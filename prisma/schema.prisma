@@ -1,0 +1,165 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===== ROLES Y USUARIOS =====
+model Rol {
+  id    Int     @id @default(autoincrement())
+  nombre String  @unique
+  usuarios Usuario[]
+}
+
+model Usuario {
+  id              Int     @id @default(autoincrement())
+  nombreCompleto  String
+  correo          String  @unique
+  passwordHash    String
+  idRol           Int
+  rol             Rol     @relation(fields: [idRol], references: [id])
+  activo          Boolean @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  compras         Compra[]
+  ventas          Venta[]
+  auditoriaLogs   AuditoriaLog[]
+}
+
+model Cliente {
+  id              Int      @id @default(autoincrement())
+  nombreCompleto  String
+  telefono        String?
+  correo          String?
+  cedula          String?  @unique
+  direccion       String?
+  activo          Boolean  @default(true)   // 👈 NUEVO
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  ventas          Venta[]
+}
+
+
+// ===== CATEGORÍA DE PRODUCTOS =====
+model CategoriaProducto {
+  id              Int     @id @default(autoincrement())
+  nombre          String  @unique
+  descripcion     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  productos       Producto[]
+}
+
+// ===== PRODUCTOS =====
+model Producto {
+  id              Int     @id @default(autoincrement())
+  nombre          String  @unique
+  descripcion     String?
+  idCategoria     Int
+  categoria       CategoriaProducto @relation(fields: [idCategoria], references: [id])
+  precioCompra    Decimal @db.Decimal(10, 2)
+  precioVenta     Decimal @db.Decimal(10, 2)
+  precioBlister   Decimal? @db.Decimal(10, 2)
+  precioCaja      Decimal? @db.Decimal(10, 2)
+  unidadesPorBlister Int?
+  unidadesPorCaja Int?
+  stockActual     Int
+  stockMinimo     Int?
+  activo          Boolean @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  detallesCompra  DetalleCompra[]
+  detallesVenta   DetalleVenta[]
+}
+
+// ===== PROVEEDORES =====
+model Proveedor {
+  id              Int     @id @default(autoincrement())
+  nombre          String  @unique 
+  telefono        String?
+  correo          String?
+  direccion       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  compras         Compra[]
+}
+
+// ===== COMPRAS A PROVEEDORES =====
+model Compra {
+  id              Int     @id @default(autoincrement())
+  fecha           DateTime @default(now())
+  idProveedor     Int
+  proveedor       Proveedor @relation(fields: [idProveedor], references: [id])
+  total           Decimal @db.Decimal(10, 2)
+  idUsuario       Int
+  usuario         Usuario @relation(fields: [idUsuario], references: [id])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  detalles        DetalleCompra[]
+}
+
+model DetalleCompra {
+  id              Int     @id @default(autoincrement())
+  idCompra        Int
+  compra          Compra  @relation(fields: [idCompra], references: [id], onDelete: Cascade)
+  idProducto      Int
+  producto        Producto @relation(fields: [idProducto], references: [id])
+  cantidad        Int
+  precioUnitario  Decimal @db.Decimal(10, 2)
+  subtotal        Decimal @db.Decimal(10, 2)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ===== VENTAS DE FARMACIA =====
+model Venta {
+  id              Int     @id @default(autoincrement())
+  fecha           DateTime @default(now())
+  idCliente       Int?
+  cliente         Cliente? @relation(fields: [idCliente], references: [id])
+  total           Decimal @db.Decimal(10, 2)
+  metodoPago      String  // "EFECTIVO", "TARJETA", "TRANSFERENCIA"
+  nombrePodologo  String?
+  numeroReceta    String?
+  idUsuario       Int
+  usuario         Usuario @relation(fields: [idUsuario], references: [id])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  detalles        DetalleVenta[]
+}
+
+model DetalleVenta {
+  id              Int     @id @default(autoincrement())
+  idVenta         Int
+  venta           Venta   @relation(fields: [idVenta], references: [id], onDelete: Cascade)
+  idProducto      Int
+  producto        Producto @relation(fields: [idProducto], references: [id])
+  cantidad        Int
+  precioUnitario  Decimal @db.Decimal(10, 2)
+  subtotal        Decimal @db.Decimal(10, 2)
+  tipoUnidad      String  @default("UNIDAD")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ===== AUDITORÍA =====
+model AuditoriaLog {
+  id          Int      @id @default(autoincrement())
+  accion      String   // ej. "CREAR_PRODUCTO", "ACTUALIZAR_STOCK", "NUEVA_VENTA"
+  entidad     String   // ej. "Producto", "Venta"
+  entidadId   Int?     // ID del registro modificado
+  detalles    String?  // JSON con detalles
+  idUsuario   Int?
+  usuario     Usuario? @relation(fields: [idUsuario], references: [id])
+  createdAt   DateTime @default(now())
+}
