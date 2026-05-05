@@ -5,7 +5,7 @@ import { Sidebar } from "@/components/sidebar"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Plus, Edit2, Trash2, Download } from "lucide-react"
+import { Plus, Edit2, Trash2, Download, Package, DollarSign, Layers, BarChart3, HelpCircle, Info, Search } from "lucide-react"
 import { toast } from "sonner"
 import useSWR from "swr"
 import * as XLSX from "xlsx"
@@ -257,29 +257,29 @@ export default function ProductosPage() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-background">
       <Sidebar />
 
       <main className="flex-1 overflow-auto">
-        <div className="p-4 pt-16 md:p-8 md:pt-8">
+        <div className="p-4 pt-16 md:p-8 md:pt-8 page-transition">
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Productos</h1>
-              <p className="text-gray-600 mt-1">Gestiona el inventario de productos</p>
+              <h1 className="text-3xl font-bold text-foreground flex items-center gap-3"><Package className="w-8 h-8 text-primary" />Productos</h1>
+              <p className="text-muted-foreground mt-1">Gestiona el inventario de productos</p>
             </div>
             {isAdmin && (
               <div className="flex gap-2">
                 <Button
                   onClick={handleExportExcel}
                   variant="outline"
-                  className="border-green-600 text-green-600 hover:bg-green-50"
+                  className="border-primary text-primary hover:bg-primary/10"
                 >
                   <Download className="w-4 h-4 mr-2" />
                   Exportar
                 </Button>
                 <Button
                   onClick={showForm ? handleCancelForm : handleOpenCreate}
-                  className="bg-green-600 hover:bg-green-700"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   {showForm ? "Cancelar" : "Nuevo Producto"}
@@ -290,145 +290,217 @@ export default function ProductosPage() {
 
           {/* Formulario crear / editar */}
           {isAdmin && showForm && (
-            <Card className="p-6 mb-6 bg-white/90 backdrop-blur-md shadow-lg border-gray-100 transition-all">
-              <h2 className="text-lg font-semibold mb-4 text-primary">
+            <Card className="glass-card p-6 mb-6 transition-all">
+              <h2 className="text-lg font-semibold mb-1 text-primary">
                 {editingId ? "Editar Producto" : "Nuevo Producto"}
               </h2>
+              <p className="text-sm text-muted-foreground mb-6">
+                {editingId 
+                  ? "Modifica los campos que necesites y presiona Actualizar." 
+                  : "Completa los campos obligatorios (*) para registrar un nuevo producto."}
+              </p>
 
-              <form className="grid grid-cols-1 md:grid-cols-2 gap-4" onSubmit={handleSaveProducto}>
-                <div className="col-span-1 md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Nombre
-                  </label>
-                  <Input
-                    value={nombre}
-                    onChange={(e) => setNombre(e.target.value)}
-                    required
-                  />
+              <form onSubmit={handleSaveProducto} className="space-y-6">
+                
+                {/* ─── SECCIÓN 1: INFORMACIÓN BÁSICA ─── */}
+                <div className="rounded-lg border border-blue-100 bg-blue-50/30 p-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="p-1.5 bg-blue-100 rounded-md">
+                      <Package className="w-4 h-4 text-blue-600" />
+                    </div>
+                    <h3 className="text-sm font-semibold text-blue-800">Información Básica</h3>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Nombre del producto <span className="text-red-500">*</span>
+                      </label>
+                      <Input
+                        value={nombre}
+                        onChange={(e) => setNombre(e.target.value)}
+                        placeholder="Ej: Paracetamol 500mg"
+                        required
+                      />
+                      <p className="text-xs text-gray-400 mt-1">Nombre comercial o genérico del medicamento.</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Categoría <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-all"
+                        value={idCategoria}
+                        onChange={(e) => setIdCategoria(e.target.value)}
+                        required
+                      >
+                        <option value="">Selecciona una categoría</option>
+                        {categorias.map((cat) => (
+                          <option key={cat.id} value={cat.id}>
+                            {cat.nombre}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-gray-400 mt-1">Grupo al que pertenece (Analgésicos, Antibióticos, etc.)</p>
+                    </div>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Categoría
-                  </label>
-                  <select
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                    value={idCategoria}
-                    onChange={(e) => setIdCategoria(e.target.value)}
-                    required
-                  >
-                    <option value="">Selecciona una categoría</option>
-                    {categorias.map((cat) => (
-                      <option key={cat.id} value={cat.id}>
-                        {cat.nombre}
-                      </option>
-                    ))}
-                  </select>
+                {/* ─── SECCIÓN 2: PRECIOS ─── */}
+                <div className="rounded-lg border border-emerald-100 bg-emerald-50/30 p-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="p-1.5 bg-emerald-100 rounded-md">
+                      <DollarSign className="w-4 h-4 text-emerald-600" />
+                    </div>
+                    <h3 className="text-sm font-semibold text-emerald-800">Precios</h3>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Precio de compra (C$)
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={precioCompra}
+                        onChange={(e) => setPrecioCompra(e.target.value)}
+                        placeholder="Ej: 2.00"
+                      />
+                      <p className="text-xs text-gray-400 mt-1">Lo que pagaste al proveedor por unidad.</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Precio de venta por unidad (C$) <span className="text-red-500">*</span>
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={precioVenta}
+                        onChange={(e) => setPrecioVenta(e.target.value)}
+                        placeholder="Ej: 5.00"
+                        required
+                      />
+                      <p className="text-xs text-gray-400 mt-1">Precio al público por 1 pastilla o unidad suelta.</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Precio por blister (C$) <span className="text-gray-400 text-xs font-normal">— opcional</span>
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={precioBlister}
+                        onChange={(e) => setPrecioBlister(e.target.value)}
+                        placeholder="Ej: 45.00"
+                      />
+                      <p className="text-xs text-gray-400 mt-1">Precio al vender un blister/cartoncito completo.</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Precio por caja (C$) <span className="text-gray-400 text-xs font-normal">— opcional</span>
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={precioCaja}
+                        onChange={(e) => setPrecioCaja(e.target.value)}
+                        placeholder="Ej: 400.00"
+                      />
+                      <p className="text-xs text-gray-400 mt-1">Precio al vender la caja cerrada completa.</p>
+                    </div>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Precio compra (C$)
-                  </label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={precioCompra}
-                    onChange={(e) => setPrecioCompra(e.target.value)}
-                  />
+                {/* ─── SECCIÓN 3: EMPAQUE / PRESENTACIÓN ─── */}
+                <div className="rounded-lg border border-purple-100 bg-purple-50/30 p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 bg-purple-100 rounded-md">
+                        <Layers className="w-4 h-4 text-purple-600" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-purple-800">Empaque / Presentación</h3>
+                    </div>
+                    <span className="text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full">Opcional</span>
+                  </div>
+                  <div className="flex items-start gap-2 mb-4 p-3 bg-purple-50 rounded-md border border-purple-100">
+                    <Info className="w-4 h-4 text-purple-500 mt-0.5 shrink-0" />
+                    <p className="text-xs text-purple-700">
+                      Define cuántas unidades tiene cada presentación. Esto permite que al vender por blister o caja, 
+                      el sistema descuente automáticamente las unidades correctas del stock.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Unidades por blister
+                      </label>
+                      <Input
+                        type="number"
+                        value={unidadesPorBlister}
+                        onChange={(e) => setUnidadesPorBlister(e.target.value)}
+                        placeholder="Ej: 10"
+                      />
+                      <p className="text-xs text-gray-400 mt-1">¿Cuántas pastillas trae cada blister?</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Unidades por caja
+                      </label>
+                      <Input
+                        type="number"
+                        value={unidadesPorCaja}
+                        onChange={(e) => setUnidadesPorCaja(e.target.value)}
+                        placeholder="Ej: 100"
+                      />
+                      <p className="text-xs text-gray-400 mt-1">¿Cuántas pastillas trae la caja completa?</p>
+                    </div>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Precio unidad (C$)
-                  </label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={precioVenta}
-                    onChange={(e) => setPrecioVenta(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Precio blister (C$) (opcional)
-                  </label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={precioBlister}
-                    onChange={(e) => setPrecioBlister(e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Precio caja (C$) (opcional)
-                  </label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={precioCaja}
-                    onChange={(e) => setPrecioCaja(e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Unidades en Blister (opcional)
-                  </label>
-                  <Input
-                    type="number"
-                    value={unidadesPorBlister}
-                    onChange={(e) => setUnidadesPorBlister(e.target.value)}
-                    placeholder="Ej. 10"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Unidades en Caja (opcional)
-                  </label>
-                  <Input
-                    type="number"
-                    value={unidadesPorCaja}
-                    onChange={(e) => setUnidadesPorCaja(e.target.value)}
-                    placeholder="Ej. 100"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Stock actual (unidades)
-                  </label>
-                  <Input
-                    type="number"
-                    value={stockActual}
-                    onChange={(e) => setStockActual(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Stock mínimo (opcional)
-                  </label>
-                  <Input
-                    type="number"
-                    value={stockMinimo}
-                    onChange={(e) => setStockMinimo(e.target.value)}
-                  />
+                {/* ─── SECCIÓN 4: INVENTARIO ─── */}
+                <div className="rounded-lg border border-amber-100 bg-amber-50/30 p-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="p-1.5 bg-amber-100 rounded-md">
+                      <BarChart3 className="w-4 h-4 text-amber-600" />
+                    </div>
+                    <h3 className="text-sm font-semibold text-amber-800">Inventario</h3>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Stock actual (unidades individuales) <span className="text-red-500">*</span>
+                      </label>
+                      <Input
+                        type="number"
+                        value={stockActual}
+                        onChange={(e) => setStockActual(e.target.value)}
+                        placeholder="Ej: 500"
+                        required
+                      />
+                      <p className="text-xs text-gray-400 mt-1">Total de unidades sueltas que tienes ahora mismo.</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Stock mínimo <span className="text-gray-400 text-xs font-normal">— alerta automática</span>
+                      </label>
+                      <Input
+                        type="number"
+                        value={stockMinimo}
+                        onChange={(e) => setStockMinimo(e.target.value)}
+                        placeholder="Ej: 50"
+                      />
+                      <p className="text-xs text-gray-400 mt-1">Si el stock baja de este número, recibirás una alerta para reabastecer.</p>
+                    </div>
+                  </div>
                 </div>
 
                 {formError && (
-                  <div className="col-span-1 md:col-span-2 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+                  <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2">
+                    <HelpCircle className="w-4 h-4 shrink-0" />
                     {formError}
                   </div>
                 )}
 
-                <div className="col-span-1 md:col-span-2 flex justify-end gap-2 mt-2">
+                <div className="flex justify-end gap-2 pt-2">
                   <Button type="button" variant="outline" onClick={handleCancelForm}>
                     Cancelar
                   </Button>
@@ -449,18 +521,21 @@ export default function ProductosPage() {
           )}
 
           {/* Búsqueda */}
-          <Card className="p-4 mb-6 bg-white/80 backdrop-blur-sm shadow-sm border-gray-100">
-            <Input
-              type="text"
-              placeholder="Buscar producto..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full"
-            />
+          <Card className="glass-card p-4 mb-6">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Buscar producto..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-10 bg-muted/30 border-border w-full"
+              />
+            </div>
           </Card>
 
           {/* Tabla */}
-          <Card className="bg-white/90 backdrop-blur-sm shadow-sm border-gray-100 overflow-hidden">
+          <Card className="glass-card overflow-hidden">
             {loadingProductos ? (
               <div className="p-8 space-y-4">
                 <Skeleton className="h-10 w-full rounded-md" />
@@ -472,51 +547,34 @@ export default function ProductosPage() {
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="bg-gray-100 border-b border-gray-200">
+                  <thead className="bg-muted/30 border-b border-border">
                     <tr>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">
-                        Nombre
-                      </th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">
-                        Categoría
-                      </th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">
-                        Precio
-                      </th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">
-                        Stock
-                      </th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">
-                        Estado
-                      </th>
-                      {isAdmin && (
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">
-                          Acciones
-                        </th>
-                      )}
+                      {["Nombre", "Categoría", "Precio", "Stock", "Estado", ...(isAdmin ? ["Acciones"] : [])].map((h) => (
+                        <th key={h} className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">{h}</th>
+                      ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
+                  <tbody className="divide-y divide-border">
                     {filteredProductos.map((producto) => (
-                      <tr key={producto.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 text-sm text-gray-900">
+                      <tr key={producto.id} className="hover:bg-muted/20 transition-colors">
+                        <td className="px-6 py-4 text-sm font-medium text-foreground">
                           {producto.nombre}
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-600">
+                        <td className="px-6 py-4 text-sm text-muted-foreground">
                           {producto.categoria.nombre}
                         </td>
-                        <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                        <td className="px-6 py-4 text-sm font-medium text-foreground">
                           C${Number.parseFloat(String(producto.precioVenta)).toFixed(2)}
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-900">
+                        <td className="px-6 py-4 text-sm text-foreground">
                           {formatStock(producto)}
                         </td>
                         <td className="px-6 py-4 text-sm">
                           <span
                             className={`px-3 py-1 rounded-full text-xs font-medium ${
                               producto.activo
-                                ? "bg-green-100 text-green-800"
-                                : "bg-gray-100 text-gray-800"
+                                ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                                : "bg-muted text-muted-foreground border border-border"
                             }`}
                           >
                             {producto.activo ? "Activo" : "Inactivo"}
@@ -529,6 +587,7 @@ export default function ProductosPage() {
                                 size="sm"
                                 variant="ghost"
                                 onClick={() => handleOpenEdit(producto)}
+                                className="text-muted-foreground hover:text-foreground"
                               >
                                 <Edit2 className="w-4 h-4" />
                               </Button>
@@ -536,8 +595,9 @@ export default function ProductosPage() {
                                 size="sm"
                                 variant="ghost"
                                 onClick={() => handleToggleActivo(producto)}
+                                className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
                               >
-                                <Trash2 className="w-4 h-4 text-red-600" />
+                                <Trash2 className="w-4 h-4" />
                               </Button>
                             </div>
                           </td>
