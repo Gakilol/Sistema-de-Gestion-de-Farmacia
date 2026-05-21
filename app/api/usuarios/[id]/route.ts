@@ -1,7 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
-import bcrypt from "bcrypt"
+import bcrypt from "bcryptjs"
+import { usuarioSchema } from "@/lib/validations"
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -21,22 +22,25 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     const { id } = await params
     const body = await request.json()
+    const validation = usuarioSchema.safeParse(body)
+
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: validation.error.errors[0].message, details: validation.error.errors },
+        { status: 400 }
+      )
+    }
+
+    const { nombreCompleto, correo, password, idRol } = validation.data
 
     const updateData: any = {}
 
-    if (typeof body.nombreCompleto === "string") {
-      updateData.nombreCompleto = body.nombreCompleto
-    }
-    if (typeof body.idRol === "number") {
-      updateData.idRol = body.idRol
-    } else if (typeof body.idRol === "string") {
-      updateData.idRol = Number(body.idRol)
-    }
-    if (typeof body.activo === "boolean") {
-      updateData.activo = body.activo
-    }
-    if (body.password) {
-      updateData.passwordHash = await bcrypt.hash(body.password, 10)
+    if (nombreCompleto) updateData.nombreCompleto = nombreCompleto
+    if (correo) updateData.correo = correo
+    if (idRol) updateData.idRol = idRol
+    if (typeof body.activo === "boolean") updateData.activo = body.activo
+    if (password) {
+      updateData.passwordHash = await bcrypt.hash(password, 10)
     }
 
     const usuarioActualizado = await prisma.usuario.update({

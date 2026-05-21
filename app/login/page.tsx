@@ -78,7 +78,12 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-foreground mb-2">Contraseña</label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-foreground">Contraseña</label>
+                <button type="button" onClick={() => alert("Por favor, contacta con tu administrador para restablecer la contraseña.")} className="text-xs text-primary hover:underline">
+                  ¿Olvidaste tu contraseña?
+                </button>
+              </div>
               <div className="relative">
                 <Input
                   type={showPassword ? "text" : "password"}

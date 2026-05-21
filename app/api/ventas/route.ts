@@ -54,17 +54,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { idCliente, detalles, metodoPago, nombrePodologo, numeroReceta } = await request.json()
+    const body = await request.json()
+    const { ventaSchema } = require('@/lib/validations')
+    const validation = ventaSchema.safeParse(body)
 
-    if (!detalles || detalles.length === 0) {
-      return NextResponse.json({ error: "Venta debe tener al menos un producto" }, { status: 400 })
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: validation.error.errors[0].message, details: validation.error.errors },
+        { status: 400 }
+      )
     }
 
-    if (!metodoPago) {
-      return NextResponse.json({ error: "Método de pago es requerido" }, { status: 400 })
-    }
+    const { idCliente, detalles, metodoPago, nombrePodologo, numeroReceta } = validation.data
 
-    // Validar stock disponible
+    // Validar stock disponible y precios correctos
     for (const detalle of detalles) {
       const producto = await prisma.producto.findUnique({
         where: { id: detalle.idProducto },
@@ -88,12 +91,35 @@ export async function POST(request: NextRequest) {
       if (producto.stockActual < cantidadDeducir) {
         return NextResponse.json({ error: `Stock insuficiente para ${producto.nombre}` }, { status: 400 })
       }
+
+      // Validar y asignar precio real desde la base de datos para evitar alteraciones en red
+      let expectedPrice = 0
+      if (tipoUnidad === "UNIDAD") {
+        expectedPrice = Number(producto.precioVenta)
+      } else if (tipoUnidad === "BLISTER") {
+        if (!producto.precioBlister) {
+          return NextResponse.json({ error: `El producto ${producto.nombre} no cuenta con presentación por blíster` }, { status: 400 })
+        }
+        expectedPrice = Number(producto.precioBlister)
+      } else if (tipoUnidad === "CAJA") {
+        if (!producto.precioCaja) {
+          return NextResponse.json({ error: `El producto ${producto.nombre} no cuenta con presentación por caja` }, { status: 400 })
+        }
+        expectedPrice = Number(producto.precioCaja)
+      }
+
+      if (expectedPrice <= 0) {
+        return NextResponse.json({ error: `El precio configurado para ${producto.nombre} (${tipoUnidad}) no es válido (debe ser mayor a 0)` }, { status: 400 })
+      }
+
+      // Sobrescribimos el precio enviado por el cliente con el verificado de la base de datos
+      detalle.precioUnitario = expectedPrice
     }
 
-    // Calcular total
+    // Calcular total de forma segura
     let total = 0
     for (const detalle of detalles) {
-      const subtotal = Number.parseFloat(detalle.precioUnitario) * Number.parseInt(detalle.cantidad)
+      const subtotal = detalle.precioUnitario * Number.parseInt(detalle.cantidad)
       total += subtotal
     }
 
@@ -111,8 +137,8 @@ export async function POST(request: NextRequest) {
           create: detalles.map((d: any) => ({
             idProducto: d.idProducto,
             cantidad: Number.parseInt(d.cantidad),
-            precioUnitario: Number.parseFloat(d.precioUnitario),
-            subtotal: Number.parseFloat(d.precioUnitario) * Number.parseInt(d.cantidad),
+            precioUnitario: d.precioUnitario,
+            subtotal: d.precioUnitario * Number.parseInt(d.cantidad),
             tipoUnidad: d.tipoUnidad || "UNIDAD",
           })),
         },

@@ -1,7 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
-import bcrypt from "bcrypt"
+import bcrypt from "bcryptjs"
+import { usuarioSchema } from "@/lib/validations"
 
 export async function GET() {
   try {
@@ -56,10 +57,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    const { nombreCompleto, correo, password, idRol } = await request.json()
+    const body = await request.json()
+    const validation = usuarioSchema.safeParse(body)
 
-    if (!nombreCompleto || !correo || !password || !idRol) {
-      return NextResponse.json({ error: "Campos requeridos faltantes" }, { status: 400 })
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: validation.error.errors[0].message, details: validation.error.errors },
+        { status: 400 }
+      )
+    }
+
+    const { nombreCompleto, correo, password, idRol } = validation.data
+
+    if (!password) {
+      return NextResponse.json({ error: "La contraseña es obligatoria para nuevos usuarios" }, { status: 400 })
     }
 
     const passwordHash = await bcrypt.hash(password, 10)

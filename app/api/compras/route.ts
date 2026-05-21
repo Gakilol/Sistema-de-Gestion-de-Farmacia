@@ -48,11 +48,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { idProveedor, detalles } = await request.json()
+    const body = await request.json()
+    const { compraSchema } = require('@/lib/validations')
+    const validation = compraSchema.safeParse(body)
 
-    if (!idProveedor || !detalles || detalles.length === 0) {
-      return NextResponse.json({ error: "Datos de compra incompletos" }, { status: 400 })
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: validation.error.errors[0].message, details: validation.error.errors },
+        { status: 400 }
+      )
     }
+
+    const { idProveedor, detalles } = validation.data
 
     // Calcular total y validar stock
     let total = 0

@@ -33,11 +33,11 @@ model Usuario {
 model Cliente {
   id              Int      @id @default(autoincrement())
   nombreCompleto  String
-  telefono        String?
-  correo          String?
+  telefono        String?  @unique
+  correo          String?  @unique
   cedula          String?  @unique
   direccion       String?
-  activo          Boolean  @default(true)   // 👈 NUEVO
+  activo          Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -61,6 +61,10 @@ model Producto {
   id              Int     @id @default(autoincrement())
   nombre          String  @unique
   descripcion     String?
+  descripcionCorta String?
+  descripcionDetallada String?
+  observaciones   String?
+  fechaVencimiento DateTime?
   idCategoria     Int
   categoria       CategoriaProducto @relation(fields: [idCategoria], references: [id])
   precioCompra    Decimal @db.Decimal(10, 2)
@@ -77,6 +81,7 @@ model Producto {
 
   detallesCompra  DetalleCompra[]
   detallesVenta   DetalleVenta[]
+  proveedores     ProveedorProducto[]
 }
 
 // ===== PROVEEDORES =====
@@ -90,6 +95,20 @@ model Proveedor {
   updatedAt       DateTime @updatedAt
 
   compras         Compra[]
+  productos       ProveedorProducto[]
+}
+
+// ===== CATÁLOGO PROVEEDOR-PRODUCTO =====
+model ProveedorProducto {
+  id              Int       @id @default(autoincrement())
+  idProveedor     Int
+  proveedor       Proveedor @relation(fields: [idProveedor], references: [id], onDelete: Cascade)
+  idProducto      Int
+  producto        Producto  @relation(fields: [idProducto], references: [id], onDelete: Cascade)
+  precioCompra    Decimal?  @db.Decimal(10, 2)
+  createdAt       DateTime  @default(now())
+
+  @@unique([idProveedor, idProducto])
 }
 
 // ===== COMPRAS A PROVEEDORES =====

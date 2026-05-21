@@ -6,8 +6,9 @@ import { Sidebar } from "@/components/sidebar"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Plus, ToggleRight, ToggleLeft, Settings } from "lucide-react"
+import { Plus, ToggleRight, ToggleLeft, Settings, Eye, EyeOff } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
+import { toast } from "sonner"
 
 interface Usuario {
   id: number
@@ -22,7 +23,8 @@ export default function UsuariosPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>("")
   const [showForm, setShowForm] = useState(false)
-  const [formData, setFormData] = useState({ nombreCompleto: "", correo: "", password: "", idRol: "2" })
+  const [showPassword, setShowPassword] = useState(false)
+  const [formData, setFormData] = useState({ nombreCompleto: "", correo: "", password: "", confirmPassword: "", idRol: "2" })
 
   useEffect(() => { fetchUsuarios() }, [])
 
@@ -40,12 +42,35 @@ export default function UsuariosPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    if (formData.password !== formData.confirmPassword) {
+      toast.error("Las contraseñas no coinciden")
+      return
+    }
+
+    const { usuarioSchema } = require("@/lib/validations");
+    const validation = usuarioSchema.safeParse(formData);
+    
+    if (!validation.success) {
+      validation.error.errors.forEach((err: any) => {
+        toast.error(err.message);
+      });
+      return;
+    }
+
     try {
-      const res = await fetch("/api/usuarios", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(formData) })
+      const payload = {
+        nombreCompleto: formData.nombreCompleto,
+        correo: formData.correo,
+        password: formData.password,
+        idRol: formData.idRol
+      }
+      const res = await fetch("/api/usuarios", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
       const data = await res.json()
-      if (!res.ok) { alert(data.error || "Error"); return }
-      setFormData({ nombreCompleto: "", correo: "", password: "", idRol: "2" }); setShowForm(false); fetchUsuarios()
-    } catch (err) { console.error(err); alert("Error al crear usuario") }
+      if (!res.ok) { toast.error(data.error || "Error"); return }
+      toast.success("Usuario creado exitosamente")
+      setFormData({ nombreCompleto: "", correo: "", password: "", confirmPassword: "", idRol: "2" }); setShowForm(false); fetchUsuarios()
+    } catch (err) { console.error(err); toast.error("Error al crear usuario") }
   }
 
   const handleToggleActivo = async (id: number, activo: boolean) => {
@@ -81,7 +106,19 @@ export default function UsuariosPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div><label className="block text-sm font-medium text-foreground mb-1">Nombre Completo <span className="text-red-500">*</span></label><Input required value={formData.nombreCompleto} onChange={(e) => setFormData({ ...formData, nombreCompleto: e.target.value })} className="bg-muted/30 border-border" /></div>
                   <div><label className="block text-sm font-medium text-foreground mb-1">Correo <span className="text-red-500">*</span></label><Input type="email" required value={formData.correo} onChange={(e) => setFormData({ ...formData, correo: e.target.value })} className="bg-muted/30 border-border" /></div>
-                  <div><label className="block text-sm font-medium text-foreground mb-1">Contraseña <span className="text-red-500">*</span></label><Input type="password" required value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} className="bg-muted/30 border-border" /></div>
+                  <div className="relative">
+                    <label className="block text-sm font-medium text-foreground mb-1">Contraseña <span className="text-red-500">*</span></label>
+                    <div className="relative">
+                      <Input type={showPassword ? "text" : "password"} required value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} className="bg-muted/30 border-border pr-10" />
+                      <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1">Confirmar Contraseña <span className="text-red-500">*</span></label>
+                    <Input type="password" required value={formData.confirmPassword} onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })} className="bg-muted/30 border-border" />
+                  </div>
                   <div><label className="block text-sm font-medium text-foreground mb-1">Rol</label><select value={formData.idRol} onChange={(e) => setFormData({ ...formData, idRol: e.target.value })} className="w-full p-2 rounded-lg bg-muted/30 border border-border text-foreground text-sm"><option value="1">ADMIN</option><option value="2">EMPLEADO</option></select></div>
                 </div>
                 <div className="flex gap-2">

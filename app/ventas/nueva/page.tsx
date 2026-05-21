@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Plus, Trash2, ShoppingCart } from "lucide-react"
+import { toast } from "sonner"
 
 interface Producto {
   id: number
@@ -76,9 +77,11 @@ export default function NuevaVentaPage() {
       return sum + d
     }, 0)
 
-    if (cantDeducir + ocupadoEnCarrito > selectedProducto.stockActual) { alert("Stock insuficiente"); return }
+    if (cantDeducir + ocupadoEnCarrito > selectedProducto.stockActual) { toast.error("Stock insuficiente"); return }
 
     const precioUnitario = getPrecioUnitario()
+    if (precioUnitario <= 0) { toast.error("El precio del producto es inválido (debe ser mayor a 0)"); return }
+    
     setLineas([...lineas, { idProducto: selectedProducto.id, nombre: selectedProducto.nombre, cantidad: cant, precioUnitario, subtotal: precioUnitario * cant, tipoUnidad }])
     setSelectedProducto(null); setCantidad(""); setTipoUnidad("UNIDAD")
   }
@@ -86,7 +89,7 @@ export default function NuevaVentaPage() {
   const total = lineas.reduce((sum, l) => sum + l.subtotal, 0)
 
   const handleRegistrarVenta = async () => {
-    if (lineas.length === 0) { alert("Agregue al menos un producto"); return }
+    if (lineas.length === 0) { toast.error("Agregue al menos un producto"); return }
     setProcesando(true)
     try {
       const res = await fetch("/api/ventas", {
@@ -97,9 +100,9 @@ export default function NuevaVentaPage() {
           metodoPago, nombrePodologo: nombrePodologo || null, numeroReceta: numeroReceta || null,
         }),
       })
-      if (res.ok) { alert("Venta registrada exitosamente"); router.push("/ventas/historial") }
-      else { const data = await res.json(); alert(data.error || "Error al registrar venta") }
-    } catch (e) { console.error(e); alert("Error al registrar venta") } finally { setProcesando(false) }
+      if (res.ok) { toast.success("Venta registrada exitosamente"); router.push("/ventas/historial") }
+      else { const data = await res.json(); toast.error(data.error || "Error al registrar venta") }
+    } catch (e) { console.error(e); toast.error("Error al registrar venta") } finally { setProcesando(false) }
   }
 
   if (loading) {

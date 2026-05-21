@@ -15,6 +15,7 @@ interface Cliente {
   cedula: string | null
   telefono: string | null
   correo: string | null
+  direccion: string | null
   activo: boolean
 }
 
@@ -48,17 +49,41 @@ export default function ClientesPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Importación dinámica o arriba
+    const { clienteSchema } = require("@/lib/validations");
+    const validation = clienteSchema.safeParse(formData);
+    
+    if (!validation.success) {
+      const { toast } = require("sonner");
+      validation.error.errors.forEach((err: any) => {
+        toast.error(err.message);
+      });
+      return;
+    }
+
     try {
       const url = editingId ? `/api/clientes/${editingId}` : "/api/clientes"
       const method = editingId ? "PUT" : "POST"
       const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(formData) })
+      
+      const data = await res.json()
       if (res.ok) {
+        const { toast } = require("sonner");
+        toast.success(editingId ? "Cliente actualizado" : "Cliente creado exitosamente");
         setFormData({ nombreCompleto: "", cedula: "", telefono: "", correo: "", direccion: "" })
         setEditingId(null)
         setShowForm(false)
         fetchClientes()
+      } else {
+        const { toast } = require("sonner");
+        toast.error(data.error || "Error al guardar el cliente");
       }
-    } catch (error) { console.error("Error:", error) }
+    } catch (error) { 
+      console.error("Error:", error)
+      const { toast } = require("sonner");
+      toast.error("Error de conexión");
+    }
   }
 
   const handleOpenCreate = () => {
@@ -69,7 +94,13 @@ export default function ClientesPage() {
 
   const handleEdit = (cliente: Cliente) => {
     setEditingId(cliente.id)
-    setFormData({ nombreCompleto: cliente.nombreCompleto, cedula: cliente.cedula || "", telefono: cliente.telefono || "", correo: cliente.correo || "", direccion: "" })
+    setFormData({ 
+      nombreCompleto: cliente.nombreCompleto, 
+      cedula: cliente.cedula || "", 
+      telefono: cliente.telefono || "", 
+      correo: cliente.correo || "", 
+      direccion: cliente.direccion || "" 
+    })
     setShowForm(true)
   }
 
@@ -81,6 +112,25 @@ export default function ClientesPage() {
       const res = await fetch(`/api/clientes/${cliente.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ activo: !cliente.activo }) })
       if (res.ok) fetchClientes()
     } catch (error) { console.error("Error:", error) }
+  }
+
+  const handleHardDelete = async (cliente: Cliente) => {
+    const ok = window.confirm(`¿Seguro que deseas ELIMINAR permanentemente al cliente "${cliente.nombreCompleto}"?\nEsta acción no se puede deshacer.`)
+    if (!ok) return
+    try {
+      const res = await fetch(`/api/clientes/${cliente.id}`, { method: "DELETE" })
+      if (res.ok) {
+        const { toast } = require("sonner");
+        toast.success("Cliente eliminado permanentemente");
+        fetchClientes();
+      } else {
+        const data = await res.json();
+        const { toast } = require("sonner");
+        toast.error(data.error || "No se pudo eliminar el cliente");
+      }
+    } catch (error) {
+      console.error("Error:", error)
+    }
   }
 
   const filteredClientes = clientes.filter((c) =>
@@ -126,16 +176,20 @@ export default function ClientesPage() {
                     <Input required value={formData.nombreCompleto} onChange={(e) => setFormData({ ...formData, nombreCompleto: e.target.value })} className="bg-muted/30 border-border" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-foreground mb-1">Cédula</label>
-                    <Input value={formData.cedula} onChange={(e) => setFormData({ ...formData, cedula: e.target.value })} className="bg-muted/30 border-border" />
+                    <label className="block text-sm font-medium text-foreground mb-1">Cédula <span className="text-red-500">*</span></label>
+                    <Input required value={formData.cedula} onChange={(e) => setFormData({ ...formData, cedula: e.target.value })} className="bg-muted/30 border-border" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-foreground mb-1">Teléfono</label>
-                    <Input value={formData.telefono} onChange={(e) => setFormData({ ...formData, telefono: e.target.value })} className="bg-muted/30 border-border" />
+                    <label className="block text-sm font-medium text-foreground mb-1">Teléfono <span className="text-red-500">*</span></label>
+                    <Input required value={formData.telefono} onChange={(e) => setFormData({ ...formData, telefono: e.target.value })} className="bg-muted/30 border-border" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-foreground mb-1">Correo</label>
-                    <Input type="email" value={formData.correo} onChange={(e) => setFormData({ ...formData, correo: e.target.value })} className="bg-muted/30 border-border" />
+                    <label className="block text-sm font-medium text-foreground mb-1">Correo <span className="text-red-500">*</span></label>
+                    <Input required type="email" value={formData.correo} onChange={(e) => setFormData({ ...formData, correo: e.target.value })} className="bg-muted/30 border-border" />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-foreground mb-1">Dirección <span className="text-red-500">*</span></label>
+                    <Input required value={formData.direccion} onChange={(e) => setFormData({ ...formData, direccion: e.target.value })} className="bg-muted/30 border-border" />
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -177,7 +231,10 @@ export default function ClientesPage() {
                         <td className="px-6 py-4 text-sm">
                           <div className="flex gap-1">
                             <Button size="sm" variant="ghost" onClick={() => handleEdit(cliente)} className="text-muted-foreground hover:text-foreground"><Edit2 className="w-4 h-4" /></Button>
-                            <Button size="sm" variant="ghost" onClick={() => handleToggleActivo(cliente)} className="text-red-400 hover:text-red-300 hover:bg-red-500/10"><Trash2 className="w-4 h-4" /></Button>
+                            <Button size="sm" variant="ghost" onClick={() => handleToggleActivo(cliente)} className="text-amber-500 hover:text-amber-400 hover:bg-amber-500/10" title={cliente.activo ? "Desactivar" : "Reactivar"}>
+                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => handleHardDelete(cliente)} className="text-red-500 hover:text-red-400 hover:bg-red-500/10" title="Eliminar permanentemente"><Trash2 className="w-4 h-4" /></Button>
                           </div>
                         </td>
                       </tr>

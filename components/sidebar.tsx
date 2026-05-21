@@ -86,6 +86,7 @@ export function Sidebar() {
     { href: "/proveedores", label: "Proveedores", icon: Truck },
     { href: "/compras", label: "Compras", icon: ShoppingCart },
     { href: "/usuarios", label: "Usuarios", icon: Settings },
+    { href: "/reportes", label: "Reportes", icon: TrendingUp },
   ]
 
   const NavLink = ({ item }: { item: { href: string; label: string; icon: any } }) => {

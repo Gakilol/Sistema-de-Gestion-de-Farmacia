@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Plus, Eye, Trash2, X, ShoppingCart } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
+import { toast } from "sonner"
 
 interface Compra { id: number; fecha: string; proveedor: { nombre: string }; total: string; detalles: Array<{ producto: { nombre: string }; cantidad: number }> }
 interface Proveedor { id: number; nombre: string }
@@ -33,23 +34,41 @@ export default function ComprasPage() {
 
   const resetForm = () => { setProveedorId(""); setDetalles([{ idProducto: "", cantidad: "1", precioUnitario: "" }]); setFormError(null) }
   const handleToggleForm = () => { if (showForm) resetForm(); setShowForm(!showForm) }
-  const handleDetalleChange = (i: number, f: keyof DetalleForm, v: string) => setDetalles(p => p.map((d, idx) => idx === i ? { ...d, [f]: v } : d))
+  const handleDetalleChange = (i: number, f: keyof DetalleForm, v: string) => {
+    if (f === "idProducto" && v !== "") {
+      const isDuplicate = detalles.some((d, idx) => idx !== i && d.idProducto === v)
+      if (isDuplicate) {
+        toast.error("Este producto ya está en la compra. Aumente la cantidad del producto existente.")
+        return
+      }
+    }
+    setDetalles(p => p.map((d, idx) => idx === i ? { ...d, [f]: v } : d))
+  }
   const handleAddDetalle = () => setDetalles(p => [...p, { idProducto: "", cantidad: "1", precioUnitario: "" }])
   const handleRemoveDetalle = (i: number) => setDetalles(p => p.filter((_, idx) => idx !== i))
   const totalCalc = detalles.reduce((a, d) => a + Number.parseFloat(d.precioUnitario || "0") * Number.parseInt(d.cantidad || "0"), 0)
 
   const handleSubmitCompra = async (e: React.FormEvent) => {
     e.preventDefault(); setFormError(null)
-    if (!proveedorId) { setFormError("Selecciona un proveedor"); return }
+    if (!proveedorId) { toast.error("Selecciona un proveedor"); return }
     const valid = detalles.filter(d => d.idProducto && d.cantidad && d.precioUnitario)
-    if (!valid.length) { setFormError("Agrega al menos un producto"); return }
+    if (!valid.length) { toast.error("Agrega al menos un producto con cantidad y precio"); return }
+    
+    // Validar duplicados antes de enviar por si acaso
+    const ids = valid.map(d => d.idProducto)
+    if (new Set(ids).size !== ids.length) {
+      toast.error("Hay productos duplicados en la lista. Consolidalos antes de guardar.")
+      return
+    }
+
     try {
       setFormLoading(true)
       const res = await fetch("/api/compras", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idProveedor: Number(proveedorId), detalles: valid.map(d => ({ idProducto: Number(d.idProducto), cantidad: d.cantidad, precioUnitario: d.precioUnitario })) }) })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) { setFormError(data.error || "Error"); return }
+      if (!res.ok) { toast.error(data.error || "Error"); return }
+      toast.success("Compra registrada exitosamente")
       await fetchCompras(); resetForm(); setShowForm(false)
-    } catch (e) { console.error(e); setFormError("Error de conexión") } finally { setFormLoading(false) }
+    } catch (e) { console.error(e); toast.error("Error de conexión") } finally { setFormLoading(false) }
   }
 
   const sc = "w-full p-2.5 rounded-lg bg-muted/30 border border-border text-foreground text-sm outline-none"

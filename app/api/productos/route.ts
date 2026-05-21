@@ -64,10 +64,16 @@ export async function POST(request: NextRequest) {
 
     const data = parsed.data
 
+    const { emptyToNull } = require('@/lib/validations')
+
     const producto = await prisma.producto.create({
       data: {
         nombre: data.nombre,
-        descripcion: data.descripcion,
+        descripcion: emptyToNull(data.descripcion),
+        descripcionCorta: emptyToNull(data.descripcionCorta),
+        descripcionDetallada: emptyToNull(data.descripcionDetallada),
+        observaciones: emptyToNull(data.observaciones),
+        fechaVencimiento: data.fechaVencimiento ? new Date(data.fechaVencimiento) : null,
         idCategoria: data.idCategoria,
         precioCompra: data.precioCompra || 0,
         precioVenta: data.precioVenta,

@@ -1,11 +1,12 @@
 "use client"
 
+import type React from "react"
 import { useEffect, useState } from "react"
 import { Sidebar } from "@/components/sidebar"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Plus, Edit2, Trash2, Download, Package, DollarSign, Layers, BarChart3, HelpCircle, Info, Search } from "lucide-react"
+import { Plus, Edit2, Trash2, Download, Package, DollarSign, Layers, BarChart3, HelpCircle, Info, Search, AlertTriangle, Settings, Eye, Calendar, FileText, X, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import useSWR from "swr"
 import * as XLSX from "xlsx"
@@ -35,16 +36,28 @@ interface Producto {
 }
 
 export default function ProductosPage() {
-  const { data: productos = [], mutate: mutateProductos, isLoading: loadingProductos } = useSWR("/api/productos?estado=todos", fetcher)
-  const { data: categorias = [] } = useSWR("/api/categorias", fetcher)
+  const { data: productos = [], mutate: mutateProductos, isLoading: loadingProductos } = useSWR<Producto[]>("/api/productos?estado=todos", fetcher)
+  const { data: categorias = [], mutate: mutateCategorias } = useSWR<Categoria[]>("/api/categorias", fetcher)
   
   const [search, setSearch] = useState("")
   const [showForm, setShowForm] = useState(false)
+  const [showCategoryModal, setShowCategoryModal] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState("")
   const [isAdmin, setIsAdmin] = useState(false)
+
+  // Detalles modal
+  const [showDetailsModal, setShowDetailsModal] = useState(false)
+  const [detailsLoading, setDetailsLoading] = useState(false)
+  const [selectedProduct, setSelectedProduct] = useState<any | null>(null)
 
   // formulario
   const [editingId, setEditingId] = useState<number | null>(null)
   const [nombre, setNombre] = useState("")
+  const [descripcion, setDescripcion] = useState("")
+  const [descripcionCorta, setDescripcionCorta] = useState("")
+  const [descripcionDetallada, setDescripcionDetallada] = useState("")
+  const [observaciones, setObservaciones] = useState("")
+  const [fechaVencimiento, setFechaVencimiento] = useState("")
   const [idCategoria, setIdCategoria] = useState<string>("")
   const [precioCompra, setPrecioCompra] = useState("")
   const [precioVenta, setPrecioVenta] = useState("")
@@ -56,6 +69,7 @@ export default function ProductosPage() {
   const [stockMinimo, setStockMinimo] = useState("")
   const [formLoading, setFormLoading] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  const [precioVentaError, setPrecioVentaError] = useState<string | null>(null)
 
   useEffect(() => {
     checkAdmin()
@@ -66,6 +80,28 @@ export default function ProductosPage() {
     setIsAdmin(true)
   }
 
+  const handleOpenDetails = async (producto: Producto) => {
+    setDetailsLoading(true)
+    setSelectedProduct(null)
+    setShowDetailsModal(true)
+    try {
+      const res = await fetch(`/api/productos/${producto.id}`)
+      if (res.ok) {
+        const data = await res.json()
+        setSelectedProduct(data)
+      } else {
+        toast.error("Error al cargar los detalles del producto")
+        setShowDetailsModal(false)
+      }
+    } catch (e) {
+      console.error(e)
+      toast.error("Error de conexión al cargar detalles")
+      setShowDetailsModal(false)
+    } finally {
+      setDetailsLoading(false)
+    }
+  }
+
   const filteredProductos = Array.isArray(productos) 
     ? productos.filter((p) => p.nombre.toLowerCase().includes(search.toLowerCase()))
     : []
@@ -73,6 +109,11 @@ export default function ProductosPage() {
   const resetForm = () => {
     setEditingId(null)
     setNombre("")
+    setDescripcion("")
+    setDescripcionCorta("")
+    setDescripcionDetallada("")
+    setObservaciones("")
+    setFechaVencimiento("")
     setIdCategoria("")
     setPrecioCompra("")
     setPrecioVenta("")
@@ -83,6 +124,7 @@ export default function ProductosPage() {
     setStockActual("")
     setStockMinimo("")
     setFormError(null)
+    setPrecioVentaError(null)
   }
 
   // cargar datos para editar
@@ -97,6 +139,11 @@ export default function ProductosPage() {
 
       setEditingId(p.id)
       setNombre(p.nombre)
+      setDescripcion(p.descripcion || "")
+      setDescripcionCorta(p.descripcionCorta || "")
+      setDescripcionDetallada(p.descripcionDetallada || "")
+      setObservaciones(p.observaciones || "")
+      setFechaVencimiento(p.fechaVencimiento ? String(p.fechaVencimiento).split("T")[0] : "")
       setIdCategoria(String(p.idCategoria))
       setPrecioCompra(p.precioCompra ? String(p.precioCompra) : "")
       setPrecioVenta(String(p.precioVenta))
@@ -124,15 +171,135 @@ export default function ProductosPage() {
     setShowForm(false)
   }
 
+  const handleCreateCategory = async () => {
+    if (!newCategoryName.trim()) return
+    try {
+      const res = await fetch("/api/categorias", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nombre: newCategoryName, descripcion: "" })
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast.success("Categoría agregada")
+        setNewCategoryName("")
+        mutateCategorias()
+      } else {
+        toast.error(data.error || "Error agregando categoría")
+      }
+    } catch (e) {
+      toast.error("Error de conexión")
+    }
+  }
+
+  const handleDeleteCategory = async (id: number) => {
+    if (!window.confirm("¿Seguro que deseas eliminar esta categoría?")) return
+    try {
+      const res = await fetch(`/api/categorias/${id}`, { method: "DELETE" })
+      const data = await res.json()
+      if (res.ok) {
+        toast.success("Categoría eliminada")
+        if (idCategoria === String(id)) setIdCategoria("")
+        mutateCategorias()
+      } else {
+        toast.error(data.error || "Error eliminando categoría")
+      }
+    } catch (e) {
+      toast.error("Error de conexión")
+    }
+  }
+
+  // ─── Helpers para sugerencia de precios con margen 20% ───
+  const calcSugerido = (precioCompraVal: string, unidades: string) => {
+    const pc = parseFloat(precioCompraVal)
+    const u = parseInt(unidades)
+    if (!isNaN(pc) && pc > 0 && !isNaN(u) && u > 0) {
+      return (pc * u * 1.20).toFixed(2)
+    }
+    return ""
+  }
+
+  const handlePrecioCompraChange = (value: string) => {
+    setPrecioCompra(value)
+    // Validar precio de venta en tiempo real
+    if (value && precioVenta) {
+      const pc = parseFloat(value)
+      const pv = parseFloat(precioVenta)
+      if (!isNaN(pc) && !isNaN(pv) && pv <= pc) {
+        setPrecioVentaError(`El precio de venta debe ser mayor a C$${pc.toFixed(2)}`)
+      } else {
+        setPrecioVentaError(null)
+      }
+    } else {
+      setPrecioVentaError(null)
+    }
+    // Sugerir precios de blister y caja
+    if (unidadesPorBlister) {
+      const sugerido = calcSugerido(value, unidadesPorBlister)
+      if (sugerido) setPrecioBlister(sugerido)
+    }
+    if (unidadesPorCaja) {
+      const sugerido = calcSugerido(value, unidadesPorCaja)
+      if (sugerido) setPrecioCaja(sugerido)
+    }
+  }
+
+  const handlePrecioVentaChange = (value: string) => {
+    setPrecioVenta(value)
+    if (precioCompra && value) {
+      const pc = parseFloat(precioCompra)
+      const pv = parseFloat(value)
+      if (!isNaN(pc) && !isNaN(pv) && pv <= pc) {
+        setPrecioVentaError(`El precio de venta debe ser mayor a C$${pc.toFixed(2)}`)
+      } else {
+        setPrecioVentaError(null)
+      }
+    } else {
+      setPrecioVentaError(null)
+    }
+  }
+
+  const handleUnidadesPorBlisterChange = (value: string) => {
+    setUnidadesPorBlister(value)
+    if (precioCompra) {
+      const sugerido = calcSugerido(precioCompra, value)
+      if (sugerido) setPrecioBlister(sugerido)
+    }
+  }
+
+  const handleUnidadesPorCajaChange = (value: string) => {
+    setUnidadesPorCaja(value)
+    if (precioCompra) {
+      const sugerido = calcSugerido(precioCompra, value)
+      if (sugerido) setPrecioCaja(sugerido)
+    }
+  }
+
   const handleSaveProducto = async (e: React.FormEvent) => {
     e.preventDefault()
     setFormError(null)
     setFormLoading(true)
 
+    // ── Validación: precio de venta > precio de compra ──
+    if (precioCompra && precioVenta) {
+      const pc = parseFloat(precioCompra)
+      const pv = parseFloat(precioVenta)
+      if (!isNaN(pc) && !isNaN(pv) && pv <= pc) {
+        setFormError(`El precio de venta (C$${pv.toFixed(2)}) debe ser mayor al precio de compra (C$${pc.toFixed(2)}). No puedes vender al costo o por debajo.`)
+        setPrecioVentaError(`Debe ser mayor a C$${pc.toFixed(2)}`)
+        setFormLoading(false)
+        return
+      }
+    }
+
     try {
       const body = {
         nombre,
-        descripcion: "",
+        descripcion: descripcion || null,
+        descripcionCorta: descripcionCorta || null,
+        descripcionDetallada: descripcionDetallada || null,
+        observaciones: observaciones || null,
+        fechaVencimiento: fechaVencimiento || null,
         idCategoria: Number(idCategoria),
         precioCompra: precioCompra || null,
         precioVenta: precioVenta || null,
@@ -324,8 +491,12 @@ export default function ProductosPage() {
                       <p className="text-xs text-gray-400 mt-1">Nombre comercial o genérico del medicamento.</p>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Categoría <span className="text-red-500">*</span>
+                      <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                        <span>Categoría <span className="text-red-500">*</span></span>
+                        <button type="button" onClick={() => setShowCategoryModal(true)} className="text-xs text-primary flex items-center hover:underline">
+                          <Settings className="w-3 h-3 mr-1" />
+                          Gestionar
+                        </button>
                       </label>
                       <select
                         className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-all"
@@ -341,6 +512,38 @@ export default function ProductosPage() {
                         ))}
                       </select>
                       <p className="text-xs text-gray-400 mt-1">Grupo al que pertenece (Analgésicos, Antibióticos, etc.)</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ─── SECCIÓN: DESCRIPCIÓN Y DETALLES ─── */}
+                <div className="rounded-lg border border-indigo-100 bg-indigo-50/30 p-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="p-1.5 bg-indigo-100 rounded-md">
+                      <Info className="w-4 h-4 text-indigo-600" />
+                    </div>
+                    <h3 className="text-sm font-semibold text-indigo-800">Descripción y Detalles (Opcional)</h3>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Descripción Corta</label>
+                      <Input value={descripcionCorta} onChange={(e) => setDescripcionCorta(e.target.value)} placeholder="Ej: Analgésico y antipirético" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
+                      <Input value={descripcion} onChange={(e) => setDescripcion(e.target.value)} placeholder="Ej: Uso para el dolor y la fiebre" />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Descripción Detallada</label>
+                      <textarea value={descripcionDetallada} onChange={(e) => setDescripcionDetallada(e.target.value)} className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 outline-none" rows={3} placeholder="Detalles completos..." />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Observaciones</label>
+                      <Input value={observaciones} onChange={(e) => setObservaciones(e.target.value)} placeholder="Ej: Mantener fuera del alcance de niños" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Fecha de Vencimiento</label>
+                      <Input type="date" value={fechaVencimiento} onChange={(e) => setFechaVencimiento(e.target.value)} className="bg-white" />
                     </div>
                   </div>
                 </div>
@@ -362,7 +565,7 @@ export default function ProductosPage() {
                         type="number"
                         step="0.01"
                         value={precioCompra}
-                        onChange={(e) => setPrecioCompra(e.target.value)}
+                        onChange={(e) => handlePrecioCompraChange(e.target.value)}
                         placeholder="Ej: 2.00"
                       />
                       <p className="text-xs text-gray-400 mt-1">Lo que pagaste al proveedor por unidad.</p>
@@ -375,11 +578,19 @@ export default function ProductosPage() {
                         type="number"
                         step="0.01"
                         value={precioVenta}
-                        onChange={(e) => setPrecioVenta(e.target.value)}
+                        onChange={(e) => handlePrecioVentaChange(e.target.value)}
                         placeholder="Ej: 5.00"
                         required
+                        className={precioVentaError ? "border-red-400 focus:ring-red-200 focus:border-red-400" : ""}
                       />
-                      <p className="text-xs text-gray-400 mt-1">Precio al público por 1 pastilla o unidad suelta.</p>
+                      {precioVentaError ? (
+                        <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3" />
+                          {precioVentaError}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-gray-400 mt-1">Precio al público por 1 pastilla o unidad suelta.</p>
+                      )}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -392,7 +603,14 @@ export default function ProductosPage() {
                         onChange={(e) => setPrecioBlister(e.target.value)}
                         placeholder="Ej: 45.00"
                       />
-                      <p className="text-xs text-gray-400 mt-1">Precio al vender un blister/cartoncito completo.</p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Precio al vender un blister completo.
+                        {precioCompra && unidadesPorBlister && calcSugerido(precioCompra, unidadesPorBlister) && (
+                          <span className="text-emerald-600 font-medium ml-1">
+                            Sugerido con 20% de ganancia: {"C$" + calcSugerido(precioCompra, unidadesPorBlister)}
+                          </span>
+                        )}
+                      </p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -405,7 +623,14 @@ export default function ProductosPage() {
                         onChange={(e) => setPrecioCaja(e.target.value)}
                         placeholder="Ej: 400.00"
                       />
-                      <p className="text-xs text-gray-400 mt-1">Precio al vender la caja cerrada completa.</p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Precio al vender la caja cerrada completa.
+                        {precioCompra && unidadesPorCaja && calcSugerido(precioCompra, unidadesPorCaja) && (
+                          <span className="text-emerald-600 font-medium ml-1">
+                            Sugerido con 20% de ganancia: {"C$" + calcSugerido(precioCompra, unidadesPorCaja)}
+                          </span>
+                        )}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -436,7 +661,7 @@ export default function ProductosPage() {
                       <Input
                         type="number"
                         value={unidadesPorBlister}
-                        onChange={(e) => setUnidadesPorBlister(e.target.value)}
+                        onChange={(e) => handleUnidadesPorBlisterChange(e.target.value)}
                         placeholder="Ej: 10"
                       />
                       <p className="text-xs text-gray-400 mt-1">¿Cuántas pastillas trae cada blister?</p>
@@ -448,7 +673,7 @@ export default function ProductosPage() {
                       <Input
                         type="number"
                         value={unidadesPorCaja}
-                        onChange={(e) => setUnidadesPorCaja(e.target.value)}
+                        onChange={(e) => handleUnidadesPorCajaChange(e.target.value)}
                         placeholder="Ej: 100"
                       />
                       <p className="text-xs text-gray-400 mt-1">¿Cuántas pastillas trae la caja completa?</p>
@@ -586,8 +811,18 @@ export default function ProductosPage() {
                               <Button
                                 size="sm"
                                 variant="ghost"
+                                onClick={() => handleOpenDetails(producto)}
+                                className="text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10"
+                                title="Ver detalles"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
                                 onClick={() => handleOpenEdit(producto)}
                                 className="text-muted-foreground hover:text-foreground"
+                                title="Editar"
                               >
                                 <Edit2 className="w-4 h-4" />
                               </Button>
@@ -596,6 +831,7 @@ export default function ProductosPage() {
                                 variant="ghost"
                                 onClick={() => handleToggleActivo(producto)}
                                 className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                                title={producto.activo ? "Desactivar" : "Reactivar"}
                               >
                                 <Trash2 className="w-4 h-4" />
                               </Button>
@@ -611,6 +847,229 @@ export default function ProductosPage() {
           </Card>
         </div>
       </main>
+
+      {/* Category Modal */}
+      {showCategoryModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <Card className="glass-card w-full max-w-md p-6">
+            <h2 className="text-lg font-semibold mb-4">Gestionar Categorías</h2>
+            
+            <div className="flex gap-2 mb-6">
+              <Input 
+                value={newCategoryName} 
+                onChange={(e) => setNewCategoryName(e.target.value)} 
+                placeholder="Nueva categoría..." 
+                onKeyDown={(e) => e.key === 'Enter' && handleCreateCategory()}
+              />
+              <Button onClick={handleCreateCategory} className="bg-primary hover:bg-primary/90 text-primary-foreground">Agregar</Button>
+            </div>
+
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
+              {categorias.length === 0 && <p className="text-sm text-muted-foreground text-center">No hay categorías registradas</p>}
+              {categorias.map(cat => (
+                <div key={cat.id} className="flex justify-between items-center p-2 rounded-lg bg-muted/30 border border-border">
+                  <span className="text-sm">{cat.nombre}</span>
+                  <Button size="sm" variant="ghost" onClick={() => handleDeleteCategory(cat.id)} className="text-red-400 hover:text-red-300 hover:bg-red-500/10 h-8 w-8 p-0">
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <Button variant="outline" onClick={() => setShowCategoryModal(false)}>Cerrar</Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Modal de Detalles del Producto */}
+      {showDetailsModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="glass-card w-full max-w-2xl p-6 relative max-h-[90vh] flex flex-col shadow-2xl rounded-2xl animate-in fade-in zoom-in duration-200">
+            <button 
+              onClick={() => setShowDetailsModal(false)}
+              className="absolute top-4 right-4 text-muted-foreground hover:text-foreground p-1 hover:bg-muted/40 rounded-full transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {detailsLoading ? (
+              <div className="flex flex-col items-center justify-center py-12 gap-3">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Cargando información del producto...</p>
+              </div>
+            ) : selectedProduct ? (
+              <>
+                <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-2xl font-bold text-foreground">{selectedProduct.nombre}</h2>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${selectedProduct.activo ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20" : "bg-muted text-muted-foreground border border-border"}`}>
+                        {selectedProduct.activo ? "Activo" : "Inactivo"}
+                      </span>
+                    </div>
+                    <p className="text-sm text-primary font-medium mt-1">Categoría: {selectedProduct.categoria?.nombre || "Sin Categoría"}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button 
+                      onClick={() => {
+                        setShowDetailsModal(false);
+                        handleOpenEdit(selectedProduct);
+                      }}
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs h-9"
+                    >
+                      <Edit2 className="w-3.5 h-3.5 mr-1" />
+                      Editar
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto space-y-6 pr-1">
+                  {/* Fila 1: Presentaciones y Precios */}
+                  <div className="rounded-lg border border-emerald-100 bg-emerald-50/20 p-4">
+                    <h3 className="text-sm font-semibold text-emerald-800 mb-3 flex items-center gap-2">
+                      <DollarSign className="w-4 h-4" />
+                      Precios y Presentaciones
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {/* Unidad */}
+                      <div className="bg-background/60 p-3 rounded-lg border border-border">
+                        <p className="text-xs text-muted-foreground font-medium">Unidad Individual</p>
+                        <div className="mt-1 space-y-1">
+                          <p className="text-xs text-gray-500">Compra: <span className="font-semibold text-foreground">C${Number(selectedProduct.precioCompra || 0).toFixed(2)}</span></p>
+                          <p className="text-sm font-bold text-emerald-600">Venta: C${Number(selectedProduct.precioVenta).toFixed(2)}</p>
+                        </div>
+                      </div>
+
+                      {/* Blister */}
+                      <div className="bg-background/60 p-3 rounded-lg border border-border">
+                        <p className="text-xs text-muted-foreground font-medium">Por Blister</p>
+                        <div className="mt-1 space-y-1">
+                          <p className="text-xs text-gray-500">Capacidad: <span className="font-medium text-foreground">{selectedProduct.unidadesPorBlister ? `${selectedProduct.unidadesPorBlister} uds` : "No define"}</span></p>
+                          <p className="text-sm font-bold text-emerald-600">
+                            Venta: {selectedProduct.precioBlister ? `C$${Number(selectedProduct.precioBlister).toFixed(2)}` : "—"}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Caja */}
+                      <div className="bg-background/60 p-3 rounded-lg border border-border">
+                        <p className="text-xs text-muted-foreground font-medium">Por Caja</p>
+                        <div className="mt-1 space-y-1">
+                          <p className="text-xs text-gray-500">Capacidad: <span className="font-medium text-foreground">{selectedProduct.unidadesPorCaja ? `${selectedProduct.unidadesPorCaja} uds` : "No define"}</span></p>
+                          <p className="text-sm font-bold text-emerald-600">
+                            Venta: {selectedProduct.precioCaja ? `C$${Number(selectedProduct.precioCaja).toFixed(2)}` : "—"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Fila 2: Inventario y Alertas */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="rounded-lg border border-amber-100 bg-amber-50/20 p-4">
+                      <h3 className="text-sm font-semibold text-amber-800 mb-3 flex items-center gap-2">
+                        <BarChart3 className="w-4 h-4" />
+                        Inventario
+                      </h3>
+                      <div className="space-y-2">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Stock Físico Real</p>
+                          <p className="text-lg font-bold text-foreground">{formatStock(selectedProduct)}</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 pt-1 border-t border-amber-100">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Mínimo Requerido</p>
+                            <p className="text-sm font-semibold text-foreground">{selectedProduct.stockMinimo != null ? `${selectedProduct.stockMinimo} uds` : "—"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Estado Stock</p>
+                            {selectedProduct.stockActual <= (selectedProduct.stockMinimo || 0) ? (
+                              <span className="text-xs font-semibold text-red-500 bg-red-100 px-2 py-0.5 rounded-full inline-block animate-pulse">¡Stock Bajo!</span>
+                            ) : (
+                              <span className="text-xs font-semibold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full inline-block">Óptimo</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border border-indigo-100 bg-indigo-50/20 p-4 flex flex-col justify-between">
+                      <div>
+                        <h3 className="text-sm font-semibold text-indigo-800 mb-3 flex items-center gap-2">
+                          <Calendar className="w-4 h-4" />
+                          Fechas Críticas
+                        </h3>
+                        <p className="text-xs text-muted-foreground">Fecha de Vencimiento</p>
+                        <p className="text-base font-semibold text-foreground mt-1">
+                          {selectedProduct.fechaVencimiento ? new Date(selectedProduct.fechaVencimiento).toLocaleDateString('es-NI', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }) : "No especificada"}
+                        </p>
+                      </div>
+                      {selectedProduct.fechaVencimiento && (
+                        <div className="mt-2">
+                          {new Date(selectedProduct.fechaVencimiento).getTime() <= new Date().getTime() ? (
+                            <span className="text-xs font-semibold text-red-600 bg-red-100 px-2 py-1 rounded-md block text-center border border-red-200">
+                              ⚠️ Medicamento Vencido
+                            </span>
+                          ) : new Date(selectedProduct.fechaVencimiento).getTime() <= new Date().getTime() + (30 * 24 * 60 * 60 * 1000) ? (
+                            <span className="text-xs font-semibold text-amber-600 bg-amber-100 px-2 py-1 rounded-md block text-center border border-amber-200 animate-pulse">
+                              ⚠️ Vence en menos de 30 días
+                            </span>
+                          ) : (
+                            <span className="text-xs font-semibold text-emerald-600 bg-emerald-100 px-2 py-1 rounded-md block text-center border border-emerald-200">
+                              ✓ Vigente y Seguro
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Fila 3: Descripciones y Observaciones */}
+                  <div className="rounded-lg border border-blue-100 bg-blue-50/20 p-4 space-y-4">
+                    <h3 className="text-sm font-semibold text-blue-800 mb-1 flex items-center gap-2">
+                      <FileText className="w-4 h-4" />
+                      Descripciones y Ficha Técnica
+                    </h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="bg-background/60 p-3 rounded-lg border border-border">
+                        <p className="text-xs text-muted-foreground font-semibold">Descripción Corta</p>
+                        <p className="text-sm text-foreground mt-1 font-medium">{selectedProduct.descripcionCorta || "—"}</p>
+                      </div>
+
+                      <div className="bg-background/60 p-3 rounded-lg border border-border">
+                        <p className="text-xs text-muted-foreground font-semibold">Descripción General</p>
+                        <p className="text-sm text-foreground mt-1 font-medium">{selectedProduct.descripcion || "—"}</p>
+                      </div>
+
+                      <div className="md:col-span-2 bg-background/60 p-3 rounded-lg border border-border">
+                        <p className="text-xs text-muted-foreground font-semibold">Ficha / Descripción Detallada</p>
+                        <p className="text-sm text-foreground mt-1 whitespace-pre-wrap">{selectedProduct.descripcionDetallada || "—"}</p>
+                      </div>
+
+                      <div className="md:col-span-2 bg-background/60 p-3 rounded-lg border border-border">
+                        <p className="text-xs text-muted-foreground font-semibold">Observaciones / Indicaciones Especiales</p>
+                        <p className="text-sm text-foreground mt-1">{selectedProduct.observaciones || "—"}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 pt-4 border-t border-border flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setShowDetailsModal(false)}>Cerrar Detalles</Button>
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 gap-2 text-red-500">
+                <AlertTriangle className="w-8 h-8" />
+                <p className="text-sm font-medium">No se pudieron cargar los detalles del producto.</p>
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
     </div>
   )
 }
