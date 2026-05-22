@@ -424,7 +424,7 @@ export default function ReportesPage() {
                               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                               <XAxis dataKey="fecha" stroke="#6b7280" fontSize={11} tickLine={false} axisLine={false} />
                               <YAxis stroke="#6b7280" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(value) => `C$${value}`} />
-                              <RechartsTooltip formatter={(value: number) => [`C$${value.toFixed(2)}`, "Ventas"]} />
+                              <RechartsTooltip formatter={(value: any) => [`C$${Number(value).toFixed(2)}`, "Ventas"]} />
                               <Line 
                                 type="monotone" 
                                 dataKey="total" 

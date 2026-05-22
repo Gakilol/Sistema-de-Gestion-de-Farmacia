@@ -105,7 +105,13 @@ export const ventaSchema = z.object({
     cantidad: z.number().int().positive("La cantidad debe ser mayor a 0"),
     precioUnitario: z.number().min(0.01, "El precio no puede ser cero ni negativo"),
     tipoUnidad: z.enum(["UNIDAD", "BLISTER", "CAJA"]).default("UNIDAD")
-  })).min(1, "La venta debe tener al menos un producto")
+  }))
+    .min(1, "La venta debe tener al menos un producto")
+    .refine((detalles) => {
+      // Prevenir stock bypass: no permitir el mismo producto repetido en una venta
+      const ids = detalles.map(d => d.idProducto)
+      return new Set(ids).size === ids.length
+    }, { message: "No puedes agregar el mismo producto repetido en la misma venta" })
 });
 
 export const compraSchema = z.object({

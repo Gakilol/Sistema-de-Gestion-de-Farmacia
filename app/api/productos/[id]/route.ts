@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
 import { productoSchema } from "@/lib/validations"
+import { registrarLog } from "@/lib/audit"
 
 // Obtener un producto por id
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -78,6 +79,15 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       include: { categoria: true },
     })
 
+    // Registrar auditoría de actualización
+    registrarLog({
+      accion: "ACTUALIZAR_PRODUCTO",
+      entidad: "Producto",
+      entidadId: producto.id,
+      idUsuario: user.id,
+      detalles: { nombre: producto.nombre, precioVenta: Number(producto.precioVenta), stockActual: producto.stockActual },
+    })
+
     return NextResponse.json(producto)
   } catch (error) {
     console.error("Error updating producto:", error)
@@ -85,7 +95,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-// Activar / desactivar producto (borrado lógico)
+// Activar / desactivar producto (borrado lógico) — solo ADMIN
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await getCurrentUser()
@@ -93,16 +103,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Aquí puedes decidir si solo ADMIN puede cambiar el estado
-    // o también EMPLEADO. Si quieres solo ADMIN, descomenta el bloque:
-
-    // const usuarioDb = await prisma.usuario.findUnique({
-    //   where: { id: user.id },
-    //   include: { rol: true },
-    // })
-    // if (usuarioDb?.rol.nombre !== "ADMIN") {
-    //   return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    // }
+    const usuarioDb = await prisma.usuario.findUnique({
+      where: { id: user.id },
+      include: { rol: true },
+    })
+    if (usuarioDb?.rol.nombre !== "ADMIN") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
 
     const { id } = await params
     const { activo } = await request.json()
@@ -111,6 +118,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       where: { id: Number.parseInt(id) },
       data: { activo },
       include: { categoria: true },
+    })
+
+    registrarLog({
+      accion: activo ? "ACTIVAR_PRODUCTO" : "DESACTIVAR_PRODUCTO",
+      entidad: "Producto",
+      entidadId: product.id,
+      idUsuario: user.id,
+      detalles: { nombre: product.nombre, activo },
     })
 
     return NextResponse.json(product)

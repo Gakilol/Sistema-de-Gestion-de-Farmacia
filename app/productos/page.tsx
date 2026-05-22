@@ -6,7 +6,7 @@ import { Sidebar } from "@/components/sidebar"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Plus, Edit2, Trash2, Download, Package, DollarSign, Layers, BarChart3, HelpCircle, Info, Search, AlertTriangle, Settings, Eye, Calendar, FileText, X, Loader2 } from "lucide-react"
+import { Plus, Edit2, Trash2, Download, Package, DollarSign, Layers, BarChart3, HelpCircle, Info, Search, AlertTriangle, Settings, Eye, Calendar, FileText, X, Loader2, Sliders } from "lucide-react"
 import { toast } from "sonner"
 import useSWR from "swr"
 import * as XLSX from "xlsx"
@@ -50,6 +50,14 @@ export default function ProductosPage() {
   const [detailsLoading, setDetailsLoading] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<any | null>(null)
 
+  // Ajuste de stock modal
+  const [showAjusteModal, setShowAjusteModal] = useState(false)
+  const [ajusteProducto, setAjusteProducto] = useState<Producto | null>(null)
+  const [ajusteNuevoStock, setAjusteNuevoStock] = useState("")
+  const [ajusteMotivo, setAjusteMotivo] = useState("Inventario Físico")
+  const [ajusteMotivoCustom, setAjusteMotivoCustom] = useState("")
+  const [ajusteLoading, setAjusteLoading] = useState(false)
+
   // formulario
   const [editingId, setEditingId] = useState<number | null>(null)
   const [nombre, setNombre] = useState("")
@@ -78,6 +86,50 @@ export default function ProductosPage() {
   const checkAdmin = () => {
     // TODO: leer rol desde token; por ahora true para pruebas
     setIsAdmin(true)
+  }
+
+  const handleOpenAjusteModal = (producto: Producto) => {
+    setAjusteProducto(producto)
+    setAjusteNuevoStock(String(producto.stockActual))
+    setAjusteMotivo("Inventario Físico")
+    setAjusteMotivoCustom("")
+    setShowAjusteModal(true)
+  }
+
+  const handleAjustarStock = async () => {
+    if (!ajusteProducto) return
+    const nuevoStock = parseInt(ajusteNuevoStock)
+    if (isNaN(nuevoStock) || nuevoStock < 0) {
+      toast.error("El nuevo stock debe ser un número válido mayor o igual a 0")
+      return
+    }
+    const motivoFinal = ajusteMotivo === "Otro" ? ajusteMotivoCustom.trim() : ajusteMotivo
+    if (!motivoFinal) {
+      toast.error("Debes ingresar un motivo para el ajuste")
+      return
+    }
+    setAjusteLoading(true)
+    try {
+      const res = await fetch(`/api/productos/${ajusteProducto.id}/ajustar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nuevoStock, motivo: motivoFinal }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || "Error al ajustar el stock")
+        return
+      }
+      toast.success(
+        `Stock de "${ajusteProducto.nombre}" ajustado: ${data.stockAnterior} → ${data.nuevoStock} (${data.diferencia >= 0 ? "+" : ""}${data.diferencia})`
+      )
+      setShowAjusteModal(false)
+      await mutateProductos()
+    } catch (e) {
+      toast.error("Error de conexión al ajustar stock")
+    } finally {
+      setAjusteLoading(false)
+    }
   }
 
   const handleOpenDetails = async (producto: Producto) => {
@@ -826,6 +878,17 @@ export default function ProductosPage() {
                               >
                                 <Edit2 className="w-4 h-4" />
                               </Button>
+                              {producto.activo && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleOpenAjusteModal(producto)}
+                                  className="text-orange-400 hover:text-orange-300 hover:bg-orange-500/10"
+                                  title="Ajustar Stock"
+                                >
+                                  <Sliders className="w-4 h-4" />
+                                </Button>
+                              )}
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -847,6 +910,100 @@ export default function ProductosPage() {
           </Card>
         </div>
       </main>
+
+      {/* Modal Ajuste de Stock */}
+      {showAjusteModal && ajusteProducto && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="glass-card w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-orange-500/10 border border-orange-500/20">
+                  <Sliders className="w-5 h-5 text-orange-400" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-foreground">Ajuste de Stock</h2>
+                  <p className="text-xs text-muted-foreground">{ajusteProducto.nombre}</p>
+                </div>
+              </div>
+              <button onClick={() => setShowAjusteModal(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Stock actual */}
+              <div className="p-3 rounded-xl bg-muted/40 border border-border flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Stock actual</span>
+                <span className="text-xl font-bold text-foreground">{ajusteProducto.stockActual} <span className="text-xs font-normal text-muted-foreground">uds</span></span>
+              </div>
+
+              {/* Nuevo stock */}
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Nuevo Stock (unidades)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={ajusteNuevoStock}
+                  onChange={e => setAjusteNuevoStock(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-input border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  placeholder="Ej: 100"
+                />
+                {ajusteNuevoStock !== "" && !isNaN(parseInt(ajusteNuevoStock)) && (
+                  <p className={`text-xs mt-1 font-medium ${
+                    parseInt(ajusteNuevoStock) > ajusteProducto.stockActual ? "text-emerald-500" :
+                    parseInt(ajusteNuevoStock) < ajusteProducto.stockActual ? "text-red-400" : "text-muted-foreground"
+                  }`}>
+                    Diferencia: {parseInt(ajusteNuevoStock) - ajusteProducto.stockActual >= 0 ? "+" : ""}{parseInt(ajusteNuevoStock) - ajusteProducto.stockActual} unidades
+                  </p>
+                )}
+              </div>
+
+              {/* Motivo */}
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Motivo del ajuste</label>
+                <select
+                  value={ajusteMotivo}
+                  onChange={e => setAjusteMotivo(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-input border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 mb-2"
+                >
+                  <option value="Inventario Físico">Inventario Físico</option>
+                  <option value="Medicamento Vencido">Medicamento Vencido</option>
+                  <option value="Pérdida / Daño">Pérdida / Daño</option>
+                  <option value="Error de Registro">Error de Registro</option>
+                  <option value="Recepción de Mercancía">Recepción de Mercancía</option>
+                  <option value="Otro">Otro (especificar)</option>
+                </select>
+                {ajusteMotivo === "Otro" && (
+                  <input
+                    type="text"
+                    value={ajusteMotivoCustom}
+                    onChange={e => setAjusteMotivoCustom(e.target.value)}
+                    placeholder="Describe el motivo..."
+                    className="w-full px-3 py-2 rounded-lg bg-input border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-2 mt-6">
+              <Button variant="outline" className="flex-1" onClick={() => setShowAjusteModal(false)} disabled={ajusteLoading}>
+                Cancelar
+              </Button>
+              <Button
+                className="flex-1 bg-orange-500 hover:bg-orange-600 text-white"
+                onClick={handleAjustarStock}
+                disabled={ajusteLoading}
+              >
+                {ajusteLoading ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Ajustando...</>
+                ) : (
+                  <><Sliders className="w-4 h-4 mr-2" />Aplicar Ajuste</>
+                )}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
 
       {/* Category Modal */}
       {showCategoryModal && (

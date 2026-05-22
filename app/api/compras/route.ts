@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
+import { registrarLog } from "@/lib/audit"
 
 export async function GET(request: NextRequest) {
   try {
@@ -61,47 +62,65 @@ export async function POST(request: NextRequest) {
 
     const { idProveedor, detalles } = validation.data
 
-    // Calcular total y validar stock
+    // Calcular total
     let total = 0
     for (const detalle of detalles) {
       const subtotal = Number.parseFloat(detalle.precioUnitario) * Number.parseInt(detalle.cantidad)
       total += subtotal
     }
 
-    // Crear compra dentro de una transacción
-    const compra = await prisma.compra.create({
-      data: {
-        fecha: new Date(),
-        idProveedor,
-        idUsuario: user.id,
-        total: total,
-        detalles: {
-          create: detalles.map((d: any) => ({
-            idProducto: d.idProducto,
-            cantidad: Number.parseInt(d.cantidad),
-            precioUnitario: Number.parseFloat(d.precioUnitario),
-            subtotal: Number.parseFloat(d.precioUnitario) * Number.parseInt(d.cantidad),
-          })),
-        },
-      },
-      include: {
-        detalles: { include: { producto: true } },
-        proveedor: true,
-        usuario: { include: { rol: true } },
-      },
-    })
-
-    // Actualizar stock de productos
-    for (const detalle of detalles) {
-      await prisma.producto.update({
-        where: { id: detalle.idProducto },
+    // ── Transacción atómica: insertar compra + detalles + incrementar stock ──
+    const compra = await prisma.$transaction(async (tx) => {
+      const nuevaCompra = await tx.compra.create({
         data: {
-          stockActual: {
-            increment: Number.parseInt(detalle.cantidad),
+          fecha: new Date(),
+          idProveedor,
+          idUsuario: user.id,
+          total: total,
+          detalles: {
+            create: detalles.map((d: any) => ({
+              idProducto: d.idProducto,
+              cantidad: Number.parseInt(d.cantidad),
+              precioUnitario: Number.parseFloat(d.precioUnitario),
+              subtotal: Number.parseFloat(d.precioUnitario) * Number.parseInt(d.cantidad),
+            })),
           },
         },
+        include: {
+          detalles: { include: { producto: true } },
+          proveedor: true,
+          usuario: { include: { rol: true } },
+        },
       })
-    }
+
+      // Incrementar stock dentro de la misma transacción
+      for (const detalle of detalles) {
+        await tx.producto.update({
+          where: { id: detalle.idProducto },
+          data: { stockActual: { increment: Number.parseInt(detalle.cantidad) } },
+        })
+      }
+
+      return nuevaCompra
+    })
+
+    // Registrar auditoría
+    registrarLog({
+      accion: "CREAR_COMPRA",
+      entidad: "Compra",
+      entidadId: compra.id,
+      idUsuario: user.id,
+      detalles: {
+        total,
+        idProveedor,
+        items: detalles.length,
+        productos: detalles.map((d: any) => ({
+          idProducto: d.idProducto,
+          cantidad: d.cantidad,
+          precioUnitario: d.precioUnitario,
+        })),
+      },
+    })
 
     return NextResponse.json(compra, { status: 201 })
   } catch (error) {

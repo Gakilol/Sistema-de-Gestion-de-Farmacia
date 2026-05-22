@@ -19,6 +19,7 @@ import {
   Moon,
   Sun,
   Truck,
+  ClipboardList,
 } from "lucide-react"
 
 import { useCurrentUser } from "../app/hooks/useCurrentUser"
@@ -87,6 +88,7 @@ export function Sidebar() {
     { href: "/compras", label: "Compras", icon: ShoppingCart },
     { href: "/usuarios", label: "Usuarios", icon: Settings },
     { href: "/reportes", label: "Reportes", icon: TrendingUp },
+    { href: "/auditoria", label: "Auditoría", icon: ClipboardList },
   ]
 
   const NavLink = ({ item }: { item: { href: string; label: string; icon: any } }) => {

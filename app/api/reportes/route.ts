@@ -159,7 +159,7 @@ export async function GET(request: NextRequest) {
           mapClientes[cid] = {
             id: cid,
             nombre: v.cliente.nombreCompleto,
-            cedula: v.cliente.cedula,
+            cedula: v.cliente.cedula || "—",
             comprasCount: 0,
             totalComprado: 0
           }
@@ -222,7 +222,7 @@ export async function GET(request: NextRequest) {
           tipo: "VENTA",
           fecha: v.fecha,
           total: Number(v.total),
-          usuario: v.usuario?.nombre || "Usuario del Sistema",
+          usuario: v.usuario?.nombreCompleto || "Usuario del Sistema",
           detalle: v.cliente ? `Cliente: ${v.cliente.nombreCompleto}` : "Público General"
         })),
         ...comprasList.map(c => ({
@@ -230,7 +230,7 @@ export async function GET(request: NextRequest) {
           tipo: "COMPRA",
           fecha: c.fecha,
           total: Number(c.total),
-          usuario: c.usuario?.nombre || "Usuario del Sistema",
+          usuario: c.usuario?.nombreCompleto || "Usuario del Sistema",
           detalle: c.proveedor ? `Proveedor: ${c.proveedor.nombre}` : "Proveedor Externo"
         }))
       ].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())

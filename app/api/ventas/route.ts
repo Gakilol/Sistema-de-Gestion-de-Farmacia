@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
+import { registrarLog } from "@/lib/audit"
 
 export async function GET(request: NextRequest) {
   try {
@@ -67,32 +68,46 @@ export async function POST(request: NextRequest) {
 
     const { idCliente, detalles, metodoPago, nombrePodologo, numeroReceta } = validation.data
 
-    // Validar stock disponible y precios correctos
-    for (const detalle of detalles) {
-      const producto = await prisma.producto.findUnique({
-        where: { id: detalle.idProducto },
-      })
+    // ── Pre-validación: cargar todos los productos de una sola consulta ──
+    const productIds = detalles.map((d: any) => d.idProducto)
+    const productos = await prisma.producto.findMany({
+      where: { id: { in: productIds } },
+    })
+    const productoMap = new Map(productos.map(p => [p.id, p]))
 
+    // Calcular cantidades totales por producto (agrupa líneas del mismo ítem)
+    const cantidadTotalPorProducto = new Map<number, number>()
+    for (const detalle of detalles) {
+      const producto = productoMap.get(detalle.idProducto)
       if (!producto) {
         return NextResponse.json({ error: `Producto ${detalle.idProducto} no encontrado` }, { status: 404 })
       }
 
-      let cantidadDeducir = Number.parseInt(detalle.cantidad)
       const tipoUnidad = detalle.tipoUnidad || "UNIDAD"
+      let cantidadDeducir = Number.parseInt(detalle.cantidad)
       if (tipoUnidad === "BLISTER") {
         cantidadDeducir = cantidadDeducir * (producto.unidadesPorBlister || 1)
       } else if (tipoUnidad === "CAJA") {
         cantidadDeducir = cantidadDeducir * (producto.unidadesPorCaja || 1)
       }
-      
-      // Guardar cantidadDeducir para usarlo en el update final
       detalle.cantidadDeducir = cantidadDeducir
 
-      if (producto.stockActual < cantidadDeducir) {
+      const prev = cantidadTotalPorProducto.get(detalle.idProducto) || 0
+      cantidadTotalPorProducto.set(detalle.idProducto, prev + cantidadDeducir)
+    }
+
+    // Validar stock suficiente usando totales agregados
+    for (const [idProducto, cantidadTotal] of cantidadTotalPorProducto) {
+      const producto = productoMap.get(idProducto)!
+      if (producto.stockActual < cantidadTotal) {
         return NextResponse.json({ error: `Stock insuficiente para ${producto.nombre}` }, { status: 400 })
       }
+    }
 
-      // Validar y asignar precio real desde la base de datos para evitar alteraciones en red
+    // Validar precios desde la base de datos (evita alteraciones en red)
+    for (const detalle of detalles) {
+      const producto = productoMap.get(detalle.idProducto)!
+      const tipoUnidad = detalle.tipoUnidad || "UNIDAD"
       let expectedPrice = 0
       if (tipoUnidad === "UNIDAD") {
         expectedPrice = Number(producto.precioVenta)
@@ -111,56 +126,72 @@ export async function POST(request: NextRequest) {
       if (expectedPrice <= 0) {
         return NextResponse.json({ error: `El precio configurado para ${producto.nombre} (${tipoUnidad}) no es válido (debe ser mayor a 0)` }, { status: 400 })
       }
-
-      // Sobrescribimos el precio enviado por el cliente con el verificado de la base de datos
       detalle.precioUnitario = expectedPrice
     }
 
     // Calcular total de forma segura
     let total = 0
     for (const detalle of detalles) {
-      const subtotal = detalle.precioUnitario * Number.parseInt(detalle.cantidad)
-      total += subtotal
+      total += detalle.precioUnitario * Number.parseInt(detalle.cantidad)
     }
 
-    // Crear venta
-    const venta = await prisma.venta.create({
-      data: {
-        fecha: new Date(),
-        idCliente: idCliente ? Number.parseInt(idCliente) : null,
-        idUsuario: user.id,
-        total,
-        metodoPago,
-        nombrePodologo: nombrePodologo || null,
-        numeroReceta: numeroReceta || null,
-        detalles: {
-          create: detalles.map((d: any) => ({
-            idProducto: d.idProducto,
-            cantidad: Number.parseInt(d.cantidad),
-            precioUnitario: d.precioUnitario,
-            subtotal: d.precioUnitario * Number.parseInt(d.cantidad),
-            tipoUnidad: d.tipoUnidad || "UNIDAD",
-          })),
-        },
-      },
-      include: {
-        detalles: { include: { producto: true } },
-        cliente: true,
-        usuario: { include: { rol: true } },
-      },
-    })
-
-    // Actualizar stock de productos (disminuir)
-    for (const detalle of detalles) {
-      await prisma.producto.update({
-        where: { id: detalle.idProducto },
+    // ── Transacción atómica: insertar venta + detalles + decrementar stock ──
+    const venta = await prisma.$transaction(async (tx) => {
+      const nuevaVenta = await tx.venta.create({
         data: {
-          stockActual: {
-            decrement: detalle.cantidadDeducir,
+          fecha: new Date(),
+          idCliente: idCliente ? Number.parseInt(idCliente) : null,
+          idUsuario: user.id,
+          total,
+          metodoPago,
+          nombrePodologo: nombrePodologo || null,
+          numeroReceta: numeroReceta || null,
+          detalles: {
+            create: detalles.map((d: any) => ({
+              idProducto: d.idProducto,
+              cantidad: Number.parseInt(d.cantidad),
+              precioUnitario: d.precioUnitario,
+              subtotal: d.precioUnitario * Number.parseInt(d.cantidad),
+              tipoUnidad: d.tipoUnidad || "UNIDAD",
+            })),
           },
         },
+        include: {
+          detalles: { include: { producto: true } },
+          cliente: true,
+          usuario: { include: { rol: true } },
+        },
       })
-    }
+
+      // Decrementar stock dentro de la misma transacción
+      for (const detalle of detalles) {
+        await tx.producto.update({
+          where: { id: detalle.idProducto },
+          data: { stockActual: { decrement: detalle.cantidadDeducir } },
+        })
+      }
+
+      return nuevaVenta
+    })
+
+    // Registrar auditoría (no bloquea la respuesta)
+    registrarLog({
+      accion: "CREAR_VENTA",
+      entidad: "Venta",
+      entidadId: venta.id,
+      idUsuario: user.id,
+      detalles: {
+        total,
+        metodoPago,
+        idCliente: idCliente || null,
+        items: detalles.length,
+        productos: detalles.map((d: any) => ({
+          idProducto: d.idProducto,
+          cantidad: d.cantidad,
+          tipoUnidad: d.tipoUnidad || "UNIDAD",
+        })),
+      },
+    })
 
     return NextResponse.json(venta, { status: 201 })
   } catch (error) {

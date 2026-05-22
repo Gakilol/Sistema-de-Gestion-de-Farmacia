@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"             // 👈 bcryptjs
 import { signToken } from "@/lib/auth"
+import { registrarLog } from "@/lib/audit"
 
 export async function POST(request: NextRequest) {
   try {
@@ -72,6 +73,15 @@ export async function POST(request: NextRequest) {
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       maxAge: 7 * 24 * 60 * 60, // 7 días
+    })
+
+    // Registrar auditoría de inicio de sesión
+    registrarLog({
+      accion: "INICIO_SESION",
+      entidad: "Usuario",
+      entidadId: usuario.id,
+      idUsuario: usuario.id,
+      detalles: { correo: usuario.correo, rol: usuario.rol.nombre },
     })
 
     return response

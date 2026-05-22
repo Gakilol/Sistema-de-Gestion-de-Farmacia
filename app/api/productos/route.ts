@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
 import { productoSchema } from "@/lib/validations"
 import { z } from "zod"
+import { registrarLog } from "@/lib/audit"
 
 // GET /api/productos?estado=activos|inactivos|todos
 export async function GET(request: NextRequest) {
@@ -86,6 +87,15 @@ export async function POST(request: NextRequest) {
         activo: data.activo,
       },
       include: { categoria: true },
+    })
+
+    // Registrar auditoría
+    registrarLog({
+      accion: "CREAR_PRODUCTO",
+      entidad: "Producto",
+      entidadId: producto.id,
+      idUsuario: user.id,
+      detalles: { nombre: producto.nombre, precioVenta: producto.precioVenta, stockActual: producto.stockActual },
     })
 
     return NextResponse.json(producto, { status: 201 })
