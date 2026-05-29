@@ -86,6 +86,7 @@ export function Sidebar() {
     { href: "/productos", label: "Productos", icon: Package },
     { href: "/proveedores", label: "Proveedores", icon: Truck },
     { href: "/compras", label: "Compras", icon: ShoppingCart },
+    { href: "/inventario", label: "Inventario", icon: ClipboardList },
     { href: "/usuarios", label: "Usuarios", icon: Settings },
     { href: "/reportes", label: "Reportes", icon: TrendingUp },
     { href: "/auditoria", label: "Auditoría", icon: ClipboardList },

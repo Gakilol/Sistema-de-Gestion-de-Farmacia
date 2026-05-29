@@ -28,6 +28,7 @@ model Usuario {
   compras         Compra[]
   ventas          Venta[]
   auditoriaLogs   AuditoriaLog[]
+  movimientos     MovimientoInventario[]
 }
 
 model Cliente {
@@ -56,24 +57,26 @@ model CategoriaProducto {
   productos       Producto[]
 }
 
-// ===== PRODUCTOS =====
+// ===== PRODUCTOS (CATÁLOGO) =====
 model Producto {
   id              Int     @id @default(autoincrement())
   nombre          String  @unique
+  codigoBarras    String? @unique
+  imagen          String?
   descripcion     String?
   descripcionCorta String?
   descripcionDetallada String?
   observaciones   String?
-  fechaVencimiento DateTime?
+  fechaVencimiento DateTime?  // Legacy field — now tracked per batch (Lote)
   idCategoria     Int
   categoria       CategoriaProducto @relation(fields: [idCategoria], references: [id])
-  precioCompra    Decimal @db.Decimal(10, 2)
+  precioCompra    Decimal @db.Decimal(10, 2)  // Average cost — auto-calculated from purchases
   precioVenta     Decimal @db.Decimal(10, 2)
   precioBlister   Decimal? @db.Decimal(10, 2)
   precioCaja      Decimal? @db.Decimal(10, 2)
   unidadesPorBlister Int?
   unidadesPorCaja Int?
-  stockActual     Int
+  stockActual     Int     @default(0)  // Computed from Lote totals — read-only in UI
   stockMinimo     Int?
   activo          Boolean @default(true)
   createdAt       DateTime @default(now())
@@ -82,6 +85,8 @@ model Producto {
   detallesCompra  DetalleCompra[]
   detallesVenta   DetalleVenta[]
   proveedores     ProveedorProducto[]
+  lotes           Lote[]
+  movimientos     MovimientoInventario[]
 }
 
 // ===== PROVEEDORES =====
@@ -115,6 +120,8 @@ model ProveedorProducto {
 model Compra {
   id              Int     @id @default(autoincrement())
   fecha           DateTime @default(now())
+  fechaCompra     DateTime?  // Actual invoice date (may differ from registration date)
+  numeroFactura   String?
   idProveedor     Int
   proveedor       Proveedor @relation(fields: [idProveedor], references: [id])
   total           Decimal @db.Decimal(10, 2)
@@ -135,8 +142,53 @@ model DetalleCompra {
   cantidad        Int
   precioUnitario  Decimal @db.Decimal(10, 2)
   subtotal        Decimal @db.Decimal(10, 2)
+  lote            String?   // Batch code from invoice
+  fechaVencimiento DateTime?  // Expiration date of this batch
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  lotes           Lote[]
+}
+
+// ===== LOTES (BATCH TRACKING) =====
+model Lote {
+  id                Int       @id @default(autoincrement())
+  idProducto        Int
+  producto          Producto  @relation(fields: [idProducto], references: [id], onDelete: Cascade)
+  codigoLote        String
+  fechaVencimiento  DateTime?
+  stockInicial      Int       @default(0)
+  stockActual       Int       @default(0)
+  costoCompra       Decimal   @db.Decimal(10, 2) @default(0)
+  idDetalleCompra   Int?
+  detalleCompra     DetalleCompra? @relation(fields: [idDetalleCompra], references: [id], onDelete: SetNull)
+  activo            Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  movimientos       MovimientoInventario[]
+
+  @@index([idProducto])
+}
+
+// ===== MOVIMIENTOS DE INVENTARIO (KARDEX) =====
+model MovimientoInventario {
+  id              Int       @id @default(autoincrement())
+  idProducto      Int
+  producto        Producto  @relation(fields: [idProducto], references: [id], onDelete: Cascade)
+  idLote          Int?
+  lote            Lote?     @relation(fields: [idLote], references: [id], onDelete: SetNull)
+  tipo            String    // 'ENTRADA_COMPRA', 'SALIDA_VENTA', 'AJUSTE_POSITIVO', 'AJUSTE_NEGATIVO'
+  cantidad        Int
+  stockResultante Int       @default(0)
+  costoUnitario   Decimal?  @db.Decimal(10, 2)
+  referencia      String?   // e.g. 'Compra #12', 'Venta #45', 'Ajuste: Inventario Físico'
+  idUsuario       Int?
+  usuario         Usuario?  @relation(fields: [idUsuario], references: [id], onDelete: SetNull)
+  createdAt       DateTime  @default(now())
+
+  @@index([idProducto])
+  @@index([createdAt])
 }
 
 // ===== VENTAS DE FARMACIA =====

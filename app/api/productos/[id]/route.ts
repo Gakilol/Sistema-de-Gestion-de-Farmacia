@@ -4,13 +4,23 @@ import { getCurrentUser } from "@/lib/auth"
 import { productoSchema } from "@/lib/validations"
 import { registrarLog } from "@/lib/audit"
 
-// Obtener un producto por id
+// Obtener un producto por id (incluye lotes y últimos movimientos)
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
     const producto = await prisma.producto.findUnique({
       where: { id: Number.parseInt(id) },
-      include: { categoria: true },
+      include: { 
+        categoria: true,
+        lotes: {
+          where: { activo: true },
+          orderBy: { fechaVencimiento: "asc" },
+        },
+        movimientos: {
+          orderBy: { createdAt: "desc" },
+          take: 20,
+        },
+      },
     })
 
     if (!producto) {
@@ -24,7 +34,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   }
 }
 
-// Actualizar datos del producto (ADMIN)
+// Actualizar datos del producto (ADMIN) — Catálogo solamente, no toca stock
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await getCurrentUser()
@@ -56,15 +66,17 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const data = parsed.data
     const { emptyToNull } = require('@/lib/validations')
 
+    // Only update catalog fields — DO NOT update stockActual
     const producto = await prisma.producto.update({
       where: { id: Number.parseInt(id) },
       data: {
         nombre: data.nombre,
+        codigoBarras: emptyToNull(data.codigoBarras),
+        imagen: emptyToNull(data.imagen),
         descripcion: emptyToNull(data.descripcion),
         descripcionCorta: emptyToNull(data.descripcionCorta),
         descripcionDetallada: emptyToNull(data.descripcionDetallada),
         observaciones: emptyToNull(data.observaciones),
-        fechaVencimiento: data.fechaVencimiento ? new Date(data.fechaVencimiento) : null,
         idCategoria: data.idCategoria,
         precioCompra: data.precioCompra || 0,
         precioVenta: data.precioVenta,
@@ -72,7 +84,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         precioCaja: data.precioCaja,
         unidadesPorBlister: data.unidadesPorBlister,
         unidadesPorCaja: data.unidadesPorCaja,
-        stockActual: data.stockActual,
         stockMinimo: data.stockMinimo,
         activo: data.activo,
       },
@@ -85,7 +96,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       entidad: "Producto",
       entidadId: producto.id,
       idUsuario: user.id,
-      detalles: { nombre: producto.nombre, precioVenta: Number(producto.precioVenta), stockActual: producto.stockActual },
+      detalles: { nombre: producto.nombre, precioVenta: Number(producto.precioVenta) },
     })
 
     return NextResponse.json(producto)

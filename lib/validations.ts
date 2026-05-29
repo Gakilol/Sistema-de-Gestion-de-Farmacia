@@ -11,24 +11,48 @@ export const clienteSchema = z.object({
     .transform(val => val.replace(/\s+/g, " ")), // Colapsar espacios múltiples
   cedula: z.preprocess(
     (val) => {
+      if (val === null || val === undefined) return null;
       if (typeof val !== "string") return val;
-      const clean = val.replace(/[\s-]/g, "").toUpperCase();
+      const trimmed = val.trim();
+      if (trimmed === "") return null;
+      const clean = trimmed.replace(/[\s-]/g, "").toUpperCase();
       if (clean.length === 14 && /^\d{13}[A-Z]$/.test(clean)) {
         return `${clean.substring(0, 3)}-${clean.substring(3, 9)}-${clean.substring(9, 13)}${clean.charAt(13)}`;
       }
-      return val;
+      return trimmed;
     },
-    z.string().trim().min(1, "La cédula es requerida").regex(nicaraguaCedulaRegex, "Formato de cédula de Nicaragua inválido (ej: 001-130605-1005A)")
+    z.string().trim().regex(nicaraguaCedulaRegex, "Formato de cédula de Nicaragua inválido (ej: 001-130605-1005A)").nullable().optional()
   ),
   telefono: z.preprocess(
     (val) => {
+      if (val === null || val === undefined) return null;
       if (typeof val !== "string") return val;
-      return val.replace(/[\s-]/g, "");
+      const trimmed = val.trim();
+      if (trimmed === "") return null;
+      return trimmed.replace(/[\s-]/g, "");
     },
-    z.string().trim().regex(/^\d{8}$/, "El teléfono debe tener exactamente 8 dígitos numéricos")
+    z.string().trim().regex(/^\d{8}$/, "El teléfono debe tener exactamente 8 dígitos numéricos").nullable().optional()
   ),
-  correo: z.string().trim().email("El correo electrónico es requerido y debe ser válido"),
-  direccion: z.string().trim().min(1, "La dirección es requerida"),
+  correo: z.preprocess(
+    (val) => {
+      if (val === null || val === undefined) return null;
+      if (typeof val !== "string") return val;
+      const trimmed = val.trim();
+      if (trimmed === "") return null;
+      return trimmed;
+    },
+    z.string().trim().email("El correo electrónico debe ser válido").nullable().optional()
+  ),
+  direccion: z.preprocess(
+    (val) => {
+      if (val === null || val === undefined) return null;
+      if (typeof val !== "string") return val;
+      const trimmed = val.trim();
+      if (trimmed === "") return null;
+      return trimmed;
+    },
+    z.string().trim().nullable().optional()
+  ),
   activo: z.boolean().optional().default(true),
 });
 
@@ -78,11 +102,12 @@ export const usuarioSchema = z.object({
 
 export const productoSchema = z.object({
   nombre: z.string().min(2, "El nombre debe tener al menos 2 caracteres"),
+  codigoBarras: z.string().optional().nullable(),
+  imagen: z.string().optional().nullable(),
   descripcion: z.string().optional().nullable(),
   descripcionCorta: z.string().optional().nullable(),
   descripcionDetallada: z.string().optional().nullable(),
   observaciones: z.string().optional().nullable(),
-  fechaVencimiento: z.string().optional().nullable(),
   idCategoria: z.number({ required_error: "La categoría es obligatoria" }).int().positive(),
   precioCompra: z.preprocess((a) => (a ? parseFloat(String(a)) : null), z.number().min(0, "El precio de compra no puede ser negativo").nullable().optional()),
   precioVenta: z.preprocess((a) => parseFloat(String(a)), z.number().min(0.01, "El precio de venta debe ser mayor a 0")),
@@ -90,7 +115,6 @@ export const productoSchema = z.object({
   precioCaja: z.preprocess((a) => (a ? parseFloat(String(a)) : null), z.number().min(0.01, "El precio por caja debe ser mayor a 0").nullable().optional()),
   unidadesPorBlister: z.preprocess((a) => (a ? parseInt(String(a), 10) : null), z.number().int().min(1).nullable().optional()),
   unidadesPorCaja: z.preprocess((a) => (a ? parseInt(String(a), 10) : null), z.number().int().min(1).nullable().optional()),
-  stockActual: z.preprocess((a) => parseInt(String(a), 10), z.number().int().min(0, "El stock no puede ser negativo")),
   stockMinimo: z.preprocess((a) => (a ? parseInt(String(a), 10) : null), z.number().int().min(0).nullable().optional()),
   activo: z.boolean().default(true),
 });
@@ -116,15 +140,14 @@ export const ventaSchema = z.object({
 
 export const compraSchema = z.object({
   idProveedor: z.number().int().positive("El proveedor es requerido"),
+  numeroFactura: z.string().optional().nullable(),
+  fechaCompra: z.string().optional().nullable(),
   detalles: z.array(z.object({
     idProducto: z.number().int().positive("El producto es requerido"),
     cantidad: z.number().int().positive("La cantidad debe ser mayor a 0"),
-    precioUnitario: z.number().min(0, "El precio unitario no puede ser negativo")
+    precioUnitario: z.number().min(0, "El precio unitario no puede ser negativo"),
+    lote: z.string().optional().nullable(),
+    fechaVencimiento: z.string().optional().nullable(),
   })).min(1, "La compra debe tener al menos un producto")
-    .refine((detalles) => {
-      // Validar que no haya productos duplicados
-      const ids = detalles.map(d => d.idProducto);
-      return new Set(ids).size === ids.length;
-    }, { message: "No puedes agregar el mismo producto repetido en la misma compra" })
 });
 

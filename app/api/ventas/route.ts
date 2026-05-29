@@ -135,8 +135,8 @@ export async function POST(request: NextRequest) {
       total += detalle.precioUnitario * Number.parseInt(detalle.cantidad)
     }
 
-    // ── Transacción atómica: insertar venta + detalles + decrementar stock ──
-    const venta = await prisma.$transaction(async (tx) => {
+    // ── Transacción atómica: venta + detalles + FIFO batch deduction + movimientos ──
+    const venta = await prisma.$transaction(async (tx: any) => {
       const nuevaVenta = await tx.venta.create({
         data: {
           fecha: new Date(),
@@ -163,8 +163,66 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      // Decrementar stock dentro de la misma transacción
+      // FIFO batch deduction for each product
       for (const detalle of detalles) {
+        let pendiente = detalle.cantidadDeducir
+        const producto = productoMap.get(detalle.idProducto)!
+        const nuevoStockProducto = producto.stockActual - detalle.cantidadDeducir
+
+        // Get active batches ordered by expiration (FIFO — oldest first)
+        const lotes = await tx.lote.findMany({
+          where: { idProducto: detalle.idProducto, activo: true, stockActual: { gt: 0 } },
+          orderBy: [
+            { fechaVencimiento: "asc" },
+            { createdAt: "asc" },
+          ],
+        })
+
+        for (const lote of lotes) {
+          if (pendiente <= 0) break
+
+          const deducir = Math.min(pendiente, lote.stockActual)
+          const nuevoStockLote = lote.stockActual - deducir
+
+          await tx.lote.update({
+            where: { id: lote.id },
+            data: {
+              stockActual: nuevoStockLote,
+              activo: nuevoStockLote > 0,
+            },
+          })
+
+          await tx.movimientoInventario.create({
+            data: {
+              idProducto: detalle.idProducto,
+              idLote: lote.id,
+              tipo: "SALIDA_VENTA",
+              cantidad: deducir,
+              stockResultante: nuevoStockProducto,
+              costoUnitario: lote.costoCompra,
+              referencia: `Venta #${nuevaVenta.id}`,
+              idUsuario: user.id,
+            },
+          })
+
+          pendiente -= deducir
+        }
+
+        // If batches don't cover everything (legacy stock without batches), log it anyway
+        if (pendiente > 0) {
+          await tx.movimientoInventario.create({
+            data: {
+              idProducto: detalle.idProducto,
+              tipo: "SALIDA_VENTA",
+              cantidad: pendiente,
+              stockResultante: nuevoStockProducto,
+              referencia: `Venta #${nuevaVenta.id} (sin lote)`,
+              idUsuario: user.id,
+            },
+          })
+        }
+
+        // Decrement product stock
         await tx.producto.update({
           where: { id: detalle.idProducto },
           data: { stockActual: { decrement: detalle.cantidadDeducir } },

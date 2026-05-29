@@ -38,50 +38,133 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { nuevoStock, motivo } = parsed.data
     const idProducto = Number.parseInt(id)
 
-    // Obtener stock actual para log
-    const productoActual = await prisma.producto.findUnique({
-      where: { id: idProducto },
+    // Execute within a transaction for atomicity
+    const result = await prisma.$transaction(async (tx) => {
+      const productoActual = await tx.producto.findUnique({
+        where: { id: idProducto },
+      })
+      if (!productoActual) {
+        throw new Error("Producto no encontrado")
+      }
+
+      const stockAnterior = productoActual.stockActual
+      const diferencia = nuevoStock - stockAnterior
+
+      if (diferencia === 0) {
+        return { stockAnterior, nuevoStock, diferencia: 0, producto: productoActual }
+      }
+
+      if (diferencia > 0) {
+        // INCREASE: Create an adjustment batch and log AJUSTE_POSITIVO
+        const loteAjuste = await tx.lote.create({
+          data: {
+            idProducto,
+            codigoLote: `AJUSTE-${Date.now()}`,
+            stockInicial: diferencia,
+            stockActual: diferencia,
+            costoCompra: productoActual.precioCompra,
+            activo: true,
+          },
+        })
+
+        await tx.movimientoInventario.create({
+          data: {
+            idProducto,
+            idLote: loteAjuste.id,
+            tipo: "AJUSTE_POSITIVO",
+            cantidad: diferencia,
+            stockResultante: nuevoStock,
+            costoUnitario: productoActual.precioCompra,
+            referencia: `Ajuste: ${motivo}`,
+            idUsuario: user.id,
+          },
+        })
+      } else {
+        // DECREASE: Deduct via FIFO across active batches
+        let pendiente = Math.abs(diferencia)
+        const lotes = await tx.lote.findMany({
+          where: { idProducto, activo: true, stockActual: { gt: 0 } },
+          orderBy: { fechaVencimiento: "asc" },
+        })
+
+        for (const lote of lotes) {
+          if (pendiente <= 0) break
+
+          const deducir = Math.min(pendiente, lote.stockActual)
+          await tx.lote.update({
+            where: { id: lote.id },
+            data: {
+              stockActual: { decrement: deducir },
+              activo: lote.stockActual - deducir > 0,
+            },
+          })
+
+          await tx.movimientoInventario.create({
+            data: {
+              idProducto,
+              idLote: lote.id,
+              tipo: "AJUSTE_NEGATIVO",
+              cantidad: deducir,
+              stockResultante: nuevoStock,
+              costoUnitario: lote.costoCompra,
+              referencia: `Ajuste: ${motivo}`,
+              idUsuario: user.id,
+            },
+          })
+
+          pendiente -= deducir
+        }
+
+        // If we couldn't deduct everything from batches, log the remainder
+        if (pendiente > 0) {
+          await tx.movimientoInventario.create({
+            data: {
+              idProducto,
+              tipo: "AJUSTE_NEGATIVO",
+              cantidad: pendiente,
+              stockResultante: nuevoStock,
+              referencia: `Ajuste (sin lote): ${motivo}`,
+              idUsuario: user.id,
+            },
+          })
+        }
+      }
+
+      // Update product stock
+      const productoActualizado = await tx.producto.update({
+        where: { id: idProducto },
+        data: { stockActual: nuevoStock },
+        include: { categoria: true },
+      })
+
+      return { stockAnterior, nuevoStock, diferencia, producto: productoActualizado }
     })
-    if (!productoActual) {
-      return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 })
-    }
 
-    const stockAnterior = productoActual.stockActual
-
-    // Llamar al procedimiento almacenado de PostgreSQL
-    await prisma.$executeRaw`CALL sp_ajuste_inventario(${idProducto}, ${nuevoStock}, ${motivo})`
-
-    // Retornar el producto actualizado (refrescar desde DB)
-    const productoActualizado = await prisma.producto.findUnique({
-      where: { id: idProducto },
-      include: { categoria: true },
-    })
-
-    // Registrar auditoría de ajuste de stock
+    // Registrar auditoría
     registrarLog({
       accion: "AJUSTE_STOCK",
       entidad: "Producto",
       entidadId: idProducto,
       idUsuario: user.id,
       detalles: {
-        nombre: productoActual.nombre,
-        stockAnterior,
-        nuevoStock,
-        diferencia: nuevoStock - stockAnterior,
+        nombre: result.producto.nombre,
+        stockAnterior: result.stockAnterior,
+        nuevoStock: result.nuevoStock,
+        diferencia: result.diferencia,
         motivo,
       },
     })
 
     return NextResponse.json({
       success: true,
-      producto: productoActualizado,
-      stockAnterior,
-      nuevoStock,
-      diferencia: nuevoStock - stockAnterior,
+      producto: result.producto,
+      stockAnterior: result.stockAnterior,
+      nuevoStock: result.nuevoStock,
+      diferencia: result.diferencia,
       motivo,
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error ajustando stock:", error)
-    return NextResponse.json({ error: "Error al ajustar el stock" }, { status: 500 })
+    return NextResponse.json({ error: error.message || "Error al ajustar el stock" }, { status: 500 })
   }
 }

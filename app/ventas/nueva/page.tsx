@@ -1,12 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Sidebar } from "@/components/sidebar"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Plus, Trash2, ShoppingCart } from "lucide-react"
+import { Plus, Trash2, ShoppingCart, Search, ChevronDown, X } from "lucide-react"
 import { toast } from "sonner"
 
 interface Producto {
@@ -46,7 +46,37 @@ export default function NuevaVentaPage() {
   const [nombrePodologo, setNombrePodologo] = useState("")
   const [numeroReceta, setNumeroReceta] = useState("")
 
+  // Smart search states
+  const [productoSearch, setProductoSearch] = useState("")
+  const [showProductoDropdown, setShowProductoDropdown] = useState(false)
+  const [clienteSearch, setClienteSearch] = useState("")
+  const [showClienteDropdown, setShowClienteDropdown] = useState(false)
+  const productoDropdownRef = useRef<HTMLDivElement>(null)
+  const clienteDropdownRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => { fetchData() }, [])
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (productoDropdownRef.current && !productoDropdownRef.current.contains(e.target as Node)) {
+        setShowProductoDropdown(false)
+      }
+      if (clienteDropdownRef.current && !clienteDropdownRef.current.contains(e.target as Node)) {
+        setShowClienteDropdown(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  const filteredProductos = productos.filter(p =>
+    p.nombre.toLowerCase().includes(productoSearch.toLowerCase())
+  )
+
+  const filteredClientes = clientes.filter(c =>
+    c.nombreCompleto.toLowerCase().includes(clienteSearch.toLowerCase())
+  )
 
   const fetchData = async () => {
     try {
@@ -135,16 +165,72 @@ export default function NuevaVentaPage() {
               <Card className="glass-card p-6">
                 <h2 className="text-lg font-semibold text-foreground mb-4">Agregar Productos</h2>
                 <div className="space-y-4">
-                  <div>
+                  <div ref={productoDropdownRef} className="relative">
                     <label className="block text-sm font-medium text-foreground mb-1">Producto</label>
-                    <select value={selectedProducto?.id || ""} onChange={(e) => { const prod = productos.find((p) => p.id === Number.parseInt(e.target.value)); setSelectedProducto(prod || null); setTipoUnidad("UNIDAD") }} className={selectClass}>
-                      <option value="">Selecciona un producto</option>
-                      {productos.map((p) => {
-                        let stockDisplay = `${p.stockActual} uds`
-                        if (p.unidadesPorCaja) stockDisplay += ` / ${Math.floor(p.stockActual / p.unidadesPorCaja)} cajas`
-                        return <option key={p.id} value={p.id}>{p.nombre} - Stock: {stockDisplay}</option>
-                      })}
-                    </select>
+                    {selectedProducto ? (
+                      <div className="flex items-center gap-2 p-2.5 rounded-lg bg-muted/30 border border-primary/40 text-foreground text-sm">
+                        <div className="flex-1 min-w-0">
+                          <span className="font-medium">{selectedProducto.nombre}</span>
+                          <span className="text-xs text-muted-foreground ml-2">Stock: {selectedProducto.stockActual} uds</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => { setSelectedProducto(null); setProductoSearch(""); setTipoUnidad("UNIDAD") }}
+                          className="text-muted-foreground hover:text-foreground shrink-0"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <input
+                          type="text"
+                          value={productoSearch}
+                          onChange={(e) => { setProductoSearch(e.target.value); setShowProductoDropdown(true) }}
+                          onFocus={() => setShowProductoDropdown(true)}
+                          placeholder="Buscar producto por nombre..."
+                          className={`${selectClass} pl-10`}
+                          autoComplete="off"
+                        />
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      </div>
+                    )}
+                    {showProductoDropdown && !selectedProducto && (
+                      <div className="absolute z-30 mt-1 w-full bg-card border border-border rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                        {filteredProductos.length === 0 ? (
+                          <div className="px-4 py-3 text-sm text-muted-foreground text-center">No se encontraron productos</div>
+                        ) : (
+                          filteredProductos.map((p) => {
+                            let stockDisplay = `${p.stockActual} uds`
+                            if (p.unidadesPorCaja) stockDisplay += ` / ${Math.floor(p.stockActual / p.unidadesPorCaja)} cajas`
+                            const isLowStock = p.stockActual <= 10
+                            return (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedProducto(p)
+                                  setTipoUnidad("UNIDAD")
+                                  setShowProductoDropdown(false)
+                                  setProductoSearch("")
+                                }}
+                                className="w-full text-left px-4 py-2.5 hover:bg-muted/40 transition-colors flex items-center justify-between gap-2 border-b border-border/30 last:border-b-0"
+                              >
+                                <span className="text-sm font-medium text-foreground truncate">{p.nombre}</span>
+                                <span className={`text-xs font-semibold shrink-0 px-2 py-0.5 rounded-full ${
+                                  isLowStock
+                                    ? "bg-red-500/10 text-red-500 border border-red-500/20"
+                                    : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                                }`}>
+                                  {stockDisplay}
+                                </span>
+                              </button>
+                            )
+                          })
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {selectedProducto && (
@@ -215,12 +301,62 @@ export default function NuevaVentaPage() {
               <Card className="glass-card p-6 sticky top-8">
                 <h2 className="text-lg font-semibold text-foreground mb-4">Información de Venta</h2>
                 <div className="space-y-4">
-                  <div>
+                  <div ref={clienteDropdownRef} className="relative">
                     <label className="block text-sm font-medium text-foreground mb-1">Cliente (Opcional)</label>
-                    <select value={selectedCliente} onChange={(e) => setSelectedCliente(e.target.value)} className={selectClass}>
-                      <option value="">Sin cliente</option>
-                      {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombreCompleto}</option>)}
-                    </select>
+                    {selectedCliente ? (
+                      <div className="flex items-center gap-2 p-2.5 rounded-lg bg-muted/30 border border-primary/40 text-foreground text-sm">
+                        <span className="flex-1 font-medium truncate">{clientes.find(c => String(c.id) === selectedCliente)?.nombreCompleto || "Cliente"}</span>
+                        <button
+                          type="button"
+                          onClick={() => { setSelectedCliente(""); setClienteSearch("") }}
+                          className="text-muted-foreground hover:text-foreground shrink-0"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <input
+                          type="text"
+                          value={clienteSearch}
+                          onChange={(e) => { setClienteSearch(e.target.value); setShowClienteDropdown(true) }}
+                          onFocus={() => setShowClienteDropdown(true)}
+                          placeholder="Buscar cliente..."
+                          className={`${selectClass} pl-10`}
+                          autoComplete="off"
+                        />
+                      </div>
+                    )}
+                    {showClienteDropdown && !selectedCliente && (
+                      <div className="absolute z-30 mt-1 w-full bg-card border border-border rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                        <button
+                          type="button"
+                          onClick={() => { setSelectedCliente(""); setShowClienteDropdown(false); setClienteSearch("") }}
+                          className="w-full text-left px-4 py-2.5 hover:bg-muted/40 transition-colors text-sm text-muted-foreground border-b border-border/30"
+                        >
+                          Sin cliente (Público General)
+                        </button>
+                        {filteredClientes.length === 0 ? (
+                          <div className="px-4 py-3 text-sm text-muted-foreground text-center">No se encontraron clientes</div>
+                        ) : (
+                          filteredClientes.map((c) => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedCliente(String(c.id))
+                                setShowClienteDropdown(false)
+                                setClienteSearch("")
+                              }}
+                              className="w-full text-left px-4 py-2.5 hover:bg-muted/40 transition-colors text-sm font-medium text-foreground border-b border-border/30 last:border-b-0"
+                            >
+                              {c.nombreCompleto}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-foreground mb-1">Método de Pago</label>

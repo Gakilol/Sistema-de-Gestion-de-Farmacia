@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { idProveedor, detalles } = validation.data
+    const { idProveedor, numeroFactura, fechaCompra, detalles } = validation.data
 
     // Calcular total
     let total = 0
@@ -69,11 +69,13 @@ export async function POST(request: NextRequest) {
       total += subtotal
     }
 
-    // ── Transacción atómica: insertar compra + detalles + incrementar stock ──
-    const compra = await prisma.$transaction(async (tx) => {
+    // ── Transacción atómica: compra + detalles + lotes + stock + movimientos + costo promedio ──
+    const compra = await prisma.$transaction(async (tx: any) => {
       const nuevaCompra = await tx.compra.create({
         data: {
           fecha: new Date(),
+          fechaCompra: fechaCompra ? new Date(fechaCompra) : new Date(),
+          numeroFactura: numeroFactura || null,
           idProveedor,
           idUsuario: user.id,
           total: total,
@@ -83,6 +85,8 @@ export async function POST(request: NextRequest) {
               cantidad: Number.parseInt(d.cantidad),
               precioUnitario: Number.parseFloat(d.precioUnitario),
               subtotal: Number.parseFloat(d.precioUnitario) * Number.parseInt(d.cantidad),
+              lote: d.lote || null,
+              fechaVencimiento: d.fechaVencimiento ? new Date(d.fechaVencimiento) : null,
             })),
           },
         },
@@ -93,11 +97,55 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      // Incrementar stock dentro de la misma transacción
-      for (const detalle of detalles) {
+      // For each detail: create batch, update stock, log movement, recalculate avg cost
+      for (const detalle of nuevaCompra.detalles) {
+        const cantidad = detalle.cantidad
+        const costoUnitario = Number(detalle.precioUnitario)
+        const producto = detalle.producto
+
+        // 1. Create Lote (Batch)
+        const lote = await tx.lote.create({
+          data: {
+            idProducto: detalle.idProducto,
+            codigoLote: detalle.lote || `COMP-${nuevaCompra.id}-${detalle.id}`,
+            fechaVencimiento: detalle.fechaVencimiento,
+            stockInicial: cantidad,
+            stockActual: cantidad,
+            costoCompra: costoUnitario,
+            idDetalleCompra: detalle.id,
+            activo: true,
+          },
+        })
+
+        // 2. Calculate new average cost
+        const stockAnterior = producto.stockActual
+        const costoAnterior = Number(producto.precioCompra)
+        const nuevoStockTotal = stockAnterior + cantidad
+        const costoPromedio = nuevoStockTotal > 0
+          ? ((stockAnterior * costoAnterior) + (cantidad * costoUnitario)) / nuevoStockTotal
+          : costoUnitario
+
+        // 3. Update Producto: increment stock + recalculate average cost
         await tx.producto.update({
           where: { id: detalle.idProducto },
-          data: { stockActual: { increment: Number.parseInt(detalle.cantidad) } },
+          data: {
+            stockActual: { increment: cantidad },
+            precioCompra: Math.round(costoPromedio * 100) / 100,
+          },
+        })
+
+        // 4. Create MovimientoInventario
+        await tx.movimientoInventario.create({
+          data: {
+            idProducto: detalle.idProducto,
+            idLote: lote.id,
+            tipo: "ENTRADA_COMPRA",
+            cantidad: cantidad,
+            stockResultante: nuevoStockTotal,
+            costoUnitario: costoUnitario,
+            referencia: `Compra #${nuevaCompra.id}${numeroFactura ? ` (Fact: ${numeroFactura})` : ''}`,
+            idUsuario: user.id,
+          },
         })
       }
 
@@ -113,11 +161,13 @@ export async function POST(request: NextRequest) {
       detalles: {
         total,
         idProveedor,
+        numeroFactura,
         items: detalles.length,
         productos: detalles.map((d: any) => ({
           idProducto: d.idProducto,
           cantidad: d.cantidad,
           precioUnitario: d.precioUnitario,
+          lote: d.lote,
         })),
       },
     })

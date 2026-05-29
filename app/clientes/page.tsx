@@ -173,23 +173,23 @@ export default function ClientesPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-foreground mb-1">Nombre Completo <span className="text-red-500">*</span></label>
-                    <Input required value={formData.nombreCompleto} onChange={(e) => setFormData({ ...formData, nombreCompleto: e.target.value })} className="bg-muted/30 border-border" />
+                    <Input required value={formData.nombreCompleto} onChange={(e) => setFormData({ ...formData, nombreCompleto: e.target.value })} className="bg-muted/30 border-border" placeholder="Ej: Juan Carlos Pérez López" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-foreground mb-1">Cédula <span className="text-red-500">*</span></label>
-                    <Input required value={formData.cedula} onChange={(e) => setFormData({ ...formData, cedula: e.target.value })} className="bg-muted/30 border-border" />
+                    <label className="block text-sm font-medium text-foreground mb-1">Cédula <span className="text-muted-foreground text-xs font-normal">(Opcional)</span></label>
+                    <Input value={formData.cedula} onChange={(e) => setFormData({ ...formData, cedula: e.target.value })} className="bg-muted/30 border-border" placeholder="Ej: 001-130605-1005A" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-foreground mb-1">Teléfono <span className="text-red-500">*</span></label>
-                    <Input required value={formData.telefono} onChange={(e) => setFormData({ ...formData, telefono: e.target.value })} className="bg-muted/30 border-border" />
+                    <label className="block text-sm font-medium text-foreground mb-1">Teléfono <span className="text-muted-foreground text-xs font-normal">(Opcional)</span></label>
+                    <Input value={formData.telefono} onChange={(e) => setFormData({ ...formData, telefono: e.target.value })} className="bg-muted/30 border-border" placeholder="Ej: 88881234" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-foreground mb-1">Correo <span className="text-red-500">*</span></label>
-                    <Input required type="email" value={formData.correo} onChange={(e) => setFormData({ ...formData, correo: e.target.value })} className="bg-muted/30 border-border" />
+                    <label className="block text-sm font-medium text-foreground mb-1">Correo <span className="text-muted-foreground text-xs font-normal">(Opcional)</span></label>
+                    <Input type="email" value={formData.correo} onChange={(e) => setFormData({ ...formData, correo: e.target.value })} className="bg-muted/30 border-border" placeholder="Ej: correo@ejemplo.com" />
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-foreground mb-1">Dirección <span className="text-red-500">*</span></label>
-                    <Input required value={formData.direccion} onChange={(e) => setFormData({ ...formData, direccion: e.target.value })} className="bg-muted/30 border-border" />
+                    <label className="block text-sm font-medium text-foreground mb-1">Dirección <span className="text-muted-foreground text-xs font-normal">(Opcional)</span></label>
+                    <Input value={formData.direccion} onChange={(e) => setFormData({ ...formData, direccion: e.target.value })} className="bg-muted/30 border-border" placeholder="Ej: Bo. San Judas, de la iglesia 2c al sur" />
                   </div>
                 </div>
                 <div className="flex gap-2">

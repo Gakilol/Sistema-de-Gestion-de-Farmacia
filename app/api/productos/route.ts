@@ -23,7 +23,13 @@ export async function GET(request: NextRequest) {
 
     const productos = await prisma.producto.findMany({
       where,
-      include: { categoria: true },
+      include: { 
+        categoria: true,
+        lotes: {
+          where: { activo: true, stockActual: { gt: 0 } },
+          orderBy: { fechaVencimiento: "asc" },
+        },
+      },
       orderBy: { nombre: "asc" },
     })
 
@@ -34,7 +40,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/productos  -> crear producto nuevo
+// POST /api/productos  -> crear producto nuevo (CATÁLOGO solamente — stock=0 por defecto)
 export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser()
@@ -70,11 +76,12 @@ export async function POST(request: NextRequest) {
     const producto = await prisma.producto.create({
       data: {
         nombre: data.nombre,
+        codigoBarras: emptyToNull(data.codigoBarras),
+        imagen: emptyToNull(data.imagen),
         descripcion: emptyToNull(data.descripcion),
         descripcionCorta: emptyToNull(data.descripcionCorta),
         descripcionDetallada: emptyToNull(data.descripcionDetallada),
         observaciones: emptyToNull(data.observaciones),
-        fechaVencimiento: data.fechaVencimiento ? new Date(data.fechaVencimiento) : null,
         idCategoria: data.idCategoria,
         precioCompra: data.precioCompra || 0,
         precioVenta: data.precioVenta,
@@ -82,7 +89,7 @@ export async function POST(request: NextRequest) {
         precioCaja: data.precioCaja,
         unidadesPorBlister: data.unidadesPorBlister,
         unidadesPorCaja: data.unidadesPorCaja,
-        stockActual: data.stockActual,
+        stockActual: 0,  // Stock starts at 0 — only increased via purchases
         stockMinimo: data.stockMinimo,
         activo: data.activo,
       },
@@ -95,7 +102,7 @@ export async function POST(request: NextRequest) {
       entidad: "Producto",
       entidadId: producto.id,
       idUsuario: user.id,
-      detalles: { nombre: producto.nombre, precioVenta: producto.precioVenta, stockActual: producto.stockActual },
+      detalles: { nombre: producto.nombre, precioVenta: producto.precioVenta },
     })
 
     return NextResponse.json(producto, { status: 201 })

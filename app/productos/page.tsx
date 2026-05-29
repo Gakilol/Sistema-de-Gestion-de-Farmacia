@@ -6,11 +6,12 @@ import { Sidebar } from "@/components/sidebar"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Plus, Edit2, Trash2, Download, Package, DollarSign, Layers, BarChart3, HelpCircle, Info, Search, AlertTriangle, Settings, Eye, Calendar, FileText, X, Loader2, Sliders } from "lucide-react"
+import { Plus, Edit2, Trash2, Download, Package, DollarSign, Layers, BarChart3, HelpCircle, Info, Search, AlertTriangle, Settings, Eye, Calendar, FileText, X, Loader2, Sliders, Filter } from "lucide-react"
 import { toast } from "sonner"
 import useSWR from "swr"
 import * as XLSX from "xlsx"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useCurrentUser } from "@/app/hooks/useCurrentUser"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
@@ -39,11 +40,15 @@ export default function ProductosPage() {
   const { data: productos = [], mutate: mutateProductos, isLoading: loadingProductos } = useSWR<Producto[]>("/api/productos?estado=todos", fetcher)
   const { data: categorias = [], mutate: mutateCategorias } = useSWR<Categoria[]>("/api/categorias", fetcher)
   
+  const { user } = useCurrentUser()
+  const isAdmin = user?.rolNombre === "ADMIN"
+
   const [search, setSearch] = useState("")
   const [showForm, setShowForm] = useState(false)
   const [showCategoryModal, setShowCategoryModal] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState("")
-  const [isAdmin, setIsAdmin] = useState(false)
+  const [activeFilter, setActiveFilter] = useState<"todos" | "activos" | "stock-bajo" | "vencidos" | "inactivos">("activos")
+  const [filterCategoria, setFilterCategoria] = useState<string>("")
 
   // Detalles modal
   const [showDetailsModal, setShowDetailsModal] = useState(false)
@@ -65,7 +70,8 @@ export default function ProductosPage() {
   const [descripcionCorta, setDescripcionCorta] = useState("")
   const [descripcionDetallada, setDescripcionDetallada] = useState("")
   const [observaciones, setObservaciones] = useState("")
-  const [fechaVencimiento, setFechaVencimiento] = useState("")
+  const [codigoBarras, setCodigoBarras] = useState("")
+  const [imagen, setImagen] = useState("")
   const [idCategoria, setIdCategoria] = useState<string>("")
   const [precioCompra, setPrecioCompra] = useState("")
   const [precioVenta, setPrecioVenta] = useState("")
@@ -73,20 +79,10 @@ export default function ProductosPage() {
   const [precioCaja, setPrecioCaja] = useState("")
   const [unidadesPorBlister, setUnidadesPorBlister] = useState("")
   const [unidadesPorCaja, setUnidadesPorCaja] = useState("")
-  const [stockActual, setStockActual] = useState("")
   const [stockMinimo, setStockMinimo] = useState("")
   const [formLoading, setFormLoading] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [precioVentaError, setPrecioVentaError] = useState<string | null>(null)
-
-  useEffect(() => {
-    checkAdmin()
-  }, [])
-
-  const checkAdmin = () => {
-    // TODO: leer rol desde token; por ahora true para pruebas
-    setIsAdmin(true)
-  }
 
   const handleOpenAjusteModal = (producto: Producto) => {
     setAjusteProducto(producto)
@@ -154,9 +150,43 @@ export default function ProductosPage() {
     }
   }
 
-  const filteredProductos = Array.isArray(productos) 
-    ? productos.filter((p) => p.nombre.toLowerCase().includes(search.toLowerCase()))
-    : []
+  // Contadores para filtros
+  const allProducts = Array.isArray(productos) ? productos : []
+  const countActivos = allProducts.filter(p => p.activo).length
+  const countInactivos = allProducts.filter(p => !p.activo).length
+  const countStockBajo = allProducts.filter(p => p.activo && p.stockMinimo != null && p.stockActual <= p.stockMinimo).length
+  const now = new Date()
+  const noventaDias = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000)
+  const countVencidos = allProducts.filter(p => {
+    if (!p.activo) return false
+    // We need fechaVencimiento from the data but our interface doesn't have it.
+    // We'll use a type assertion since the API returns it.
+    const fv = (p as any).fechaVencimiento
+    if (!fv) return false
+    return new Date(fv).getTime() <= noventaDias.getTime()
+  }).length
+
+  const filteredProductos = allProducts
+    .filter((p) => {
+      // Text search
+      if (search && !p.nombre.toLowerCase().includes(search.toLowerCase())) return false
+      // Category filter
+      if (filterCategoria && p.categoria.nombre !== filterCategoria) return false
+      // Tab filter
+      switch (activeFilter) {
+        case "activos": return p.activo
+        case "inactivos": return !p.activo
+        case "stock-bajo": return p.activo && p.stockMinimo != null && p.stockActual <= p.stockMinimo
+        case "vencidos": {
+          if (!p.activo) return false
+          const fv = (p as any).fechaVencimiento
+          if (!fv) return false
+          return new Date(fv).getTime() <= noventaDias.getTime()
+        }
+        case "todos":
+        default: return true
+      }
+    })
 
   const resetForm = () => {
     setEditingId(null)
@@ -165,7 +195,8 @@ export default function ProductosPage() {
     setDescripcionCorta("")
     setDescripcionDetallada("")
     setObservaciones("")
-    setFechaVencimiento("")
+    setCodigoBarras("")
+    setImagen("")
     setIdCategoria("")
     setPrecioCompra("")
     setPrecioVenta("")
@@ -173,7 +204,6 @@ export default function ProductosPage() {
     setPrecioCaja("")
     setUnidadesPorBlister("")
     setUnidadesPorCaja("")
-    setStockActual("")
     setStockMinimo("")
     setFormError(null)
     setPrecioVentaError(null)
@@ -195,7 +225,8 @@ export default function ProductosPage() {
       setDescripcionCorta(p.descripcionCorta || "")
       setDescripcionDetallada(p.descripcionDetallada || "")
       setObservaciones(p.observaciones || "")
-      setFechaVencimiento(p.fechaVencimiento ? String(p.fechaVencimiento).split("T")[0] : "")
+      setCodigoBarras(p.codigoBarras || "")
+      setImagen(p.imagen || "")
       setIdCategoria(String(p.idCategoria))
       setPrecioCompra(p.precioCompra ? String(p.precioCompra) : "")
       setPrecioVenta(String(p.precioVenta))
@@ -203,7 +234,6 @@ export default function ProductosPage() {
       setPrecioCaja(p.precioCaja ? String(p.precioCaja) : "")
       setUnidadesPorBlister(p.unidadesPorBlister != null ? String(p.unidadesPorBlister) : "")
       setUnidadesPorCaja(p.unidadesPorCaja != null ? String(p.unidadesPorCaja) : "")
-      setStockActual(String(p.stockActual))
       setStockMinimo(p.stockMinimo != null ? String(p.stockMinimo) : "")
       setShowForm(true)
       setFormError(null)
@@ -347,11 +377,12 @@ export default function ProductosPage() {
     try {
       const body = {
         nombre,
+        codigoBarras: codigoBarras || null,
+        imagen: imagen || null,
         descripcion: descripcion || null,
         descripcionCorta: descripcionCorta || null,
         descripcionDetallada: descripcionDetallada || null,
         observaciones: observaciones || null,
-        fechaVencimiento: fechaVencimiento || null,
         idCategoria: Number(idCategoria),
         precioCompra: precioCompra || null,
         precioVenta: precioVenta || null,
@@ -359,7 +390,6 @@ export default function ProductosPage() {
         precioCaja: precioCaja || null,
         unidadesPorBlister: unidadesPorBlister || null,
         unidadesPorCaja: unidadesPorCaja || null,
-        stockActual: stockActual || 0,
         stockMinimo: stockMinimo || null,
         activo: true,
       }
@@ -379,7 +409,26 @@ export default function ProductosPage() {
         if (res.status === 401 || res.status === 403) {
           setFormError(data.error || "No autorizado")
         } else {
-          setFormError(data.error || "Error al guardar producto")
+          // Mostrar errores detallados de validación Zod del backend
+          if (data.details) {
+            const details = data.details
+            const errorMessages: string[] = []
+            for (const key of Object.keys(details)) {
+              if (key === '_errors') {
+                errorMessages.push(...details._errors)
+              } else if (details[key]?._errors?.length) {
+                errorMessages.push(`${key}: ${details[key]._errors.join(', ')}`)
+              }
+            }
+            if (errorMessages.length > 0) {
+              setFormError(errorMessages.join(' | '))
+              errorMessages.forEach(msg => toast.error(msg))
+            } else {
+              setFormError(data.error || "Error al guardar producto")
+            }
+          } else {
+            setFormError(data.error || "Error al guardar producto")
+          }
         }
         return
       }
@@ -594,8 +643,14 @@ export default function ProductosPage() {
                       <Input value={observaciones} onChange={(e) => setObservaciones(e.target.value)} placeholder="Ej: Mantener fuera del alcance de niños" />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Fecha de Vencimiento</label>
-                      <Input type="date" value={fechaVencimiento} onChange={(e) => setFechaVencimiento(e.target.value)} className="bg-white" />
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Código de Barras</label>
+                      <Input value={codigoBarras} onChange={(e) => setCodigoBarras(e.target.value)} placeholder="Ej: 7441001123456" />
+                      <p className="text-xs text-gray-400 mt-1">Opcional. Código de barras del producto.</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Imagen (URL)</label>
+                      <Input value={imagen} onChange={(e) => setImagen(e.target.value)} placeholder="https://..." />
+                      <p className="text-xs text-gray-400 mt-1">Opcional. URL de imagen del producto.</p>
                     </div>
                   </div>
                 </div>
@@ -733,28 +788,21 @@ export default function ProductosPage() {
                   </div>
                 </div>
 
-                {/* ─── SECCIÓN 4: INVENTARIO ─── */}
+                {/* ─── SECCIÓN 4: STOCK MÍNIMO ─── */}
                 <div className="rounded-lg border border-amber-100 bg-amber-50/30 p-4">
                   <div className="flex items-center gap-2 mb-4">
                     <div className="p-1.5 bg-amber-100 rounded-md">
                       <BarChart3 className="w-4 h-4 text-amber-600" />
                     </div>
-                    <h3 className="text-sm font-semibold text-amber-800">Inventario</h3>
+                    <h3 className="text-sm font-semibold text-amber-800">Alertas de Stock</h3>
+                  </div>
+                  <div className="flex items-start gap-2 mb-4 p-3 bg-amber-50 rounded-md border border-amber-100">
+                    <Info className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                    <p className="text-xs text-amber-700">
+                      El stock actual se gestiona automáticamente mediante compras. Aquí solo defines el umbral mínimo para recibir alertas de reabastecimiento.
+                    </p>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Stock actual (unidades individuales) <span className="text-red-500">*</span>
-                      </label>
-                      <Input
-                        type="number"
-                        value={stockActual}
-                        onChange={(e) => setStockActual(e.target.value)}
-                        placeholder="Ej: 500"
-                        required
-                      />
-                      <p className="text-xs text-gray-400 mt-1">Total de unidades sueltas que tienes ahora mismo.</p>
-                    </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Stock mínimo <span className="text-gray-400 text-xs font-normal">— alerta automática</span>
@@ -797,17 +845,61 @@ export default function ProductosPage() {
             </Card>
           )}
 
-          {/* Búsqueda */}
-          <Card className="glass-card p-4 mb-6">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                type="text"
-                placeholder="Buscar producto..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-10 bg-muted/30 border-border w-full"
-              />
+          {/* Filtros Avanzados */}
+          <Card className="glass-card p-4 mb-6 space-y-4">
+            {/* Barra de Búsqueda + Categoría */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Buscar producto por nombre..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-10 bg-muted/30 border-border w-full"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Filter className="w-4 h-4 text-muted-foreground shrink-0" />
+                <select
+                  value={filterCategoria}
+                  onChange={(e) => setFilterCategoria(e.target.value)}
+                  className="w-full sm:w-48 p-2.5 rounded-lg bg-muted/30 border border-border text-foreground text-sm focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none transition-colors"
+                >
+                  <option value="">Todas las categorías</option>
+                  {categorias.map((cat) => (
+                    <option key={cat.id} value={cat.nombre}>{cat.nombre}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Pestañas de Filtro Rápido */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {[
+                { id: "activos" as const, label: "Activos", count: countActivos, color: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20" },
+                { id: "todos" as const, label: "Todos", count: allProducts.length, color: "text-blue-500 bg-blue-500/10 border-blue-500/20" },
+                { id: "stock-bajo" as const, label: "Stock Bajo", count: countStockBajo, color: "text-amber-500 bg-amber-500/10 border-amber-500/20" },
+                { id: "vencidos" as const, label: "Vencidos / Por Vencer", count: countVencidos, color: "text-red-500 bg-red-500/10 border-red-500/20" },
+                { id: "inactivos" as const, label: "Inactivos", count: countInactivos, color: "text-muted-foreground bg-muted/50 border-border" },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveFilter(tab.id)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all duration-200 ${
+                    activeFilter === tab.id
+                      ? `${tab.color} shadow-sm`
+                      : "text-muted-foreground bg-transparent border-transparent hover:bg-muted/30"
+                  }`}
+                >
+                  {tab.label}
+                  <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold ${
+                    activeFilter === tab.id ? "bg-white/20" : "bg-muted/60"
+                  }`}>
+                    {tab.count}
+                  </span>
+                </button>
+              ))}
             </div>
           </Card>
 
