@@ -31,8 +31,11 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url))
   }
 
-  // Proteger rutas de ADMIN (aquí solo decides, la verificación fina puede ir en la página)
+  // Proteger rutas de ADMIN
   if (adminRoutes.includes(pathname)) {
+    if (payload.idRol !== 1) { // 1 is ADMIN
+      return NextResponse.redirect(new URL("/", request.url))
+    }
     return NextResponse.next()
   }
 
