@@ -110,13 +110,21 @@ export const productoSchema = z.object({
   observaciones: z.string().optional().nullable(),
   idCategoria: z.number({ required_error: "La categoría es obligatoria" }).int().positive(),
   precioCompra: z.preprocess((a) => (a ? parseFloat(String(a)) : null), z.number().min(0, "El precio de compra no puede ser negativo").nullable().optional()),
-  precioVenta: z.preprocess((a) => parseFloat(String(a)), z.number().min(0.01, "El precio de venta debe ser mayor a 0")),
+  precioVenta: z.preprocess((a) => (a !== null && a !== undefined && a !== "" ? parseFloat(String(a)) : 0), z.number().min(0, "El precio de venta no puede ser negativo").optional().default(0)),
   precioBlister: z.preprocess((a) => (a ? parseFloat(String(a)) : null), z.number().min(0.01, "El precio por blíster debe ser mayor a 0").nullable().optional()),
   precioCaja: z.preprocess((a) => (a ? parseFloat(String(a)) : null), z.number().min(0.01, "El precio por caja debe ser mayor a 0").nullable().optional()),
   unidadesPorBlister: z.preprocess((a) => (a ? parseInt(String(a), 10) : null), z.number().int().min(1).nullable().optional()),
   unidadesPorCaja: z.preprocess((a) => (a ? parseInt(String(a), 10) : null), z.number().int().min(1).nullable().optional()),
   stockMinimo: z.preprocess((a) => (a ? parseInt(String(a), 10) : null), z.number().int().min(0).nullable().optional()),
   activo: z.boolean().default(true),
+}).refine(data => {
+  const pv = data.precioVenta || 0;
+  const pb = data.precioBlister || 0;
+  const pc = data.precioCaja || 0;
+  return pv > 0 || pb > 0 || pc > 0;
+}, {
+  message: "Debes definir al menos un precio de venta (unidad, blíster o caja) mayor a 0",
+  path: ["precioVenta"]
 });
 
 export const ventaSchema = z.object({

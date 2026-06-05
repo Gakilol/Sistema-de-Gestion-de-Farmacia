@@ -145,7 +145,6 @@ export default function NuevaVentaPage() {
 
   // Scanner states
   const [scannerOpen, setScannerOpen] = useState(false)
-  const [scannerTarget, setScannerTarget] = useState<"producto" | "cliente">("producto")
   const [buscandoScanner, setBuscandoScanner] = useState(false)
   const [quickClientOpen, setQuickClientOpen] = useState(false)
   const [cedulaParaCliente, setCedulaParaCliente] = useState("")
@@ -199,35 +198,7 @@ export default function NuevaVentaPage() {
     setBuscandoScanner(true)
 
     try {
-      // Limpieza del código para verificar si es cédula
-      const cleanCode = code.replace(/[\s\-]/g, "").toUpperCase().trim()
-      const matchesCedulaPattern = /^\d{13}[A-Z]$/.test(cleanCode)
-
-      // Si se escanea explícitamente como cliente, o coincide con el patrón de cédula
-      if (scannerTarget === "cliente" || matchesCedulaPattern) {
-        const res = await fetch(`/api/clientes/by-cedula?cedula=${encodeURIComponent(code)}`)
-        const data = await res.json()
-
-        if (data.encontrado && data.cliente) {
-          // Cliente encontrado → seleccionar
-          setSelectedCliente(String(data.cliente.id))
-          setClienteSearch("")
-          // Añadir a lista local si no está
-          if (!clientes.find(c => c.id === data.cliente.id)) {
-            setClientes(prev => [...prev, data.cliente])
-          }
-          toast.success(`✓ Cliente: ${data.cliente.nombreCompleto}`)
-        } else if (!data.encontrado && data.cedulaFormateada) {
-          // Cédula válida pero cliente nuevo → abrir modal de creación rápida
-          setCedulaParaCliente(data.cedulaFormateada)
-          setQuickClientOpen(true)
-        } else {
-          toast.error(data.error || "Cliente no registrado o cédula inválida")
-        }
-        return
-      }
-
-      // Si no es cédula, buscar como código de barras de producto
+      // Buscar como código de barras de producto
       const res = await fetch(`/api/productos/by-barcode?code=${encodeURIComponent(code)}`)
       const data = await res.json()
 
@@ -251,6 +222,8 @@ export default function NuevaVentaPage() {
       const prod = data.producto as Producto
       const existe = productos.find(p => p.id === prod.id)
       setSelectedProducto(existe || prod)
+      const defaultUnit = prod.precioVenta && Number(prod.precioVenta) > 0 ? "UNIDAD" : (prod.precioBlister && Number(prod.precioBlister) > 0 ? "BLISTER" : "CAJA")
+      setTipoUnidad(defaultUnit)
       if (!existe) {
         setProductos(prev => [...prev, prod])
       }
@@ -261,7 +234,7 @@ export default function NuevaVentaPage() {
     } finally {
       setBuscandoScanner(false)
     }
-  }, [buscandoScanner, clientes, productos])
+  }, [buscandoScanner, productos])
 
   // Hook de lector físico (solo activo cuando no hay modal abierto)
   useBarcodeScanner(handleScanCode, !scannerOpen && !quickClientOpen && !procesando)
@@ -361,7 +334,7 @@ export default function NuevaVentaPage() {
               id="btn-scanner-venta"
               variant="outline"
               size="sm"
-              onClick={() => { setScannerTarget("producto"); setScannerOpen(true) }}
+              onClick={() => setScannerOpen(true)}
               className="border-primary/30 text-primary hover:bg-primary/10 gap-2"
             >
               <ScanLine className="w-4 h-4" />
@@ -398,14 +371,6 @@ export default function NuevaVentaPage() {
               <Card className="glass-card p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold text-foreground">Agregar Productos</h2>
-                  <button
-                    id="btn-scan-cedula"
-                    onClick={() => { setScannerTarget("cliente"); setScannerOpen(true) }}
-                    className="text-xs text-primary hover:text-primary/80 flex items-center gap-1 transition-colors"
-                  >
-                    <Scan className="w-3.5 h-3.5" />
-                    Escanear Cédula
-                  </button>
                 </div>
                 <div className="space-y-4">
                   <div ref={productoDropdownRef} className="relative">
@@ -456,7 +421,8 @@ export default function NuevaVentaPage() {
                                 type="button"
                                 onClick={() => {
                                   setSelectedProducto(p)
-                                  setTipoUnidad("UNIDAD")
+                                  const defaultUnit = p.precioVenta && Number(p.precioVenta) > 0 ? "UNIDAD" : (p.precioBlister && Number(p.precioBlister) > 0 ? "BLISTER" : "CAJA")
+                                  setTipoUnidad(defaultUnit)
                                   setShowProductoDropdown(false)
                                   setProductoSearch("")
                                 }}
@@ -482,9 +448,9 @@ export default function NuevaVentaPage() {
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-1">Tipo de Venta</label>
                       <select value={tipoUnidad} onChange={(e) => setTipoUnidad(e.target.value)} className={selectClass}>
-                        <option value="UNIDAD">Unidad</option>
-                        {selectedProducto.precioBlister && <option value="BLISTER">Blister</option>}
-                        {selectedProducto.precioCaja && <option value="CAJA">Caja</option>}
+                        {selectedProducto.precioVenta && Number(selectedProducto.precioVenta) > 0 && <option value="UNIDAD">Unidad</option>}
+                        {selectedProducto.precioBlister && Number(selectedProducto.precioBlister) > 0 && <option value="BLISTER">Blister</option>}
+                        {selectedProducto.precioCaja && Number(selectedProducto.precioCaja) > 0 && <option value="CAJA">Caja</option>}
                       </select>
                     </div>
                   )}
@@ -697,11 +663,8 @@ export default function NuevaVentaPage() {
           setScannerOpen(false)
           handleScanCode(code)
         }}
-        title={scannerTarget === "cliente" ? "Escanear Cédula" : "Escanear Producto"}
-        hint={scannerTarget === "cliente"
-          ? "Apunta al código de barras de la cédula nicaragüense"
-          : "Apunta al código de barras del medicamento"
-        }
+        title="Escanear Producto"
+        hint="Apunta al código de barras del medicamento"
       />
 
       {/* Quick Client Modal */}

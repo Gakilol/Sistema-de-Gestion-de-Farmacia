@@ -358,23 +358,10 @@ export default function ProductosPage() {
       if (sugerido) setPrecioCaja(sugerido)
     }
   }
-
   const handleSaveProducto = async (e: React.FormEvent) => {
     e.preventDefault()
     setFormError(null)
     setFormLoading(true)
-
-    // ── Validación: precio de venta > precio de compra ──
-    if (precioCompra && precioVenta) {
-      const pc = parseFloat(precioCompra)
-      const pv = parseFloat(precioVenta)
-      if (!isNaN(pc) && !isNaN(pv) && pv <= pc) {
-        setFormError(`El precio de venta (C$${pv.toFixed(2)}) debe ser mayor al precio de compra (C$${pc.toFixed(2)}). No puedes vender al costo o por debajo.`)
-        setPrecioVentaError(`Debe ser mayor a C$${pc.toFixed(2)}`)
-        setFormLoading(false)
-        return
-      }
-    }
 
     try {
       const body = {
