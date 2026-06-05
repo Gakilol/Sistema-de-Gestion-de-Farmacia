@@ -117,4 +117,4 @@ NEXT_PUBLIC_APP_URL="http://localhost:3000"
 
 ---
 
-El sistema está completamente optimizado y listo para ser presentado ante los evaluadores de tu proyecto. ¡Éxitos en tu presentación! 🎓🌟
+
