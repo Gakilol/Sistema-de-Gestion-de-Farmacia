@@ -28,14 +28,91 @@ function detectIOS(): boolean {
 }
 
 /**
- * Modal de escáner híbrido con soporte universal:
+ * Helper to downscale and/or rotate an image to make barcode detection
+ * faster, cleaner, and independent of orientation.
+ */
+function resizeAndRotateImage(
+  file: File,
+  maxDimension: number,
+  rotateAngle: number
+): Promise<File> {
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const img = new Image()
+      img.onload = () => {
+        let width = img.width
+        let height = img.height
+
+        // Calculate aspect ratio downscaling
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width)
+            width = maxDimension
+          } else {
+            width = Math.round((width * maxDimension) / height)
+            height = maxDimension
+          }
+        }
+
+        const canvas = document.createElement("canvas")
+        // Swap dimensions if rotating 90 or 270 degrees
+        if (rotateAngle === 90 || rotateAngle === 270) {
+          canvas.width = height
+          canvas.height = width
+        } else {
+          canvas.width = width
+          canvas.height = height
+        }
+
+        const ctx = canvas.getContext("2d")
+        if (!ctx) {
+          resolve(file)
+          return
+        }
+
+        // Apply rotation
+        if (rotateAngle !== 0) {
+          ctx.translate(canvas.width / 2, canvas.height / 2)
+          ctx.rotate((rotateAngle * Math.PI) / 180)
+          ctx.drawImage(img, -width / 2, -height / 2, width, height)
+        } else {
+          ctx.drawImage(img, 0, 0, width, height)
+        }
+
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              resolve(file)
+              return
+            }
+            const processedFile = new File([blob], file.name, {
+              type: "image/jpeg",
+              lastModified: Date.now(),
+            })
+            resolve(processedFile)
+          },
+          "image/jpeg",
+          0.90
+        )
+      }
+      img.onerror = () => resolve(file)
+      img.src = e.target?.result as string
+    }
+    reader.onerror = () => resolve(file)
+    reader.readAsDataURL(file)
+  })
+}
+
+/**
+ * Modal de escáner híbrido con soporte universal y multi-intento de decodificación:
  *
- * • CÁMARA (iOS Safari):  <input capture="environment"> → foto → scanFile()
- *   Abre la cámara nativa sin getUserMedia. Sin crashes.
+ * • CÁMARA (iOS Safari):  <input capture="environment"> → foto → scan con 5 intentos
+ *   (resoluciones/rotaciones distintas) para mayor tolerancia a cédulas/barras.
  *
- * • CÁMARA (Chrome/Android/Desktop): html5-qrcode en modo live stream.
+ * • CÁMARA (Chrome/Android/Desktop): html5-qrcode en modo live stream optimizado.
  *
- * • MANUAL: campo de texto para ingresar el código a mano.
+ * • MANUAL: campo de texto.
  */
 export function ScannerModal({
   isOpen,
@@ -55,7 +132,7 @@ export function ScannerModal({
   const [manualCode, setManualCode]   = useState("")
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [isScanning, setIsScanning]   = useState(false)
-  const [isDecoding, setIsDecoding]   = useState(false)   // iOS: decoding photo
+  const [isDecoding, setIsDecoding]   = useState(false)
 
   // ─── Stop live-stream scanner ─────────────────────────────────────────────
   const stopScanner = useCallback(async () => {
@@ -67,13 +144,13 @@ export function ScannerModal({
         if (state === 2) await scanner.stop()
         scanner.clear?.()
       } catch {
-        // stream may already be torn down — ignore
+        // ignore
       }
     }
     if (isMounted.current) setIsScanning(false)
   }, [])
 
-  // ─── iOS: decode a photo taken with <input capture> ───────────────────────
+  // ─── iOS: decode photo using multi-attempt pipeline ───────────────────────
   const handleFileCapture = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -81,34 +158,109 @@ export function ScannerModal({
     setIsDecoding(true)
     setCameraError(null)
 
-    try {
-      const { Html5Qrcode } = await import("html5-qrcode")
-      // scanFile requires a DOM element id — use a temporary hidden div
-      const tempId = "scanner-temp-" + Date.now()
-      const tempDiv = document.createElement("div")
-      tempDiv.id = tempId
-      tempDiv.style.display = "none"
-      document.body.appendChild(tempDiv)
+    // Temp container for decoder
+    const tempId = "scanner-temp-" + Date.now()
+    const tempDiv = document.createElement("div")
+    tempDiv.id = tempId
+    tempDiv.style.display = "none"
+    document.body.appendChild(tempDiv)
 
-      const scanner = new Html5Qrcode(tempId)
+    try {
+      const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode")
+
+      // Support ALL common 1D and 2D formats
+      const formats = [
+        Html5QrcodeSupportedFormats.QR_CODE,
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.CODE_93,
+        Html5QrcodeSupportedFormats.CODABAR,
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.ITF,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.UPC_E,
+        Html5QrcodeSupportedFormats.PDF_417
+      ]
+
+      const scanner = new Html5Qrcode(tempId, {
+        formatsToSupport: formats,
+        useBarCodeDetectorIfSupported: true
+      })
+
+      let decodedText: string | null = null
+      let lastError: any = null
+
+      // Pipeline of decoding attempts
+      // 1. Raw photo
       try {
-        const result = await scanner.scanFile(file, /* showImage */ false)
-        onScan(result.trim())
+        decodedText = await scanner.scanFile(file, false)
+      } catch (err) {
+        lastError = err
+      }
+
+      // 2. Downscaled to 1200px max (filters high-frequency noise from 12MP+ cameras)
+      if (!decodedText) {
+        try {
+          const processed = await resizeAndRotateImage(file, 1200, 0)
+          decodedText = await scanner.scanFile(processed, false)
+        } catch (err) {
+          lastError = err
+        }
+      }
+
+      // 3. Rotated 90 degrees (essential for vertical phone photos of horizontal cards)
+      if (!decodedText) {
+        try {
+          const processed = await resizeAndRotateImage(file, 1000, 90)
+          decodedText = await scanner.scanFile(processed, false)
+        } catch (err) {
+          lastError = err
+        }
+      }
+
+      // 4. Rotated 270 degrees
+      if (!decodedText) {
+        try {
+          const processed = await resizeAndRotateImage(file, 1000, 270)
+          decodedText = await scanner.scanFile(processed, false)
+        } catch (err) {
+          lastError = err
+        }
+      }
+
+      // 5. Downscaled to 800px max (very fast check for blurry barcodes)
+      if (!decodedText) {
+        try {
+          const processed = await resizeAndRotateImage(file, 800, 0)
+          decodedText = await scanner.scanFile(processed, false)
+        } catch (err) {
+          lastError = err
+        }
+      }
+
+      // Cleanup
+      try { scanner.clear() } catch { /* ignore */ }
+
+      if (decodedText) {
+        onScan(decodedText.trim())
         onClose()
-      } finally {
-        try { scanner.clear() } catch { /* ignore */ }
-        document.body.removeChild(tempDiv)
+      } else {
+        throw lastError || new Error("No code detected")
       }
     } catch (err: any) {
+      console.error("All decoding attempts failed:", err)
       const msg = (err?.message || String(err)).toLowerCase()
       if (msg.includes("no multiformat") || msg.includes("not found") || msg.includes("no barcode")) {
-        setCameraError("No se encontró ningún código en la imagen. Intenta de nuevo con mejor iluminación.")
+        setCameraError(
+          "No se detectó ningún código. Asegúrate de enfocar bien el código de barras/cédula, evitar reflejos y sostener la tarjeta horizontalmente."
+        )
       } else {
-        setCameraError("No se pudo leer el código. Ingrésalo manualmente si el problema persiste.")
+        setCameraError("Error al procesar la imagen. Por favor, ingresa el código de forma manual.")
       }
     } finally {
+      document.body.removeChild(tempDiv)
       if (isMounted.current) setIsDecoding(false)
-      // Reset the input so the same file can be re-selected
       if (fileInputRef.current) fileInputRef.current.value = ""
     }
   }, [onScan, onClose])
@@ -125,13 +277,30 @@ export function ScannerModal({
     }
 
     try {
-      const { Html5Qrcode } = await import("html5-qrcode")
+      const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode")
       if (!isMounted.current || !containerRef.current) return
 
       const scannerId = "scanner-region-" + Date.now()
       containerRef.current.id = scannerId
 
-      const html5QrCode = new Html5Qrcode(scannerId)
+      const formats = [
+        Html5QrcodeSupportedFormats.QR_CODE,
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.CODE_93,
+        Html5QrcodeSupportedFormats.CODABAR,
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.ITF,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.UPC_E,
+        Html5QrcodeSupportedFormats.PDF_417
+      ]
+
+      const html5QrCode = new Html5Qrcode(scannerId, {
+        formatsToSupport: formats,
+        useBarCodeDetectorIfSupported: true
+      })
       scannerRef.current = html5QrCode
 
       await html5QrCode.start(
@@ -148,7 +317,7 @@ export function ScannerModal({
           onScan(decodedText.trim())
           onClose()
         },
-        () => { /* per-frame errors are normal — ignore */ }
+        () => { /* ignore normal per-frame errors */ }
       )
 
       if (isMounted.current) setIsScanning(true)
@@ -160,7 +329,7 @@ export function ScannerModal({
       } else if (msg.includes("notfound") || msg.includes("device")) {
         setCameraError("No se encontró cámara en este dispositivo.")
       } else {
-        setCameraError("No se pudo iniciar la cámara. Prueba con el modo Manual.")
+        setCameraError("No se pudo iniciar la cámara en vivo. Prueba con el modo Manual.")
       }
       setMode("manual")
     }
@@ -316,7 +485,7 @@ export function ScannerModal({
                   <div className="text-center">
                     <p className="text-sm font-medium text-foreground mb-1">Captura con la cámara</p>
                     <p className="text-xs text-muted-foreground">
-                      Toca el botón para abrir la cámara, apunta al código y toma la foto.
+                      Toca el botón, apunta de forma horizontal al código y toma la foto.
                     </p>
                   </div>
 
@@ -341,12 +510,12 @@ export function ScannerModal({
                     {isDecoding ? (
                       <>
                         <span className="w-4 h-4 mr-2 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
-                        Leyendo código...
+                        Procesando imagen (reintentando)...
                       </>
                     ) : (
                       <>
                         <ImageIcon className="w-4 h-4 mr-2" />
-                        Abrir Cámara
+                        Tomar Foto
                       </>
                     )}
                   </Button>
