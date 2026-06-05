@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState, useCallback } from "react"
-import { X, Camera, Keyboard, ScanLine, AlertTriangle, Wifi } from "lucide-react"
+import { X, Camera, Keyboard, ScanLine, AlertTriangle, ImageIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
@@ -14,24 +14,28 @@ interface ScannerModalProps {
 }
 
 /**
- * Detects iOS / iPadOS Safari to default to manual mode.
- * html5-qrcode throws unhandled promise rejections on these browsers
- * that crash the entire React tree if camera mode is attempted first.
+ * Detects iOS / iPadOS to use file-capture mode instead of getUserMedia.
+ * html5-qrcode throws unhandled promise rejections on iOS Safari when using
+ * the live-stream approach, crashing the entire React tree.
  */
-function isIOSSafari(): boolean {
-  if (typeof window === "undefined") return false
-  const ua = window.navigator.userAgent
-  const isIOS = /iPad|iPhone|iPod/.test(ua) && !(window as any).MSStream
-  const isSafari = /Safari/.test(ua) && !/Chrome|CriOS|FxiOS|EdgiOS/.test(ua)
-  return isIOS || (isSafari && isIOS)
+function detectIOS(): boolean {
+  if (typeof navigator === "undefined") return false
+  return (
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    // iPadOS 13+ reports as MacIntel with touch
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+  )
 }
 
 /**
- * Modal de escáner híbrido:
- * - Modo CÁMARA: usa html5-qrcode (desktop/Android). En iOS Safari inicia en manual.
- * - Modo MANUAL: campo de texto para ingresar el código a mano (fallback universal).
+ * Modal de escáner híbrido con soporte universal:
  *
- * Maneja tanto `error` como `unhandledrejection` globales para evitar crashes en iOS Safari.
+ * • CÁMARA (iOS Safari):  <input capture="environment"> → foto → scanFile()
+ *   Abre la cámara nativa sin getUserMedia. Sin crashes.
+ *
+ * • CÁMARA (Chrome/Android/Desktop): html5-qrcode en modo live stream.
+ *
+ * • MANUAL: campo de texto para ingresar el código a mano.
  */
 export function ScannerModal({
   isOpen,
@@ -40,62 +44,88 @@ export function ScannerModal({
   title = "Escanear Código",
   hint = "Apunta la cámara al código de barras o cédula",
 }: ScannerModalProps) {
-  const scannerRef = useRef<any>(null)
+  // ─── State ────────────────────────────────────────────────────────────────
+  const scannerRef   = useRef<any>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const isMounted = useRef(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const isMounted    = useRef(false)
 
-  // iOS Safari starts in manual mode to avoid crashes
-  const [mode, setMode] = useState<"camera" | "manual">(() =>
-    typeof window !== "undefined" && isIOSSafari() ? "manual" : "camera"
-  )
-  const [manualCode, setManualCode] = useState("")
+  const [isIOS]      = useState(detectIOS)
+  const [mode, setMode]         = useState<"camera" | "manual">("camera")
+  const [manualCode, setManualCode]   = useState("")
   const [cameraError, setCameraError] = useState<string | null>(null)
-  const [isScanning, setIsScanning] = useState(false)
-  const [isIOS] = useState(() => typeof window !== "undefined" && isIOSSafari())
+  const [isScanning, setIsScanning]   = useState(false)
+  const [isDecoding, setIsDecoding]   = useState(false)   // iOS: decoding photo
 
-  // ─── Stop scanner safely ───────────────────────────────────────────────────
+  // ─── Stop live-stream scanner ─────────────────────────────────────────────
   const stopScanner = useCallback(async () => {
     const scanner = scannerRef.current
     scannerRef.current = null
     if (scanner) {
       try {
         const state = scanner.getState?.()
-        if (state === 2) {
-          await scanner.stop()
-        }
+        if (state === 2) await scanner.stop()
         scanner.clear?.()
       } catch {
-        // ignore — browser may have already torn down the stream
+        // stream may already be torn down — ignore
       }
     }
-    if (isMounted.current) {
-      setIsScanning(false)
-    }
+    if (isMounted.current) setIsScanning(false)
   }, [])
 
-  // ─── Start camera ──────────────────────────────────────────────────────────
+  // ─── iOS: decode a photo taken with <input capture> ───────────────────────
+  const handleFileCapture = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setIsDecoding(true)
+    setCameraError(null)
+
+    try {
+      const { Html5Qrcode } = await import("html5-qrcode")
+      // scanFile requires a DOM element id — use a temporary hidden div
+      const tempId = "scanner-temp-" + Date.now()
+      const tempDiv = document.createElement("div")
+      tempDiv.id = tempId
+      tempDiv.style.display = "none"
+      document.body.appendChild(tempDiv)
+
+      const scanner = new Html5Qrcode(tempId)
+      try {
+        const result = await scanner.scanFile(file, /* showImage */ false)
+        onScan(result.trim())
+        onClose()
+      } finally {
+        try { scanner.clear() } catch { /* ignore */ }
+        document.body.removeChild(tempDiv)
+      }
+    } catch (err: any) {
+      const msg = (err?.message || String(err)).toLowerCase()
+      if (msg.includes("no multiformat") || msg.includes("not found") || msg.includes("no barcode")) {
+        setCameraError("No se encontró ningún código en la imagen. Intenta de nuevo con mejor iluminación.")
+      } else {
+        setCameraError("No se pudo leer el código. Ingrésalo manualmente si el problema persiste.")
+      }
+    } finally {
+      if (isMounted.current) setIsDecoding(false)
+      // Reset the input so the same file can be re-selected
+      if (fileInputRef.current) fileInputRef.current.value = ""
+    }
+  }, [onScan, onClose])
+
+  // ─── Desktop/Android: start live-stream scanner ───────────────────────────
   const startCamera = useCallback(async () => {
     if (!containerRef.current || !isMounted.current) return
     setCameraError(null)
 
-    // Extra guard: don't try on iOS Safari
-    if (isIOSSafari()) {
-      setCameraError("La cámara en Safari de iPhone no es compatible. Usa el modo Manual.")
-      setMode("manual")
-      return
-    }
-
-    // Check browser support before importing the library
     if (!navigator.mediaDevices?.getUserMedia) {
-      setCameraError("Tu navegador no soporta acceso a la cámara. Usa el modo Manual.")
+      setCameraError("Tu navegador no soporta acceso a la cámara en vivo. Usa el modo Manual.")
       setMode("manual")
       return
     }
 
     try {
-      // Dynamic import to avoid SSR issues
       const { Html5Qrcode } = await import("html5-qrcode")
-
       if (!isMounted.current || !containerRef.current) return
 
       const scannerId = "scanner-region-" + Date.now()
@@ -108,93 +138,71 @@ export function ScannerModal({
         { facingMode: "environment" },
         {
           fps: 10,
-          qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-            const minEdge = Math.min(viewfinderWidth, viewfinderHeight)
-            const qrboxSize = Math.max(120, Math.floor(minEdge * 0.7))
-            return { width: qrboxSize, height: qrboxSize }
+          qrbox: (w: number, h: number) => {
+            const size = Math.max(120, Math.floor(Math.min(w, h) * 0.7))
+            return { width: size, height: size }
           },
         },
         (decodedText: string) => {
-          // Code found
           stopScanner()
           onScan(decodedText.trim())
           onClose()
         },
-        () => {
-          // Per-frame errors are normal while scanning — ignore
-        }
+        () => { /* per-frame errors are normal — ignore */ }
       )
 
       if (isMounted.current) setIsScanning(true)
     } catch (err: any) {
       if (!isMounted.current) return
-      console.error("Error iniciando cámara:", err)
       const msg = (err?.message || String(err)).toLowerCase()
       if (msg.includes("permission") || msg.includes("denied") || msg.includes("notallowed")) {
-        setCameraError("Permiso de cámara denegado. Activa el acceso en Ajustes y recarga.")
+        setCameraError("Permiso de cámara denegado. Actívalo en los Ajustes del navegador.")
       } else if (msg.includes("notfound") || msg.includes("device")) {
         setCameraError("No se encontró cámara en este dispositivo.")
       } else {
-        setCameraError("No se pudo iniciar la cámara en este navegador.")
+        setCameraError("No se pudo iniciar la cámara. Prueba con el modo Manual.")
       }
       setMode("manual")
     }
   }, [onScan, onClose, stopScanner])
 
-  // ─── Global error handlers (prevent page crash from library internals) ─────
+  // ─── Global error fence (prevents library internals from crashing React) ──
   useEffect(() => {
-    const handleGlobalError = (event: ErrorEvent) => {
-      const msg = (event.message || "").toLowerCase()
-      const isLibError =
-        msg.includes("qrcode") ||
-        msg.includes("html5-qrcode") ||
-        msg.includes("getusermedia") ||
-        msg.includes("constraints") ||
-        msg.includes("overconstrained")
-
-      if (isLibError) {
-        console.warn("Scanner: caught global error, switching to manual:", event.error)
-        event.preventDefault()
+    const handleError = (e: ErrorEvent) => {
+      const msg = (e.message || "").toLowerCase()
+      if (msg.includes("qrcode") || msg.includes("getusermedia") || msg.includes("overconstrained")) {
+        e.preventDefault()
         stopScanner()
         if (isMounted.current) {
-          setCameraError("Problema de compatibilidad con la cámara. Cambiando a modo Manual.")
+          setCameraError("Error de compatibilidad con la cámara. Usa el modo Manual.")
           setMode("manual")
         }
       }
     }
-
-    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      const reason = event.reason
-      const msg = (reason?.message || String(reason) || "").toLowerCase()
-      const isLibError =
-        msg.includes("qrcode") ||
-        msg.includes("html5-qrcode") ||
-        msg.includes("getusermedia") ||
-        msg.includes("overconstrained") ||
-        msg.includes("notallowederror") ||
-        msg.includes("notfounderror") ||
-        msg.includes("aborterror")
-
-      if (isLibError) {
-        console.warn("Scanner: caught unhandled rejection, switching to manual:", reason)
-        event.preventDefault()
+    const handleRejection = (e: PromiseRejectionEvent) => {
+      const msg = (String(e.reason?.message || e.reason) || "").toLowerCase()
+      if (
+        msg.includes("qrcode") || msg.includes("getusermedia") ||
+        msg.includes("notallowederror") || msg.includes("overconstrained") ||
+        msg.includes("aborterror") || msg.includes("notfounderror")
+      ) {
+        e.preventDefault()
         stopScanner()
         if (isMounted.current) {
-          setCameraError("La cámara no pudo iniciarse en este dispositivo.")
+          setCameraError("Error de acceso a la cámara. Usa el modo Manual.")
           setMode("manual")
         }
       }
     }
-
-    window.addEventListener("error", handleGlobalError)
-    window.addEventListener("unhandledrejection", handleUnhandledRejection)
+    window.addEventListener("error", handleError)
+    window.addEventListener("unhandledrejection", handleRejection)
     return () => {
-      window.removeEventListener("error", handleGlobalError)
-      window.removeEventListener("unhandledrejection", handleUnhandledRejection)
+      window.removeEventListener("error", handleError)
+      window.removeEventListener("unhandledrejection", handleRejection)
     }
   }, [stopScanner])
 
-  // ─── Lifecycle ─────────────────────────────────────────────────────────────
+  // ─── Mount / unmount ──────────────────────────────────────────────────────
   useEffect(() => {
     isMounted.current = true
     return () => {
@@ -203,6 +211,7 @@ export function ScannerModal({
     }
   }, [stopScanner])
 
+  // ─── Open / close / mode change ───────────────────────────────────────────
   useEffect(() => {
     if (!isOpen) {
       stopScanner()
@@ -210,16 +219,16 @@ export function ScannerModal({
       setCameraError(null)
       return
     }
-
-    if (mode === "camera") {
+    // iOS uses file-capture — no live stream to start
+    if (mode === "camera" && !isIOS) {
       const t = setTimeout(() => startCamera(), 300)
       return () => clearTimeout(t)
     } else {
       stopScanner()
     }
-  }, [isOpen, mode, startCamera, stopScanner])
+  }, [isOpen, mode, isIOS, startCamera, stopScanner])
 
-  // ─── Handlers ──────────────────────────────────────────────────────────────
+  // ─── Handlers ─────────────────────────────────────────────────────────────
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     const code = manualCode.trim()
@@ -229,11 +238,6 @@ export function ScannerModal({
     onClose()
   }
 
-  const handleModeSwitch = (newMode: "camera" | "manual") => {
-    if (newMode === mode) return
-    setMode(newMode)
-  }
-
   const handleClose = () => {
     stopScanner()
     onClose()
@@ -241,16 +245,15 @@ export function ScannerModal({
 
   if (!isOpen) return null
 
+  // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       {/* Overlay */}
-      <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-        onClick={handleClose}
-      />
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleClose} />
 
       {/* Modal */}
       <div className="relative z-10 w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl overflow-hidden">
+
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-border bg-gradient-to-r from-emerald-500/10 to-cyan-500/10">
           <div className="flex items-center gap-2">
@@ -265,24 +268,21 @@ export function ScannerModal({
           </button>
         </div>
 
-        {/* Mode Tabs */}
+        {/* Mode tabs */}
         <div className="flex border-b border-border">
-          {/* Camera tab — hidden on iOS Safari */}
-          {!isIOS && (
-            <button
-              onClick={() => handleModeSwitch("camera")}
-              className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors ${
-                mode === "camera"
-                  ? "text-primary border-b-2 border-primary bg-primary/5"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Camera className="w-4 h-4" />
-              Cámara
-            </button>
-          )}
           <button
-            onClick={() => handleModeSwitch("manual")}
+            onClick={() => setMode("camera")}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors ${
+              mode === "camera"
+                ? "text-primary border-b-2 border-primary bg-primary/5"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Camera className="w-4 h-4" />
+            Cámara
+          </button>
+          <button
+            onClick={() => setMode("manual")}
             className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors ${
               mode === "manual"
                 ? "text-primary border-b-2 border-primary bg-primary/5"
@@ -296,17 +296,8 @@ export function ScannerModal({
 
         {/* Content */}
         <div className="p-5">
-          {/* iOS Safari notice */}
-          {isIOS && (
-            <div className="mb-4 p-3 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-start gap-2">
-              <Wifi className="w-4 h-4 text-cyan-500 shrink-0 mt-0.5" />
-              <p className="text-xs text-cyan-600 dark:text-cyan-400">
-                En iPhone/iPad, ingresa el código manualmente o con un lector físico Bluetooth.
-              </p>
-            </div>
-          )}
 
-          {/* Camera mode */}
+          {/* ── CAMERA MODE ── */}
           {mode === "camera" && (
             <div>
               {cameraError && (
@@ -315,25 +306,79 @@ export function ScannerModal({
                   <p className="text-xs text-amber-600 dark:text-amber-400">{cameraError}</p>
                 </div>
               )}
-              <div
-                ref={containerRef}
-                className="w-full rounded-xl overflow-hidden bg-black/80 min-h-[220px] flex items-center justify-center"
-              >
-                {!isScanning && !cameraError && (
-                  <div className="text-center text-muted-foreground py-8">
-                    <Camera className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                    <p className="text-sm">Iniciando cámara...</p>
+
+              {/* iOS: photo-capture button */}
+              {isIOS ? (
+                <div className="flex flex-col items-center gap-4 py-4">
+                  <div className="w-20 h-20 rounded-full bg-primary/10 border-2 border-primary/30 flex items-center justify-center">
+                    <Camera className="w-9 h-9 text-primary" />
                   </div>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground text-center mt-3">{hint}</p>
-              <p className="text-xs text-muted-foreground/60 text-center mt-1">
-                ¿No funciona la cámara? Cambia a modo <strong>Manual</strong>.
-              </p>
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-foreground mb-1">Captura con la cámara</p>
+                    <p className="text-xs text-muted-foreground">
+                      Toca el botón para abrir la cámara, apunta al código y toma la foto.
+                    </p>
+                  </div>
+
+                  {/* Hidden file input — triggers native iOS camera */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={handleFileCapture}
+                  />
+
+                  <Button
+                    onClick={() => {
+                      setCameraError(null)
+                      fileInputRef.current?.click()
+                    }}
+                    disabled={isDecoding}
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground w-full"
+                  >
+                    {isDecoding ? (
+                      <>
+                        <span className="w-4 h-4 mr-2 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
+                        Leyendo código...
+                      </>
+                    ) : (
+                      <>
+                        <ImageIcon className="w-4 h-4 mr-2" />
+                        Abrir Cámara
+                      </>
+                    )}
+                  </Button>
+
+                  <p className="text-xs text-muted-foreground/60 text-center">
+                    También puedes cambiar a <strong>Manual</strong> para escribir el código.
+                  </p>
+                </div>
+              ) : (
+                /* Desktop / Android: live stream */
+                <div>
+                  <div
+                    ref={containerRef}
+                    className="w-full rounded-xl overflow-hidden bg-black/80 min-h-[220px] flex items-center justify-center"
+                  >
+                    {!isScanning && !cameraError && (
+                      <div className="text-center text-muted-foreground py-8">
+                        <Camera className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                        <p className="text-sm">Iniciando cámara...</p>
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground text-center mt-3">{hint}</p>
+                  <p className="text-xs text-muted-foreground/60 text-center mt-1">
+                    ¿No funciona la cámara? Cambia a modo <strong>Manual</strong>.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Manual mode */}
+          {/* ── MANUAL MODE ── */}
           {mode === "manual" && (
             <form onSubmit={handleManualSubmit} className="space-y-4">
               <div>
@@ -348,7 +393,7 @@ export function ScannerModal({
                   className="bg-muted/30 border-border text-sm"
                 />
                 <p className="text-xs text-muted-foreground mt-2">
-                  Ingresa el código manualmente o conecta un lector físico de código de barras.
+                  Escribe el código o conéctate con un lector físico de código de barras.
                 </p>
               </div>
               <Button
@@ -361,6 +406,7 @@ export function ScannerModal({
               </Button>
             </form>
           )}
+
         </div>
       </div>
     </div>
