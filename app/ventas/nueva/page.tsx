@@ -26,7 +26,15 @@ interface Producto {
   unidadesPorCaja?: number | null
 }
 
-interface Cliente { id: number; nombreCompleto: string; cedula?: string }
+interface Cliente {
+  id: number
+  nombreCompleto: string
+  cedula?: string | null
+  telefono?: string | null
+  correo?: string | null
+  direccion?: string | null
+  activo?: boolean
+}
 
 interface LineaVenta {
   idProducto: number
@@ -191,26 +199,30 @@ export default function NuevaVentaPage() {
     setBuscandoScanner(true)
 
     try {
-      // ¿Es posiblemente una cédula nicaragüense?
-      if (esPosibleCedula(code)) {
+      // Limpieza del código para verificar si es cédula
+      const cleanCode = code.replace(/[\s\-]/g, "").toUpperCase().trim()
+      const matchesCedulaPattern = /^\d{13}[A-Z]$/.test(cleanCode)
+
+      // Si se escanea explícitamente como cliente, o coincide con el patrón de cédula
+      if (scannerTarget === "cliente" || matchesCedulaPattern) {
         const res = await fetch(`/api/clientes/by-cedula?cedula=${encodeURIComponent(code)}`)
         const data = await res.json()
 
         if (data.encontrado && data.cliente) {
           // Cliente encontrado → seleccionar
           setSelectedCliente(String(data.cliente.id))
-          setClienteSearch(data.cliente.nombreCompleto)
+          setClienteSearch("")
           // Añadir a lista local si no está
           if (!clientes.find(c => c.id === data.cliente.id)) {
             setClientes(prev => [...prev, data.cliente])
           }
           toast.success(`✓ Cliente: ${data.cliente.nombreCompleto}`)
         } else if (!data.encontrado && data.cedulaFormateada) {
-          // Cédula válida pero cliente nuevo → abrir modal de creación
+          // Cédula válida pero cliente nuevo → abrir modal de creación rápida
           setCedulaParaCliente(data.cedulaFormateada)
           setQuickClientOpen(true)
-        } else if (data.error) {
-          toast.error(data.error)
+        } else {
+          toast.error(data.error || "Cliente no registrado o cédula inválida")
         }
         return
       }
@@ -548,15 +560,45 @@ export default function NuevaVentaPage() {
                       </button>
                     </div>
                     {selectedCliente ? (
-                      <div className="flex items-center gap-2 p-2.5 rounded-lg bg-muted/30 border border-primary/40 text-foreground text-sm">
-                        <span className="flex-1 font-medium truncate">{clientes.find(c => String(c.id) === selectedCliente)?.nombreCompleto || "Cliente"}</span>
-                        <button
-                          type="button"
-                          onClick={() => { setSelectedCliente(""); setClienteSearch("") }}
-                          className="text-muted-foreground hover:text-foreground shrink-0"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 p-2.5 rounded-lg bg-muted/30 border border-primary/40 text-foreground text-sm">
+                          <span className="flex-1 font-medium truncate">
+                            {clientes.find(c => String(c.id) === selectedCliente)?.nombreCompleto || "Cliente"}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => { setSelectedCliente(""); setClienteSearch("") }}
+                            className="text-muted-foreground hover:text-foreground shrink-0"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                        {(() => {
+                          const client = clientes.find(c => String(c.id) === selectedCliente)
+                          if (!client) return null
+                          return (
+                            <div className="p-3.5 rounded-xl bg-primary/5 border border-primary/10 text-xs space-y-1.5 text-muted-foreground">
+                              {client.cedula && (
+                                <p className="font-mono flex justify-between">
+                                  <span>Cédula:</span>
+                                  <span className="font-semibold text-foreground">{client.cedula}</span>
+                                </p>
+                              )}
+                              {client.telefono && (
+                                <p className="flex justify-between">
+                                  <span>Teléfono:</span>
+                                  <span className="font-medium text-foreground">{client.telefono}</span>
+                                </p>
+                              )}
+                              {client.direccion && (
+                                <p className="flex flex-col gap-0.5 mt-1 border-t border-border/40 pt-1.5">
+                                  <span>Dirección:</span>
+                                  <span className="text-foreground font-normal line-clamp-2">{client.direccion}</span>
+                                </p>
+                              )}
+                            </div>
+                          )
+                        })()}
                       </div>
                     ) : (
                       <div className="relative">

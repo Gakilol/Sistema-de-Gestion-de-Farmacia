@@ -16,7 +16,41 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Parámetro cedula requerido' }, { status: 400 })
     }
 
-    // 1. Validación algorítmica de la cédula
+    // 1. Limpieza inicial para búsqueda en base de datos
+    const cleanCed = cedula.replace(/[\s\-]/g, '').toUpperCase().trim();
+    let formattedCed = cleanCed;
+    if (cleanCed.length === 14) {
+      formattedCed = `${cleanCed.substring(0, 3)}-${cleanCed.substring(3, 9)}-${cleanCed.substring(9, 13)}${cleanCed.charAt(13)}`;
+    }
+
+    // 2. Buscar primero en la base de datos (por si ya existe, sin importar validación estricta)
+    const cliente = await prisma.cliente.findFirst({
+      where: {
+        OR: [
+          { cedula: cleanCed },
+          { cedula: formattedCed },
+          { cedula: cedula },
+        ],
+      },
+    })
+
+    if (cliente) {
+      return NextResponse.json({
+        encontrado: true,
+        cedulaFormateada: cliente.cedula || formattedCed,
+        cliente: {
+          id: cliente.id,
+          nombreCompleto: cliente.nombreCompleto,
+          cedula: cliente.cedula,
+          telefono: cliente.telefono,
+          correo: cliente.correo,
+          direccion: cliente.direccion,
+          activo: cliente.activo,
+        },
+      })
+    }
+
+    // 3. Si no existe en BD, validar algorítmicamente para registro nuevo
     const resultado = validarCedula(cedula)
     if (!resultado.valida) {
       return NextResponse.json({
@@ -26,39 +60,10 @@ export async function GET(request: NextRequest) {
       }, { status: 422 })
     }
 
-    const cedulaFormateada = resultado.formateada!
-    const cedulaLimpia = cedulaFormateada.replace(/[\s\-]/g, '').toUpperCase()
-
-    // 2. Buscar en BD (por formato con guiones y sin guiones)
-    const cliente = await prisma.cliente.findFirst({
-      where: {
-        OR: [
-          { cedula: cedulaFormateada },
-          { cedula: cedulaLimpia },
-        ],
-      },
-    })
-
-    if (!cliente) {
-      return NextResponse.json({
-        encontrado: false,
-        cedulaFormateada,
-        message: 'Cliente no registrado. Puedes crear uno nuevo.',
-      })
-    }
-
     return NextResponse.json({
-      encontrado: true,
-      cedulaFormateada,
-      cliente: {
-        id: cliente.id,
-        nombreCompleto: cliente.nombreCompleto,
-        cedula: cliente.cedula,
-        telefono: cliente.telefono,
-        correo: cliente.correo,
-        direccion: cliente.direccion,
-        activo: cliente.activo,
-      },
+      encontrado: false,
+      cedulaFormateada: resultado.formateada,
+      message: 'Cliente no registrado. Puedes crear uno nuevo.',
     })
   } catch (error) {
     console.error('Error en /api/clientes/by-cedula:', error)
