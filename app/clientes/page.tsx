@@ -6,8 +6,9 @@ import { Sidebar } from "@/components/sidebar"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Plus, Edit2, Trash2, Users, Search } from "lucide-react"
+import { Plus, Edit2, Trash2, Users, Search, ScanLine } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ScannerModal } from "@/components/scanner-modal"
 
 interface Cliente {
   id: number
@@ -25,6 +26,7 @@ export default function ClientesPage() {
   const [search, setSearch] = useState("")
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
+  const [scannerOpen, setScannerOpen] = useState(false)
   const [formData, setFormData] = useState({
     nombreCompleto: "",
     cedula: "",
@@ -177,7 +179,18 @@ export default function ClientesPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-foreground mb-1">Cédula <span className="text-muted-foreground text-xs font-normal">(Opcional)</span></label>
-                    <Input value={formData.cedula} onChange={(e) => setFormData({ ...formData, cedula: e.target.value })} className="bg-muted/30 border-border" placeholder="Ej: 001-130605-1005A" />
+                    <div className="flex gap-2">
+                      <Input value={formData.cedula} onChange={(e) => setFormData({ ...formData, cedula: e.target.value })} className="bg-muted/30 border-border" placeholder="Ej: 001-130605-1005A" />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setScannerOpen(true)}
+                        className="border-primary/30 text-primary hover:bg-primary/10 px-3 shrink-0"
+                        title="Escanear cédula"
+                      >
+                        <ScanLine className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-foreground mb-1">Teléfono <span className="text-muted-foreground text-xs font-normal">(Opcional)</span></label>
@@ -246,6 +259,27 @@ export default function ClientesPage() {
           </Card>
         </div>
       </main>
+      {/* Scanner Modal */}
+      <ScannerModal
+        isOpen={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onScan={(code) => {
+          setScannerOpen(false)
+          const { esPosibleCedula, formatCedula } = require("@/lib/cedulaValidator")
+          if (esPosibleCedula(code)) {
+            setFormData(prev => ({ ...prev, cedula: formatCedula(code) }))
+            const { toast } = require("sonner")
+            toast.success("Cédula escaneada y formateada")
+          } else {
+            setFormData(prev => ({ ...prev, cedula: code }))
+            const { toast } = require("sonner")
+            toast.success("Código escaneado")
+          }
+        }}
+        title="Escanear Cédula"
+        hint="Apunta al código de barras de la cédula nicaragüense"
+      />
     </div>
   )
 }
+

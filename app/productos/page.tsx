@@ -6,12 +6,13 @@ import { Sidebar } from "@/components/sidebar"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Plus, Edit2, Trash2, Download, Package, DollarSign, Layers, BarChart3, HelpCircle, Info, Search, AlertTriangle, Settings, Eye, Calendar, FileText, X, Loader2, Sliders, Filter } from "lucide-react"
+import { Plus, Edit2, Trash2, Download, Package, DollarSign, Layers, BarChart3, HelpCircle, Info, Search, AlertTriangle, Settings, Eye, Calendar, FileText, X, Loader2, Sliders, Filter, ScanLine } from "lucide-react"
 import { toast } from "sonner"
 import useSWR from "swr"
 import * as XLSX from "xlsx"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useCurrentUser } from "@/app/hooks/useCurrentUser"
+import { ScannerModal } from "@/components/scanner-modal"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
@@ -52,6 +53,7 @@ export default function ProductosPage() {
 
   // Detalles modal
   const [showDetailsModal, setShowDetailsModal] = useState(false)
+  const [scannerOpen, setScannerOpen] = useState(false)
   const [detailsLoading, setDetailsLoading] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<any | null>(null)
 
@@ -644,7 +646,18 @@ export default function ProductosPage() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Código de Barras</label>
-                      <Input value={codigoBarras} onChange={(e) => setCodigoBarras(e.target.value)} placeholder="Ej: 7441001123456" />
+                      <div className="flex gap-2">
+                        <Input value={codigoBarras} onChange={(e) => setCodigoBarras(e.target.value)} placeholder="Ej: 7441001123456" />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setScannerOpen(true)}
+                          className="border-primary/30 text-primary hover:bg-primary/10 px-3 shrink-0"
+                          title="Escanear código de barras"
+                        >
+                          <ScanLine className="w-4 h-4" />
+                        </Button>
+                      </div>
                       <p className="text-xs text-gray-400 mt-1">Opcional. Código de barras del producto.</p>
                     </div>
                     <div>
@@ -1319,6 +1332,20 @@ export default function ProductosPage() {
           </Card>
         </div>
       )}
+      {/* Scanner Modal */}
+      <ScannerModal
+        isOpen={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onScan={(code) => {
+          setScannerOpen(false)
+          setCodigoBarras(code)
+          const { toast } = require("sonner")
+          toast.success("Código de barras escaneado")
+        }}
+        title="Escanear Código de Barras"
+        hint="Apunta al código de barras del medicamento"
+      />
     </div>
   )
 }
+
