@@ -92,7 +92,8 @@ export function ScannerModal({
 
       const html5QrCode = new Html5Qrcode(scannerId, {
         formatsToSupport: formats,
-        useBarCodeDetectorIfSupported: true
+        useBarCodeDetectorIfSupported: true,
+        verbose: false
       })
       scannerRef.current = html5QrCode
 
