@@ -104,6 +104,42 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // ── BLOQUEO DE SEGURIDAD SANITARIA: verificar que no haya lotes vencidos activos ──
+    // Se verifica el lote más antiguo (FIFO) para cada producto en la venta.
+    // Si el primer lote disponible está vencido, se bloquea la venta completamente.
+    const ahora = new Date()
+    for (const detalle of detalles) {
+      const producto = productoMap.get(detalle.idProducto)!
+
+      const loteMasAntiguo = await prisma.lote.findFirst({
+        where: {
+          idProducto: detalle.idProducto,
+          activo: true,
+          stockActual: { gt: 0 },
+        },
+        orderBy: [
+          { fechaVencimiento: "asc" },
+          { createdAt: "asc" },
+        ],
+      })
+
+      if (loteMasAntiguo && loteMasAntiguo.fechaVencimiento) {
+        if (new Date(loteMasAntiguo.fechaVencimiento) <= ahora) {
+          return NextResponse.json({
+            error: `Venta Bloqueada: El lote del medicamento está vencido`,
+            detalle: `Producto: ${producto.nombre} | Lote: ${loteMasAntiguo.codigoLote} | Vencimiento: ${new Date(loteMasAntiguo.fechaVencimiento).toLocaleDateString('es-NI')}`,
+            codigoError: "LOTE_VENCIDO",
+            productoNombre: producto.nombre,
+            loteInfo: {
+              codigoLote: loteMasAntiguo.codigoLote,
+              fechaVencimiento: loteMasAntiguo.fechaVencimiento,
+            }
+          }, { status: 422 })
+        }
+      }
+    }
+
+
     // Validar precios desde la base de datos (evita alteraciones en red)
     for (const detalle of detalles) {
       const producto = productoMap.get(detalle.idProducto)!

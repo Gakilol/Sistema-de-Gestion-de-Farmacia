@@ -5,14 +5,15 @@ import { Sidebar } from "@/components/sidebar"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Plus, Eye, Trash2, X, ShoppingCart, ChevronRight, ChevronLeft, Check, FileText, Calendar, Package, Layers } from "lucide-react"
+import { Plus, Eye, Trash2, X, ShoppingCart, ChevronRight, ChevronLeft, Check, FileText, Calendar, Package, Layers, Zap, TrendingDown, AlertTriangle } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
 
 interface Compra { id: number; fecha: string; fechaCompra?: string; numeroFactura?: string; proveedor: { nombre: string }; total: string; detalles: Array<{ producto: { nombre: string }; cantidad: number; lote?: string; fechaVencimiento?: string; precioUnitario: string; subtotal: string }> }
 interface Proveedor { id: number; nombre: string }
-interface Producto { id: number; nombre: string; precioCompra?: string }
+interface Producto { id: number; nombre: string; precioCompra?: string; stockActual?: number; stockMinimo?: number }
 interface DetalleForm { idProducto: string; cantidad: string; precioUnitario: string; lote: string; fechaVencimiento: string }
+interface ProductoStockBajo { id: number; nombre: string; stockActual: number; stockMinimo: number; cantidadOptima: number; precioCompra: number }
 
 export default function ComprasPage() {
   const [compras, setCompras] = useState<Compra[]>([])
@@ -30,11 +31,53 @@ export default function ComprasPage() {
   const [formLoading, setFormLoading] = useState(false)
   const [selectedCompra, setSelectedCompra] = useState<Compra | null>(null)
 
-  useEffect(() => { fetchCompras(); fetchProveedores(); fetchProductos() }, [])
+  // Smart Restock Widget
+  const [productosStockBajo, setProductosStockBajo] = useState<ProductoStockBajo[]>([])
+  const [loadingReabastecimiento, setLoadingReabastecimiento] = useState(true)
+  const [reabastecimientoAplicado, setReabastecimientoAplicado] = useState(false)
+
+  useEffect(() => { fetchCompras(); fetchProveedores(); fetchProductos(); fetchStockBajo() }, [])
 
   const fetchCompras = async () => { try { setCompras(await (await fetch("/api/compras")).json()) } catch (e) { console.error(e) } finally { setLoading(false) } }
   const fetchProveedores = async () => { try { setProveedores(await (await fetch("/api/proveedores")).json()) } catch (e) { console.error(e) } }
   const fetchProductos = async () => { try { setProductos(await (await fetch("/api/productos")).json()) } catch (e) { console.error(e) } }
+
+  const fetchStockBajo = async () => {
+    setLoadingReabastecimiento(true)
+    try {
+      const res = await fetch("/api/reportes?type=stock-bajo")
+      if (!res.ok) return
+      const data = await res.json()
+      // Calcular cantidad óptima: (stockMinimo * 2) - stockActual
+      const todos = await (await fetch("/api/productos")).json() as Producto[]
+      const prodMap = new Map(todos.map((p: Producto) => [p.id, p]))
+      const items: ProductoStockBajo[] = data.map((item: any) => ({
+        id: item.id,
+        nombre: item.nombre,
+        stockActual: item.stockActual,
+        stockMinimo: item.stockMinimo,
+        cantidadOptima: Math.max(1, (item.stockMinimo * 2) - item.stockActual),
+        precioCompra: Number(prodMap.get(item.id)?.precioCompra || 0),
+      }))
+      setProductosStockBajo(items)
+    } catch (e) { console.error(e) } finally { setLoadingReabastecimiento(false) }
+  }
+
+  const handleAplicarReabastecimiento = () => {
+    if (productosStockBajo.length === 0) return
+    const nuevosDetalles: DetalleForm[] = productosStockBajo.map(p => ({
+      idProducto: String(p.id),
+      cantidad: String(p.cantidadOptima),
+      precioUnitario: String(p.precioCompra > 0 ? p.precioCompra : ""),
+      lote: "",
+      fechaVencimiento: "",
+    }))
+    setDetalles(nuevosDetalles)
+    setReabastecimientoAplicado(true)
+    setShowForm(true)
+    setWizardStep(2)
+    toast.success(`✓ ${productosStockBajo.length} productos agregados al formulario de compra`)
+  }
 
   const resetForm = () => {
     setProveedorId(""); setNumeroFactura(""); setFechaCompra(new Date().toISOString().split("T")[0])
@@ -103,6 +146,89 @@ export default function ComprasPage() {
             </div>
             <Button onClick={handleToggleForm} className="bg-primary hover:bg-primary/90 text-primary-foreground"><Plus className="w-4 h-4 mr-2" />{showForm ? "Cancelar" : "Nueva Compra"}</Button>
           </div>
+
+          {/* ═══ WIDGET REABASTECIMIENTO INTELIGENTE ═══ */}
+          {!showForm && (
+            <Card className="glass-card mb-6 overflow-hidden">
+              <div className="flex items-center justify-between p-5 border-b border-border bg-gradient-to-r from-amber-500/10 to-orange-500/10">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-amber-500/15 border border-amber-500/20">
+                    <Zap className="w-4 h-4 text-amber-500" />
+                  </div>
+                  <div>
+                    <h2 className="font-bold text-foreground text-sm">Reabastecimiento Inteligente</h2>
+                    <p className="text-xs text-muted-foreground">Productos bajo stock mínimo · Cantidad óptima: (stockMín × 2) − stockActual</p>
+                  </div>
+                </div>
+                {productosStockBajo.length > 0 && (
+                  <Button
+                    id="btn-aplicar-reabastecimiento"
+                    size="sm"
+                    onClick={handleAplicarReabastecimiento}
+                    className="bg-amber-500 hover:bg-amber-600 text-black font-semibold text-xs gap-1.5"
+                  >
+                    <Zap className="w-3.5 h-3.5" />
+                    Auto-rellenar Compra
+                  </Button>
+                )}
+              </div>
+
+              {loadingReabastecimiento ? (
+                <div className="p-6 space-y-3">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
+              ) : productosStockBajo.length === 0 ? (
+                <div className="p-8 text-center">
+                  <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto mb-3">
+                    <Check className="w-6 h-6 text-emerald-500" />
+                  </div>
+                  <p className="text-sm font-semibold text-foreground">¡Todo en orden!</p>
+                  <p className="text-xs text-muted-foreground mt-1">Todos los productos tienen stock sobre el mínimo.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/20 border-b border-border">
+                      <tr>
+                        {["Producto", "Stock Actual", "Stock Mínimo", "Déficit", "Cantidad Óptima"].map(h => (
+                          <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {productosStockBajo.map(p => {
+                        const esVencimiento = p.stockActual === 0
+                        return (
+                          <tr key={p.id} className="hover:bg-muted/10 transition-colors">
+                            <td className="px-5 py-3 font-medium text-foreground">{p.nombre}</td>
+                            <td className="px-5 py-3">
+                              <span className="px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 text-xs font-bold">{p.stockActual} uds</span>
+                            </td>
+                            <td className="px-5 py-3 text-muted-foreground text-xs">{p.stockMinimo} uds</td>
+                            <td className="px-5 py-3">
+                              <span className="flex items-center gap-1 text-xs text-orange-400 font-medium">
+                                <TrendingDown className="w-3 h-3" />
+                                {p.stockMinimo - p.stockActual} uds
+                              </span>
+                            </td>
+                            <td className="px-5 py-3">
+                              <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-bold border border-primary/20">
+                                +{p.cantidadOptima} uds
+                              </span>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                  <div className="p-4 border-t border-border">
+                    <p className="text-xs text-muted-foreground text-center">
+                      <AlertTriangle className="w-3 h-3 inline mr-1 text-amber-500" />
+                      {productosStockBajo.length} productos requieren reabastecimiento. Haz clic en «Auto-rellenar Compra» para crear la orden automáticamente.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </Card>
+          )}
 
           {/* ═══ WIZARD FORM ═══ */}
           {showForm && (

@@ -16,11 +16,12 @@ export async function GET(request: NextRequest) {
 
     let dateWhereVenta: any = {}
     let dateWhereCompra: any = {}
+    let dateWhereMovimiento: any = {}
 
     if (startDateParam || endDateParam) {
       const gte = startDateParam ? new Date(startDateParam) : undefined
       const lte = endDateParam ? new Date(endDateParam) : undefined
-      
+
       if (gte) gte.setUTCHours(0, 0, 0, 0)
       if (lte) lte.setUTCHours(23, 59, 59, 999)
 
@@ -30,15 +31,17 @@ export async function GET(request: NextRequest) {
 
       dateWhereVenta = { fecha: range }
       dateWhereCompra = { fecha: range }
+      dateWhereMovimiento = { createdAt: range }
     } else {
       // Default to current month if no range is specified
       const ahora = new Date()
       const primerDiaMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1)
       dateWhereVenta = { fecha: { gte: primerDiaMes } }
       dateWhereCompra = { fecha: { gte: primerDiaMes } }
+      dateWhereMovimiento = { createdAt: { gte: primerDiaMes } }
     }
 
-    // 1. KPIs
+    // 1. KPIs — Ventas + COGS real (desde MovimientoInventario SALIDA_VENTA)
     if (type === "kpis") {
       const ventas = await prisma.venta.aggregate({
         _sum: { total: true },
@@ -51,12 +54,45 @@ export async function GET(request: NextRequest) {
         where: dateWhereCompra
       })
 
+      // COGS real: suma de costoUnitario * cantidad en movimientos de SALIDA_VENTA
+      const movimientosSalida = await prisma.movimientoInventario.findMany({
+        where: {
+          tipo: "SALIDA_VENTA",
+          ...dateWhereMovimiento,
+          costoUnitario: { not: null },
+        },
+        select: { cantidad: true, costoUnitario: true },
+      })
+
+      const cogs = movimientosSalida.reduce((acc, m) => {
+        return acc + (Number(m.costoUnitario || 0) * m.cantidad)
+      }, 0)
+
       const totalVentas = Number(ventas._sum.total || 0)
       const totalCompras = Number(compras._sum.total || 0)
-      const gananciaNeta = totalVentas - totalCompras
-      const transaccionesCount = (ventas._count || 0) + (compras._count || 0)
+      const margenBruto = totalVentas - cogs  // Ganancia real basada en COGS
 
-      // Count low stock items using in-memory filter to support custom per-product minima
+      // Ventas del día de hoy
+      const hoy = new Date()
+      hoy.setUTCHours(0, 0, 0, 0)
+      const mañana = new Date(hoy)
+      mañana.setUTCDate(mañana.getUTCDate() + 1)
+
+      const ventasHoy = await prisma.venta.aggregate({
+        _sum: { total: true },
+        _count: true,
+        where: { fecha: { gte: hoy, lt: mañana } }
+      })
+
+      // Ventas del mes actual
+      const primerDiaMesActual = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
+      const ventasMes = await prisma.venta.aggregate({
+        _sum: { total: true },
+        _count: true,
+        where: { fecha: { gte: primerDiaMesActual } }
+      })
+
+      // Count low stock items using in-memory filter
       const prods = await prisma.producto.findMany({
         where: { activo: true },
         select: { stockActual: true, stockMinimo: true }
@@ -66,15 +102,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         totalVentas,
         totalCompras,
-        gananciaNeta,
-        transaccionesCount,
-        stockBajo
+        cogs,
+        margenBruto,
+        transaccionesCount: (ventas._count || 0) + (compras._count || 0),
+        stockBajo,
+        ventasHoy: {
+          count: ventasHoy._count || 0,
+          total: Number(ventasHoy._sum.total || 0),
+        },
+        ventasMes: {
+          count: ventasMes._count || 0,
+          total: Number(ventasMes._sum.total || 0),
+        },
       })
     }
 
     // 2. VENTAS GRÁFICO (Ventas agrupadas por fecha)
     if (type === "ventas-grafico") {
-      // Si no hay parámetros de fecha específicos para el gráfico, mostrar últimos 30 días
       let chartWhere = dateWhereVenta
       if (!startDateParam && !endDateParam) {
         const treintaDias = new Date()
@@ -133,7 +177,7 @@ export async function GET(request: NextRequest) {
 
       const masVendidos = Object.values(map)
         .sort((a, b) => b.cantidad - a.cantidad)
-        .slice(0, 15) // Top 15 más vendidos
+        .slice(0, 15)
 
       return NextResponse.json(masVendidos)
     }
@@ -238,27 +282,52 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(movimientos)
     }
 
-    // 7. PRODUCTOS POR VENCER (Vencen en los próximos 90 días)
+    // 7. LOTES POR VENCER — FIX: ahora consulta Lote.fechaVencimiento, NO Producto.fechaVencimiento
     if (type === "por-vencer") {
       const noventaDias = new Date()
       noventaDias.setDate(noventaDias.getDate() + 90)
+      const ahora = new Date()
 
-      const productos = await prisma.producto.findMany({
+      // Lotes vencidos con stock activo
+      const lotesVencidos = await prisma.lote.findMany({
         where: {
-          fechaVencimiento: { lte: noventaDias, not: null },
-          activo: true
+          activo: true,
+          stockActual: { gt: 0 },
+          fechaVencimiento: { lte: ahora, not: null },
         },
+        include: { producto: { include: { categoria: true } } },
         orderBy: { fechaVencimiento: "asc" },
-        include: { categoria: true }
       })
 
-      return NextResponse.json(productos.map(p => ({
-        id: p.id,
-        nombre: p.nombre,
-        categoria: p.categoria?.nombre || "Sin Categoría",
-        stockActual: p.stockActual,
-        fechaVencimiento: p.fechaVencimiento
-      })))
+      // Lotes por vencer (entre hoy y 90 días)
+      const lotesPorVencer = await prisma.lote.findMany({
+        where: {
+          activo: true,
+          stockActual: { gt: 0 },
+          fechaVencimiento: { gt: ahora, lte: noventaDias },
+        },
+        include: { producto: { include: { categoria: true } } },
+        orderBy: { fechaVencimiento: "asc" },
+      })
+
+      const formatLote = (lote: any) => ({
+        id: lote.id,
+        codigoLote: lote.codigoLote,
+        nombre: lote.producto.nombre,
+        categoria: lote.producto.categoria?.nombre || "Sin Categoría",
+        stockActual: lote.stockActual,
+        fechaVencimiento: lote.fechaVencimiento,
+        diasRestantes: lote.fechaVencimiento
+          ? Math.ceil((new Date(lote.fechaVencimiento).getTime() - ahora.getTime()) / (1000 * 60 * 60 * 24))
+          : null,
+      })
+
+      return NextResponse.json({
+        vencidos: lotesVencidos.map(formatLote),
+        porVencer: lotesPorVencer.map(formatLote),
+        totalVencidos: lotesVencidos.length,
+        totalPorVencer: lotesPorVencer.length,
+      })
     }
 
     return NextResponse.json({ error: "Tipo de reporte no válido" }, { status: 400 })

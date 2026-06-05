@@ -30,3 +30,7 @@ Thumbs.db
 .vscode/*
 !.vscode/settings.json
 !.vscode/extensions.json
+
+# Build Info Cache
+*.tsbuildinfo
+

@@ -234,3 +234,16 @@ model AuditoriaLog {
   usuario     Usuario? @relation(fields: [idUsuario], references: [id])
   createdAt   DateTime @default(now())
 }
+
+// ===== RECUPERACIÓN DE CONTRASEÑA =====
+model PasswordResetToken {
+  id         Int      @id @default(autoincrement())
+  correo     String
+  tokenHash  String   @unique   // SHA-256 hash del token real
+  expiracion DateTime
+  usado      Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([correo])
+  @@index([tokenHash])
+}
