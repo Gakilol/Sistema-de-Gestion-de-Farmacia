@@ -68,9 +68,15 @@ export function ScannerModal({
       await html5QrCode.start(
         { facingMode: "environment" },
         {
-          fps: 15,
-          qrbox: { width: 280, height: 200 },
-          aspectRatio: 1.5,
+          fps: 10,
+          qrbox: (viewfinderWidth, viewfinderHeight) => {
+            const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+            const qrboxSize = Math.max(120, Math.floor(minEdge * 0.7));
+            return {
+              width: qrboxSize,
+              height: qrboxSize
+            };
+          }
         },
         (decodedText) => {
           // Código detectado
@@ -96,6 +102,21 @@ export function ScannerModal({
       setMode("manual")
     }
   }, [onScan, onClose, stopScanner])
+
+  useEffect(() => {
+    const handleGlobalError = (event: ErrorEvent) => {
+      const msg = event.message || "";
+      if (isScanning && (msg.includes("QrCode") || msg.includes("html5-qrcode") || msg.includes("constraints") || msg.includes("getUserMedia"))) {
+        console.warn("Captured asynchronous scanner error in global handler:", event.error);
+        setCameraError("La cámara experimentó un problema de compatibilidad. Cambiando a modo manual.");
+        setMode("manual");
+        stopScanner();
+        event.preventDefault();
+      }
+    };
+    window.addEventListener("error", handleGlobalError);
+    return () => window.removeEventListener("error", handleGlobalError);
+  }, [isScanning, stopScanner]);
 
   useEffect(() => {
     if (!isOpen) {
