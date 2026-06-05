@@ -104,6 +104,7 @@ export async function GET(request: NextRequest) {
         totalCompras,
         cogs,
         margenBruto,
+        gananciaNeta: margenBruto,
         transaccionesCount: (ventas._count || 0) + (compras._count || 0),
         stockBajo,
         ventasHoy: {
@@ -322,12 +323,8 @@ export async function GET(request: NextRequest) {
           : null,
       })
 
-      return NextResponse.json({
-        vencidos: lotesVencidos.map(formatLote),
-        porVencer: lotesPorVencer.map(formatLote),
-        totalVencidos: lotesVencidos.length,
-        totalPorVencer: lotesPorVencer.length,
-      })
+      const allLotes = [...lotesVencidos, ...lotesPorVencer].map(formatLote)
+      return NextResponse.json(allLotes)
     }
 
     return NextResponse.json({ error: "Tipo de reporte no válido" }, { status: 400 })
