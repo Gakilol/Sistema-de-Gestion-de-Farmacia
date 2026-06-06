@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
 import { registrarLog } from "@/lib/audit"
+import { compraSchema } from "@/lib/validations"
 
 export async function GET(request: NextRequest) {
   try {
@@ -50,12 +51,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { compraSchema } = require('@/lib/validations')
     const validation = compraSchema.safeParse(body)
 
     if (!validation.success) {
       return NextResponse.json(
-        { error: validation.error.errors[0].message, details: validation.error.errors },
+        { error: validation.error.issues[0].message, details: validation.error.issues },
         { status: 400 }
       )
     }
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     // Calcular total
     let total = 0
     for (const detalle of detalles) {
-      const subtotal = Number.parseFloat(detalle.precioUnitario) * Number.parseInt(detalle.cantidad)
+      const subtotal = detalle.precioUnitario * detalle.cantidad
       total += subtotal
     }
 

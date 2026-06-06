@@ -222,7 +222,7 @@ export default function Dashboard() {
                       <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }} dy={10} />
                       <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }} dx={-10} tickFormatter={(value) => `C$${value}`} />
                       <Tooltip
-                        formatter={(value: number) => [`C$${value.toFixed(2)}`, "Ventas"]}
+                        formatter={(value: any) => [`C$${Number(value).toFixed(2)}`, "Ventas"]}
                         cursor={{ fill: 'var(--muted)' }}
                         contentStyle={{
                           borderRadius: '12px',

@@ -69,12 +69,9 @@ export default function ProductosPage() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [nombre, setNombre] = useState("")
   const [descripcion, setDescripcion] = useState("")
-  const [descripcionCorta, setDescripcionCorta] = useState("")
-  const [descripcionDetallada, setDescripcionDetallada] = useState("")
-  const [observaciones, setObservaciones] = useState("")
   const [codigoBarras, setCodigoBarras] = useState("")
-  const [imagen, setImagen] = useState("")
   const [idCategoria, setIdCategoria] = useState<string>("")
+  const [tipoVenta, setTipoVenta] = useState<"UNIDAD" | "BLISTER" | "CAJA">("UNIDAD")
   const [precioCompra, setPrecioCompra] = useState("")
   const [precioVenta, setPrecioVenta] = useState("")
   const [precioBlister, setPrecioBlister] = useState("")
@@ -85,6 +82,36 @@ export default function ProductosPage() {
   const [formLoading, setFormLoading] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [precioVentaError, setPrecioVentaError] = useState<string | null>(null)
+
+  // Autoguardado de borrador (Fase 5)
+  useEffect(() => {
+    if (showForm && !editingId) {
+      const draft = {
+        nombre,
+        idCategoria,
+        codigoBarras,
+        descripcion,
+        tipoVenta,
+        precioCompra,
+        precioVenta,
+        precioBlister,
+        precioCaja,
+        unidadesPorBlister,
+        unidadesPorCaja,
+        stockMinimo,
+      }
+      localStorage.setItem("farmacia_producto_borrador", JSON.stringify(draft))
+    }
+  }, [
+    showForm, editingId, nombre, idCategoria, codigoBarras, descripcion, tipoVenta,
+    precioCompra, precioVenta, precioBlister, precioCaja, unidadesPorBlister, unidadesPorCaja, stockMinimo
+  ])
+
+  const handleClearDraft = () => {
+    localStorage.removeItem("farmacia_producto_borrador")
+    resetForm()
+    toast.info("Borrador limpiado")
+  }
 
   const handleOpenAjusteModal = (producto: Producto) => {
     setAjusteProducto(producto)
@@ -194,12 +221,9 @@ export default function ProductosPage() {
     setEditingId(null)
     setNombre("")
     setDescripcion("")
-    setDescripcionCorta("")
-    setDescripcionDetallada("")
-    setObservaciones("")
     setCodigoBarras("")
-    setImagen("")
     setIdCategoria("")
+    setTipoVenta("UNIDAD")
     setPrecioCompra("")
     setPrecioVenta("")
     setPrecioBlister("")
@@ -224,19 +248,27 @@ export default function ProductosPage() {
       setEditingId(p.id)
       setNombre(p.nombre)
       setDescripcion(p.descripcion || "")
-      setDescripcionCorta(p.descripcionCorta || "")
-      setDescripcionDetallada(p.descripcionDetallada || "")
-      setObservaciones(p.observaciones || "")
       setCodigoBarras(p.codigoBarras || "")
-      setImagen(p.imagen || "")
       setIdCategoria(String(p.idCategoria))
       setPrecioCompra(p.precioCompra ? String(p.precioCompra) : "")
-      setPrecioVenta(String(p.precioVenta))
+      setPrecioVenta(p.precioVenta ? String(p.precioVenta) : "")
       setPrecioBlister(p.precioBlister ? String(p.precioBlister) : "")
       setPrecioCaja(p.precioCaja ? String(p.precioCaja) : "")
       setUnidadesPorBlister(p.unidadesPorBlister != null ? String(p.unidadesPorBlister) : "")
       setUnidadesPorCaja(p.unidadesPorCaja != null ? String(p.unidadesPorCaja) : "")
       setStockMinimo(p.stockMinimo != null ? String(p.stockMinimo) : "")
+      
+      // Auto-detectar tipo de venta (Fase 4)
+      let autoTipo: "UNIDAD" | "BLISTER" | "CAJA" = "UNIDAD"
+      if (p.precioVenta && Number(p.precioVenta) > 0) {
+        autoTipo = "UNIDAD"
+      } else if (p.precioBlister && Number(p.precioBlister) > 0) {
+        autoTipo = "BLISTER"
+      } else if (p.precioCaja && Number(p.precioCaja) > 0) {
+        autoTipo = "CAJA"
+      }
+      setTipoVenta(autoTipo)
+
       setShowForm(true)
       setFormError(null)
     } catch (err) {
@@ -247,11 +279,33 @@ export default function ProductosPage() {
 
   const handleOpenCreate = () => {
     resetForm()
+    const savedDraft = localStorage.getItem("farmacia_producto_borrador")
+    if (savedDraft) {
+      try {
+        const draft = JSON.parse(savedDraft)
+        setNombre(draft.nombre || "")
+        setIdCategoria(draft.idCategoria || "")
+        setCodigoBarras(draft.codigoBarras || "")
+        setDescripcion(draft.descripcion || "")
+        setTipoVenta(draft.tipoVenta || "UNIDAD")
+        setPrecioCompra(draft.precioCompra || "")
+        setPrecioVenta(draft.precioVenta || "")
+        setPrecioBlister(draft.precioBlister || "")
+        setPrecioCaja(draft.precioCaja || "")
+        setUnidadesPorBlister(draft.unidadesPorBlister || "")
+        setUnidadesPorCaja(draft.unidadesPorCaja || "")
+        setStockMinimo(draft.stockMinimo || "")
+        toast.success("Se restauró tu borrador anterior")
+      } catch (e) {
+        console.error("Error cargando borrador:", e)
+      }
+    }
     setShowForm(true)
   }
 
   const handleCancelForm = () => {
     resetForm()
+    localStorage.removeItem("farmacia_producto_borrador")
     setShowForm(false)
   }
 
@@ -363,24 +417,72 @@ export default function ProductosPage() {
     setFormError(null)
     setFormLoading(true)
 
+    // Validaciones del lado del cliente según el tipo de venta
+    if (tipoVenta === "UNIDAD" && (!precioVenta || parseFloat(precioVenta) <= 0)) {
+      setFormError("El precio de venta por unidad debe ser mayor a 0")
+      toast.error("El precio de venta por unidad debe ser mayor a 0")
+      setFormLoading(false)
+      return
+    }
+    if (tipoVenta === "BLISTER") {
+      if (!precioBlister || parseFloat(precioBlister) <= 0) {
+        setFormError("El precio por blíster debe ser mayor a 0")
+        toast.error("El precio por blíster debe ser mayor a 0")
+        setFormLoading(false)
+        return
+      }
+      if (!unidadesPorBlister || parseInt(unidadesPorBlister) <= 0) {
+        setFormError("Las unidades por blíster deben ser mayores a 0")
+        toast.error("Las unidades por blíster deben ser mayores a 0")
+        setFormLoading(false)
+        return
+      }
+    }
+    if (tipoVenta === "CAJA") {
+      if (!precioCaja || parseFloat(precioCaja) <= 0) {
+        setFormError("El precio por caja debe ser mayor a 0")
+        toast.error("El precio por caja debe ser mayor a 0")
+        setFormLoading(false)
+        return
+      }
+      if (!unidadesPorCaja || parseInt(unidadesPorCaja) <= 0) {
+        setFormError("Las unidades por caja deben ser mayores a 0")
+        toast.error("Las unidades por caja deben ser mayores a 0")
+        setFormLoading(false)
+        return
+      }
+    }
+
     try {
-      const body = {
+      const body: any = {
         nombre,
         codigoBarras: codigoBarras || null,
-        imagen: imagen || null,
         descripcion: descripcion || null,
-        descripcionCorta: descripcionCorta || null,
-        descripcionDetallada: descripcionDetallada || null,
-        observaciones: observaciones || null,
         idCategoria: Number(idCategoria),
         precioCompra: precioCompra || null,
-        precioVenta: precioVenta || null,
-        precioBlister: precioBlister || null,
-        precioCaja: precioCaja || null,
-        unidadesPorBlister: unidadesPorBlister || null,
-        unidadesPorCaja: unidadesPorCaja || null,
         stockMinimo: stockMinimo || null,
         activo: true,
+      }
+
+      // Sanitizar precios según presentación
+      if (tipoVenta === "UNIDAD") {
+        body.precioVenta = precioVenta || null
+        body.precioBlister = null
+        body.precioCaja = null
+        body.unidadesPorBlister = null
+        body.unidadesPorCaja = null
+      } else if (tipoVenta === "BLISTER") {
+        body.precioVenta = null
+        body.precioBlister = precioBlister || null
+        body.precioCaja = null
+        body.unidadesPorBlister = unidadesPorBlister || null
+        body.unidadesPorCaja = null
+      } else if (tipoVenta === "CAJA") {
+        body.precioVenta = null
+        body.precioBlister = null
+        body.precioCaja = precioCaja || null
+        body.unidadesPorBlister = null
+        body.unidadesPorCaja = unidadesPorCaja || null
       }
 
       const url = editingId ? `/api/productos/${editingId}` : "/api/productos"
@@ -413,10 +515,12 @@ export default function ProductosPage() {
               setFormError(errorMessages.join(' | '))
               errorMessages.forEach(msg => toast.error(msg))
             } else {
-              setFormError(data.error || "Error al guardar producto")
+              setFormError("No fue posible guardar el producto. Verifica los datos e intenta nuevamente.")
+              toast.error("No fue posible guardar el producto. Verifica los datos e intenta nuevamente.")
             }
           } else {
-            setFormError(data.error || "Error al guardar producto")
+            setFormError("No fue posible guardar el producto. Verifica los datos e intenta nuevamente.")
+            toast.error("No fue posible guardar el producto. Verifica los datos e intenta nuevamente.")
           }
         }
         return
@@ -424,11 +528,13 @@ export default function ProductosPage() {
 
       await mutateProductos()
       toast.success(editingId ? "Producto actualizado correctamente" : "Producto creado correctamente")
-      handleCancelForm()
+      localStorage.removeItem("farmacia_producto_borrador")
+      resetForm()
+      setShowForm(false)
     } catch (error) {
       console.error("Error guardando producto:", error)
-      setFormError("Error en la conexión con el servidor")
-      toast.error("Error en la conexión con el servidor")
+      setFormError("No fue posible guardar el producto. Verifica la conexión e intenta nuevamente.")
+      toast.error("No fue posible guardar el producto. Verifica la conexión e intenta nuevamente.")
     } finally {
       setFormLoading(false)
     }
@@ -558,14 +664,24 @@ export default function ProductosPage() {
               </p>
 
               <form onSubmit={handleSaveProducto} className="space-y-6">
-                
                 {/* ─── SECCIÓN 1: INFORMACIÓN BÁSICA ─── */}
                 <div className="rounded-lg border border-blue-100 bg-blue-50/30 p-4">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="p-1.5 bg-blue-100 rounded-md">
-                      <Package className="w-4 h-4 text-blue-600" />
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 bg-blue-100 rounded-md">
+                        <Package className="w-4 h-4 text-blue-600" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-blue-800">Información Básica</h3>
                     </div>
-                    <h3 className="text-sm font-semibold text-blue-800">Información Básica</h3>
+                    {!editingId && (nombre || idCategoria || codigoBarras || descripcion) && (
+                      <button
+                        type="button"
+                        onClick={handleClearDraft}
+                        className="text-xs text-red-500 hover:text-red-700 transition-colors underline"
+                      >
+                        Limpiar Borrador
+                      </button>
+                    )}
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="md:col-span-2">
@@ -589,7 +705,7 @@ export default function ProductosPage() {
                         </button>
                       </label>
                       <select
-                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-all"
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-all bg-white text-foreground"
                         value={idCategoria}
                         onChange={(e) => setIdCategoria(e.target.value)}
                         required
@@ -601,35 +717,7 @@ export default function ProductosPage() {
                           </option>
                         ))}
                       </select>
-                      <p className="text-xs text-gray-400 mt-1">Grupo al que pertenece (Analgésicos, Antibióticos, etc.)</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* ─── SECCIÓN: DESCRIPCIÓN Y DETALLES ─── */}
-                <div className="rounded-lg border border-indigo-100 bg-indigo-50/30 p-4">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="p-1.5 bg-indigo-100 rounded-md">
-                      <Info className="w-4 h-4 text-indigo-600" />
-                    </div>
-                    <h3 className="text-sm font-semibold text-indigo-800">Descripción y Detalles (Opcional)</h3>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Descripción Corta</label>
-                      <Input value={descripcionCorta} onChange={(e) => setDescripcionCorta(e.target.value)} placeholder="Ej: Analgésico y antipirético" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
-                      <Input value={descripcion} onChange={(e) => setDescripcion(e.target.value)} placeholder="Ej: Uso para el dolor y la fiebre" />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Descripción Detallada</label>
-                      <textarea value={descripcionDetallada} onChange={(e) => setDescripcionDetallada(e.target.value)} className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 outline-none" rows={3} placeholder="Detalles completos..." />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Observaciones</label>
-                      <Input value={observaciones} onChange={(e) => setObservaciones(e.target.value)} placeholder="Ej: Mantener fuera del alcance de niños" />
+                      <p className="text-xs text-gray-400 mt-1">Grupo al que pertenece el producto.</p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Código de Barras</label>
@@ -645,176 +733,188 @@ export default function ProductosPage() {
                           <ScanLine className="w-4 h-4" />
                         </Button>
                       </div>
-                      <p className="text-xs text-gray-400 mt-1">Opcional. Código de barras del producto.</p>
+                      <p className="text-xs text-gray-400 mt-1">Opcional. Código de barras del empaque.</p>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Imagen (URL)</label>
-                      <Input value={imagen} onChange={(e) => setImagen(e.target.value)} placeholder="https://..." />
-                      <p className="text-xs text-gray-400 mt-1">Opcional. URL de imagen del producto.</p>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
+                      <textarea
+                        value={descripcion}
+                        onChange={(e) => setDescripcion(e.target.value)}
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 outline-none min-h-[100px] bg-white text-foreground"
+                        placeholder="Ej: Analgésico y antipirético para el dolor y la fiebre. Mantener fuera del alcance de niños."
+                      />
+                      <p className="text-xs text-gray-400 mt-1">Detalles, indicaciones especiales u observaciones del producto.</p>
                     </div>
                   </div>
                 </div>
 
-                {/* ─── SECCIÓN 2: PRECIOS ─── */}
-                <div className="rounded-lg border border-emerald-100 bg-emerald-50/30 p-4">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="p-1.5 bg-emerald-100 rounded-md">
-                      <DollarSign className="w-4 h-4 text-emerald-600" />
-                    </div>
-                    <h3 className="text-sm font-semibold text-emerald-800">Precios</h3>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Precio de compra (C$)
-                      </label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={precioCompra}
-                        onChange={(e) => handlePrecioCompraChange(e.target.value)}
-                        placeholder="Ej: 2.00"
-                      />
-                      <p className="text-xs text-gray-400 mt-1">Lo que pagaste al proveedor por unidad.</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Precio de venta por unidad (C$) <span className="text-red-500">*</span>
-                      </label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={precioVenta}
-                        onChange={(e) => handlePrecioVentaChange(e.target.value)}
-                        placeholder="Ej: 5.00"
-                        required
-                        className={precioVentaError ? "border-red-400 focus:ring-red-200 focus:border-red-400" : ""}
-                      />
-                      {precioVentaError ? (
-                        <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
-                          <AlertTriangle className="w-3 h-3" />
-                          {precioVentaError}
-                        </p>
-                      ) : (
-                        <p className="text-xs text-gray-400 mt-1">Precio al público por 1 pastilla o unidad suelta.</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Precio por blister (C$) <span className="text-gray-400 text-xs font-normal">— opcional</span>
-                      </label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={precioBlister}
-                        onChange={(e) => setPrecioBlister(e.target.value)}
-                        placeholder="Ej: 45.00"
-                      />
-                      <p className="text-xs text-gray-400 mt-1">
-                        Precio al vender un blister completo.
-                        {precioCompra && unidadesPorBlister && calcSugerido(precioCompra, unidadesPorBlister) && (
-                          <span className="text-emerald-600 font-medium ml-1">
-                            Sugerido con 20% de ganancia: {"C$" + calcSugerido(precioCompra, unidadesPorBlister)}
-                          </span>
-                        )}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Precio por caja (C$) <span className="text-gray-400 text-xs font-normal">— opcional</span>
-                      </label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={precioCaja}
-                        onChange={(e) => setPrecioCaja(e.target.value)}
-                        placeholder="Ej: 400.00"
-                      />
-                      <p className="text-xs text-gray-400 mt-1">
-                        Precio al vender la caja cerrada completa.
-                        {precioCompra && unidadesPorCaja && calcSugerido(precioCompra, unidadesPorCaja) && (
-                          <span className="text-emerald-600 font-medium ml-1">
-                            Sugerido con 20% de ganancia: {"C$" + calcSugerido(precioCompra, unidadesPorCaja)}
-                          </span>
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* ─── SECCIÓN 3: EMPAQUE / PRESENTACIÓN ─── */}
+                {/* ─── SECCIÓN 2: PRESENTACIÓN Y PRECIOS ─── */}
                 <div className="rounded-lg border border-purple-100 bg-purple-50/30 p-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 bg-purple-100 rounded-md">
-                        <Layers className="w-4 h-4 text-purple-600" />
-                      </div>
-                      <h3 className="text-sm font-semibold text-purple-800">Empaque / Presentación</h3>
-                    </div>
-                    <span className="text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full">Opcional</span>
-                  </div>
-                  <div className="flex items-start gap-2 mb-4 p-3 bg-purple-50 rounded-md border border-purple-100">
-                    <Info className="w-4 h-4 text-purple-500 mt-0.5 shrink-0" />
-                    <p className="text-xs text-purple-700">
-                      Define cuántas unidades tiene cada presentación. Esto permite que al vender por blister o caja, 
-                      el sistema descuente automáticamente las unidades correctas del stock.
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Unidades por blister
-                      </label>
-                      <Input
-                        type="number"
-                        value={unidadesPorBlister}
-                        onChange={(e) => handleUnidadesPorBlisterChange(e.target.value)}
-                        placeholder="Ej: 10"
-                      />
-                      <p className="text-xs text-gray-400 mt-1">¿Cuántas pastillas trae cada blister?</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Unidades por caja
-                      </label>
-                      <Input
-                        type="number"
-                        value={unidadesPorCaja}
-                        onChange={(e) => handleUnidadesPorCajaChange(e.target.value)}
-                        placeholder="Ej: 100"
-                      />
-                      <p className="text-xs text-gray-400 mt-1">¿Cuántas pastillas trae la caja completa?</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* ─── SECCIÓN 4: STOCK MÍNIMO ─── */}
-                <div className="rounded-lg border border-amber-100 bg-amber-50/30 p-4">
                   <div className="flex items-center gap-2 mb-4">
-                    <div className="p-1.5 bg-amber-100 rounded-md">
-                      <BarChart3 className="w-4 h-4 text-amber-600" />
+                    <div className="p-1.5 bg-purple-100 rounded-md">
+                      <Layers className="w-4 h-4 text-purple-600" />
                     </div>
-                    <h3 className="text-sm font-semibold text-amber-800">Alertas de Stock</h3>
+                    <h3 className="text-sm font-semibold text-purple-800">Presentación y Precios</h3>
                   </div>
-                  <div className="flex items-start gap-2 mb-4 p-3 bg-amber-50 rounded-md border border-amber-100">
-                    <Info className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
-                    <p className="text-xs text-amber-700">
-                      El stock actual se gestiona automáticamente mediante compras. Aquí solo defines el umbral mínimo para recibir alertas de reabastecimiento.
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                  <div className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Stock mínimo <span className="text-gray-400 text-xs font-normal">— alerta automática</span>
+                        Tipo de Venta <span className="text-red-500">*</span>
                       </label>
-                      <Input
-                        type="number"
-                        value={stockMinimo}
-                        onChange={(e) => setStockMinimo(e.target.value)}
-                        placeholder="Ej: 50"
-                      />
-                      <p className="text-xs text-gray-400 mt-1">Si el stock baja de este número, recibirás una alerta para reabastecer.</p>
+                      <select
+                        className="w-full md:w-1/2 rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-purple-200 focus:border-purple-400 transition-all bg-white text-foreground"
+                        value={tipoVenta}
+                        onChange={(e) => setTipoVenta(e.target.value as any)}
+                        required
+                      >
+                        <option value="UNIDAD">Unidad</option>
+                        <option value="BLISTER">Blister</option>
+                        <option value="CAJA">Caja</option>
+                      </select>
+                      <p className="text-xs text-gray-400 mt-1">Define el formato de venta de este producto.</p>
                     </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-purple-100/50">
+                      
+                      {/* Precio de Compra - Común para todos */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Precio de compra (C$)
+                        </label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={precioCompra}
+                          onChange={(e) => handlePrecioCompraChange(e.target.value)}
+                          placeholder="Ej: 2.00"
+                        />
+                        <p className="text-xs text-gray-400 mt-1">Lo que pagaste al proveedor por la presentación.</p>
+                      </div>
+
+                      {/* Stock Mínimo - Común para todos */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Stock mínimo
+                        </label>
+                        <Input
+                          type="number"
+                          value={stockMinimo}
+                          onChange={(e) => setStockMinimo(e.target.value)}
+                          placeholder="Ej: 50"
+                        />
+                        <p className="text-xs text-gray-400 mt-1">Umbral mínimo para recibir alertas de reabastecimiento.</p>
+                      </div>
+
+                      {/* VENTA POR UNIDAD */}
+                      {tipoVenta === "UNIDAD" && (
+                        <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Precio de venta por unidad (C$) <span className="text-red-500">*</span>
+                            </label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={precioVenta}
+                              onChange={(e) => handlePrecioVentaChange(e.target.value)}
+                              placeholder="Ej: 5.00"
+                              required
+                              className={precioVentaError ? "border-red-400 focus:ring-red-200 focus:border-red-400" : ""}
+                            />
+                            {precioVentaError ? (
+                              <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                                <AlertTriangle className="w-3 h-3" />
+                                {precioVentaError}
+                              </p>
+                            ) : (
+                              <p className="text-xs text-gray-400 mt-1">Precio al público por 1 pastilla o unidad suelta.</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* VENTA POR BLISTER */}
+                      {tipoVenta === "BLISTER" && (
+                        <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Precio de venta por blíster (C$) <span className="text-red-500">*</span>
+                            </label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={precioBlister}
+                              onChange={(e) => setPrecioBlister(e.target.value)}
+                              placeholder="Ej: 45.00"
+                              required
+                            />
+                            <p className="text-xs text-gray-400 mt-1">
+                              Precio al público por blíster completo.
+                              {precioCompra && unidadesPorBlister && calcSugerido(precioCompra, unidadesPorBlister) && (
+                                <span className="text-emerald-600 font-medium ml-1">
+                                  Sugerido (20% margen): C${calcSugerido(precioCompra, unidadesPorBlister)}
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Unidades por blíster <span className="text-red-500">*</span>
+                            </label>
+                            <Input
+                              type="number"
+                              value={unidadesPorBlister}
+                              onChange={(e) => handleUnidadesPorBlisterChange(e.target.value)}
+                              placeholder="Ej: 10"
+                              required
+                            />
+                            <p className="text-xs text-gray-400 mt-1">Cantidad de unidades individuales contenidas en un blíster.</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* VENTA POR CAJA */}
+                      {tipoVenta === "CAJA" && (
+                        <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Precio de venta por caja (C$) <span className="text-red-500">*</span>
+                            </label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={precioCaja}
+                              onChange={(e) => setPrecioCaja(e.target.value)}
+                              placeholder="Ej: 400.00"
+                              required
+                            />
+                            <p className="text-xs text-gray-400 mt-1">
+                              Precio al público por caja completa cerrada.
+                              {precioCompra && unidadesPorCaja && calcSugerido(precioCompra, unidadesPorCaja) && (
+                                <span className="text-emerald-600 font-medium ml-1">
+                                  Sugerido (20% margen): C${calcSugerido(precioCompra, unidadesPorCaja)}
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Unidades por caja <span className="text-red-500">*</span>
+                            </label>
+                            <Input
+                              type="number"
+                              value={unidadesPorCaja}
+                              onChange={(e) => handleUnidadesPorCajaChange(e.target.value)}
+                              placeholder="Ej: 100"
+                              required
+                            />
+                            <p className="text-xs text-gray-400 mt-1">Cantidad de unidades individuales contenidas en la caja completa.</p>
+                          </div>
+                        </div>
+                      )}
+
+                      </div>
                   </div>
                 </div>
 
@@ -1275,33 +1375,15 @@ export default function ProductosPage() {
                     </div>
                   </div>
 
-                  {/* Fila 3: Descripciones y Observaciones */}
+                  {/* Fila 3: Descripción */}
                   <div className="rounded-lg border border-blue-100 bg-blue-50/20 p-4 space-y-4">
                     <h3 className="text-sm font-semibold text-blue-800 mb-1 flex items-center gap-2">
                       <FileText className="w-4 h-4" />
-                      Descripciones y Ficha Técnica
+                      Descripción del Producto
                     </h3>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="bg-background/60 p-3 rounded-lg border border-border">
-                        <p className="text-xs text-muted-foreground font-semibold">Descripción Corta</p>
-                        <p className="text-sm text-foreground mt-1 font-medium">{selectedProduct.descripcionCorta || "—"}</p>
-                      </div>
-
-                      <div className="bg-background/60 p-3 rounded-lg border border-border">
-                        <p className="text-xs text-muted-foreground font-semibold">Descripción General</p>
-                        <p className="text-sm text-foreground mt-1 font-medium">{selectedProduct.descripcion || "—"}</p>
-                      </div>
-
-                      <div className="md:col-span-2 bg-background/60 p-3 rounded-lg border border-border">
-                        <p className="text-xs text-muted-foreground font-semibold">Ficha / Descripción Detallada</p>
-                        <p className="text-sm text-foreground mt-1 whitespace-pre-wrap">{selectedProduct.descripcionDetallada || "—"}</p>
-                      </div>
-
-                      <div className="md:col-span-2 bg-background/60 p-3 rounded-lg border border-border">
-                        <p className="text-xs text-muted-foreground font-semibold">Observaciones / Indicaciones Especiales</p>
-                        <p className="text-sm text-foreground mt-1">{selectedProduct.observaciones || "—"}</p>
-                      </div>
+                    <div className="bg-background/60 p-3 rounded-lg border border-border">
+                      <p className="text-sm text-foreground whitespace-pre-wrap font-medium">{selectedProduct.descripcion || "Sin descripción disponible."}</p>
                     </div>
                   </div>
                 </div>

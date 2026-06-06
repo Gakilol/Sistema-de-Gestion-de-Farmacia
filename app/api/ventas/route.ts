@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
 import { registrarLog } from "@/lib/audit"
+import { ventaSchema } from "@/lib/validations"
 
 export async function GET(request: NextRequest) {
   try {
@@ -56,17 +57,17 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { ventaSchema } = require('@/lib/validations')
     const validation = ventaSchema.safeParse(body)
 
     if (!validation.success) {
       return NextResponse.json(
-        { error: validation.error.errors[0].message, details: validation.error.errors },
+        { error: validation.error.issues[0].message, details: validation.error.issues },
         { status: 400 }
       )
     }
 
-    const { idCliente, detalles, metodoPago, nombrePodologo, numeroReceta } = validation.data
+    const { idCliente, detalles: validationDetalles, metodoPago, nombrePodologo, numeroReceta } = validation.data
+    const detalles = validationDetalles as any[]
 
     // ── Pre-validación: cargar todos los productos de una sola consulta ──
     const productIds = detalles.map((d: any) => d.idProducto)
@@ -176,7 +177,7 @@ export async function POST(request: NextRequest) {
       const nuevaVenta = await tx.venta.create({
         data: {
           fecha: new Date(),
-          idCliente: idCliente ? Number.parseInt(idCliente) : null,
+          idCliente: idCliente ? Number(idCliente) : null,
           idUsuario: user.id,
           total,
           metodoPago,

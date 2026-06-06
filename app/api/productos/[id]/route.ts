@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
-import { productoSchema } from "@/lib/validations"
+import { productoSchema, emptyToNull } from "@/lib/validations"
 import { registrarLog } from "@/lib/audit"
 
 // Obtener un producto por id (incluye lotes y últimos movimientos)
@@ -64,19 +64,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const data = parsed.data
-    const { emptyToNull } = require('@/lib/validations')
-
     // Only update catalog fields — DO NOT update stockActual
     const producto = await prisma.producto.update({
       where: { id: Number.parseInt(id) },
       data: {
         nombre: data.nombre,
         codigoBarras: emptyToNull(data.codigoBarras),
-        imagen: emptyToNull(data.imagen),
         descripcion: emptyToNull(data.descripcion),
-        descripcionCorta: emptyToNull(data.descripcionCorta),
-        descripcionDetallada: emptyToNull(data.descripcionDetallada),
-        observaciones: emptyToNull(data.observaciones),
         idCategoria: data.idCategoria,
         precioCompra: data.precioCompra || 0,
         precioVenta: data.precioVenta,

@@ -62,11 +62,7 @@ model Producto {
   id              Int     @id @default(autoincrement())
   nombre          String  @unique
   codigoBarras    String? @unique
-  imagen          String?
   descripcion     String?
-  descripcionCorta String?
-  descripcionDetallada String?
-  observaciones   String?
   fechaVencimiento DateTime?  // Legacy field — now tracked per batch (Lote)
   idCategoria     Int
   categoria       CategoriaProducto @relation(fields: [idCategoria], references: [id])

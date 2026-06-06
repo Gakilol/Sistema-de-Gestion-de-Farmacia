@@ -103,12 +103,8 @@ export const usuarioSchema = z.object({
 export const productoSchema = z.object({
   nombre: z.string().min(2, "El nombre debe tener al menos 2 caracteres"),
   codigoBarras: z.string().optional().nullable(),
-  imagen: z.string().optional().nullable(),
   descripcion: z.string().optional().nullable(),
-  descripcionCorta: z.string().optional().nullable(),
-  descripcionDetallada: z.string().optional().nullable(),
-  observaciones: z.string().optional().nullable(),
-  idCategoria: z.number({ required_error: "La categoría es obligatoria" }).int().positive(),
+  idCategoria: z.number({ message: "La categoría es obligatoria" }).int().positive("La categoría es obligatoria"),
   precioCompra: z.preprocess((a) => (a ? parseFloat(String(a)) : null), z.number().min(0, "El precio de compra no puede ser negativo").nullable().optional()),
   precioVenta: z.preprocess((a) => (a !== null && a !== undefined && a !== "" ? parseFloat(String(a)) : 0), z.number().min(0, "El precio de venta no puede ser negativo").optional().default(0)),
   precioBlister: z.preprocess((a) => (a ? parseFloat(String(a)) : null), z.number().min(0.01, "El precio por blíster debe ser mayor a 0").nullable().optional()),
