@@ -535,29 +535,28 @@ export default function ProductosPage() {
   }
 
   const formatStock = (p: Producto) => {
-    let uds = p.stockActual;
-    let str = `${uds}`;
-    if (p.unidadesPorCaja || p.unidadesPorBlister) {
-      let cajas = 0;
-      let blisters = 0;
-      let restantes = uds;
+    const uds = p.stockActual
+    const upb = p.unidadesPorBlister ? Number(p.unidadesPorBlister) : null
+    const upc = p.unidadesPorCaja ? Number(p.unidadesPorCaja) : null
 
-      if (p.unidadesPorCaja) {
-        cajas = Math.floor(restantes / p.unidadesPorCaja);
-        restantes = restantes % p.unidadesPorCaja;
-      }
-      if (p.unidadesPorBlister) {
-        blisters = Math.floor(restantes / p.unidadesPorBlister);
-        restantes = restantes % p.unidadesPorBlister;
-      }
-      
-      str += ` (`;
-      if (cajas > 0) str += `${cajas} Caj `;
-      if (blisters > 0) str += `${blisters} Blis `;
-      if (restantes > 0 || (cajas === 0 && blisters === 0)) str += `${restantes} Uds`;
-      str = str.trim() + `)`;
+    if (!upc && !upb) {
+      return { total: uds, cajas: null, blisters: null, sueltas: uds }
     }
-    return str;
+
+    let restantes = uds
+    let cajas = 0
+    let blisters = 0
+
+    if (upc && upc > 0) {
+      cajas = Math.floor(restantes / upc)
+      restantes = restantes % upc
+    }
+    if (upb && upb > 0) {
+      blisters = Math.floor(restantes / upb)
+      restantes = restantes % upb
+    }
+
+    return { total: uds, cajas: upc ? cajas : null, blisters: upb ? blisters : null, sueltas: restantes }
   }
 
   const handleExportExcel = () => {
@@ -566,15 +565,29 @@ export default function ProductosPage() {
       return;
     }
 
-    const exportData = productos.map(p => ({
-      ID: p.id,
-      Nombre: p.nombre,
-      Categoría: p.categoria?.nombre || "Sin Categoría",
-      Precio_Compra: p.precioCompra ? `C$${Number(p.precioCompra).toFixed(2)}` : "-",
-      Precio_Venta: `C$${Number(p.precioVenta).toFixed(2)}`,
-      Stock_Actual: formatStock(p),
-      Estado: p.activo ? "Activo" : "Inactivo"
-    }));
+    const exportData = productos.map(p => {
+      const s = formatStock(p)
+      let stockStr = `${s.total} uds`
+      if (s.cajas !== null || s.blisters !== null) {
+        const parts = []
+        if (s.cajas !== null && s.cajas > 0) parts.push(`${s.cajas} Caj`)
+        if (s.blisters !== null && s.blisters > 0) parts.push(`${s.blisters} Blis`)
+        parts.push(`${s.sueltas} Uds`)
+        stockStr = `${s.total} (${parts.join(" + ")})`
+      }
+      const precio = Number(p.precioVenta) > 0 ? Number(p.precioVenta)
+        : Number(p.precioBlister) > 0 ? Number(p.precioBlister)
+        : Number(p.precioCaja) > 0 ? Number(p.precioCaja) : 0
+      return {
+        ID: p.id,
+        Nombre: p.nombre,
+        Categoría: p.categoria?.nombre || "Sin Categoría",
+        Precio_Compra: p.precioCompra ? `C$${Number(p.precioCompra).toFixed(2)}` : "-",
+        Precio_Venta: `C$${precio.toFixed(2)}`,
+        Stock_Actual: stockStr,
+        Estado: p.activo ? "Activo" : "Inactivo"
+      }
+    })
 
     const worksheet = XLSX.utils.json_to_sheet(exportData);
     const workbook = XLSX.utils.book_new();
@@ -618,34 +631,35 @@ export default function ProductosPage() {
           {/* Formulario crear / editar */}
           {isAdmin && showForm && (
             <Card className="glass-card p-6 mb-6 transition-all">
-              <h2 className="text-lg font-semibold mb-1 text-primary">
-                {editingId ? "Editar Producto" : "Nuevo Producto"}
-              </h2>
+              <div className="flex items-center justify-between mb-1">
+                <h2 className="text-lg font-semibold text-primary">
+                  {editingId ? "Editar Producto" : "Nuevo Producto"}
+                </h2>
+                {!editingId && (nombre || idCategoria || codigoBarras || descripcion) && (
+                  <button
+                    type="button"
+                    onClick={handleClearDraft}
+                    className="text-xs text-red-500 hover:text-red-700 transition-colors underline"
+                  >
+                    Limpiar Borrador
+                  </button>
+                )}
+              </div>
               <p className="text-sm text-muted-foreground mb-6">
                 {editingId 
                   ? "Modifica los campos que necesites y presiona Actualizar." 
                   : "Completa los campos obligatorios (*) para registrar un nuevo producto."}
               </p>
 
-              <form onSubmit={handleSaveProducto} className="space-y-6">
+              <form onSubmit={handleSaveProducto} className="space-y-5">
+
                 {/* ─── SECCIÓN 1: INFORMACIÓN BÁSICA ─── */}
-                <div className="rounded-lg border border-blue-100 bg-blue-50/30 p-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 bg-blue-100 rounded-md">
-                        <Package className="w-4 h-4 text-blue-600" />
-                      </div>
-                      <h3 className="text-sm font-semibold text-blue-800">Información Básica</h3>
+                <div className="rounded-lg border border-blue-100 bg-white p-5 shadow-sm">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="p-1.5 bg-blue-100 rounded-md">
+                      <Package className="w-4 h-4 text-blue-600" />
                     </div>
-                    {!editingId && (nombre || idCategoria || codigoBarras || descripcion) && (
-                      <button
-                        type="button"
-                        onClick={handleClearDraft}
-                        className="text-xs text-red-500 hover:text-red-700 transition-colors underline"
-                      >
-                        Limpiar Borrador
-                      </button>
-                    )}
+                    <h3 className="text-sm font-semibold text-blue-800">Información Básica</h3>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="md:col-span-2">
@@ -660,7 +674,7 @@ export default function ProductosPage() {
                       />
                       <p className="text-xs text-gray-400 mt-1">Nombre comercial o genérico del medicamento.</p>
                     </div>
-                    <div>
+                    <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
                         <span>Categoría <span className="text-red-500">*</span></span>
                         <button type="button" onClick={() => setShowCategoryModal(true)} className="text-xs text-primary flex items-center hover:underline">
@@ -681,9 +695,32 @@ export default function ProductosPage() {
                           </option>
                         ))}
                       </select>
-                      <p className="text-xs text-gray-400 mt-1">Grupo al que pertenece el producto.</p>
+                      <p className="text-xs text-gray-400 mt-1">Grupo al que pertenece el producto (Analgésicos, Antibióticos, etc.).</p>
                     </div>
-                    <div>
+                  </div>
+                </div>
+
+                {/* ─── SECCIÓN 2: DESCRIPCIÓN Y DETALLES ─── */}
+                <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="p-1.5 bg-blue-50 rounded-md border border-blue-100">
+                      <Info className="w-4 h-4 text-blue-500" />
+                    </div>
+                    <h3 className="text-sm font-semibold text-gray-700">Descripción y Detalles</h3>
+                    <span className="ml-auto text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Opcional</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
+                      <textarea
+                        value={descripcion}
+                        onChange={(e) => setDescripcion(e.target.value)}
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 outline-none min-h-[80px] bg-white text-foreground"
+                        placeholder="Ej: Analgésico y antipirético para el dolor y la fiebre."
+                      />
+                      <p className="text-xs text-gray-400 mt-1">Indicaciones, observaciones o detalles especiales del producto.</p>
+                    </div>
+                    <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-1">Código de Barras</label>
                       <div className="flex gap-2">
                         <Input value={codigoBarras} onChange={(e) => setCodigoBarras(e.target.value)} placeholder="Ej: 7441001123456" />
@@ -697,39 +734,22 @@ export default function ProductosPage() {
                           <ScanLine className="w-4 h-4" />
                         </Button>
                       </div>
-                      <p className="text-xs text-gray-400 mt-1">Opcional. Código de barras del empaque.</p>
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
-                      <textarea
-                        value={descripcion}
-                        onChange={(e) => setDescripcion(e.target.value)}
-                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 outline-none min-h-[100px] bg-white text-foreground"
-                        placeholder="Ej: Analgésico y antipirético para el dolor y la fiebre. Mantener fuera del alcance de niños."
-                      />
-                      <p className="text-xs text-gray-400 mt-1">Detalles, indicaciones especiales u observaciones del producto.</p>
+                      <p className="text-xs text-gray-400 mt-1">Opcional. Código de barras del producto.</p>
                     </div>
                   </div>
                 </div>
 
-                {/* ─── SECCIÓN 2: PRESENTACIÓN Y PRECIOS ─── */}
-                <div className="rounded-lg border border-purple-100 bg-purple-50/30 p-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="p-1.5 bg-purple-100 rounded-md">
-                      <Layers className="w-4 h-4 text-purple-600" />
+                {/* ─── SECCIÓN 3: PRECIOS ─── */}
+                <div className="rounded-lg border border-green-100 bg-white p-5 shadow-sm">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="p-1.5 bg-green-100 rounded-md">
+                      <DollarSign className="w-4 h-4 text-green-600" />
                     </div>
-                    <h3 className="text-sm font-semibold text-purple-800">Presentaciones y Precios</h3>
+                    <h3 className="text-sm font-semibold text-green-800">Precios</h3>
                   </div>
-                  <p className="text-xs text-gray-500 mb-4">
-                    Ingresa el costo y los precios de venta. Puedes definir precio por unidad, blíster y/o caja. Al menos uno es obligatorio.
-                  </p>
-
-                  {/* ─ Fila 1: Precio de Compra + Stock Mínimo ─ */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 pb-4 border-b border-purple-100">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Precio de compra / costo (C$)
-                      </label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Precio de compra (C$)</label>
                       <Input
                         type="number"
                         step="0.01"
@@ -738,128 +758,129 @@ export default function ProductosPage() {
                         onChange={(e) => handlePrecioCompraChange(e.target.value)}
                         placeholder="Ej: 2.00"
                       />
-                      <p className="text-xs text-gray-400 mt-1">Costo unitario o por presentación.</p>
+                      <p className="text-xs text-gray-400 mt-1">Lo que pagaste al proveedor por unidad.</p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Stock mínimo (unidades)
+                        Precio de venta por unidad (C$) <span className="text-red-500">*</span>
+                        {precioVentaError && (
+                          <span className="text-xs text-red-500 font-normal ml-1">— {precioVentaError}</span>
+                        )}
                       </label>
                       <Input
                         type="number"
+                        step="0.01"
                         min="0"
-                        value={stockMinimo}
-                        onChange={(e) => setStockMinimo(e.target.value)}
-                        placeholder="Ej: 50"
+                        value={precioVenta}
+                        onChange={(e) => handlePrecioVentaChange(e.target.value)}
+                        placeholder="Ej: 5.00"
+                        className={precioVentaError ? "border-red-400 focus:ring-red-200 focus:border-red-400" : ""}
                       />
-                      <p className="text-xs text-gray-400 mt-1">Alerta cuando el stock sea menor a este valor.</p>
+                      <p className="text-xs text-gray-400 mt-1">Precio al público por 1 pastilla o unidad suelta.</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Precio por blíster (C$) <span className="text-gray-400 font-normal text-xs">— opcional</span>
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={precioBlister}
+                        onChange={(e) => setPrecioBlister(e.target.value)}
+                        placeholder="Ej: 45.00"
+                      />
+                      {precioCompra && unidadesPorBlister && calcSugerido(precioCompra, unidadesPorBlister) ? (
+                        <p className="text-xs text-emerald-600 font-medium mt-1">💡 Sugerido (20%): C${calcSugerido(precioCompra, unidadesPorBlister)}</p>
+                      ) : (
+                        <p className="text-xs text-gray-400 mt-1">Precio al vender un blíster completo.</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Precio por caja (C$) <span className="text-gray-400 font-normal text-xs">— opcional</span>
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={precioCaja}
+                        onChange={(e) => setPrecioCaja(e.target.value)}
+                        placeholder="Ej: 400.00"
+                      />
+                      {precioCompra && unidadesPorCaja && calcSugerido(precioCompra, unidadesPorCaja) ? (
+                        <p className="text-xs text-emerald-600 font-medium mt-1">💡 Sugerido (20%): C${calcSugerido(precioCompra, unidadesPorCaja)}</p>
+                      ) : (
+                        <p className="text-xs text-gray-400 mt-1">Precio al vender la caja cerrada completa.</p>
+                      )}
                     </div>
                   </div>
+                </div>
 
-                  {/* ─ Fila 2: Precios de Venta por Presentación ─ */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-
-                    {/* Unidad */}
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-2 h-2 rounded-full bg-blue-400"></div>
-                        <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Unidad</span>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Precio de venta (C$)</label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={precioVenta}
-                          onChange={(e) => handlePrecioVentaChange(e.target.value)}
-                          placeholder="Ej: 5.00"
-                          className={precioVentaError ? "border-red-400 focus:ring-red-200 focus:border-red-400" : ""}
-                        />
-                        {precioVentaError ? (
-                          <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
-                            <AlertTriangle className="w-3 h-3" />
-                            {precioVentaError}
-                          </p>
-                        ) : (
-                          <p className="text-xs text-gray-400 mt-1">Dejar vacío si no vendes por unidad.</p>
-                        )}
-                      </div>
+                {/* ─── SECCIÓN 4: EMPAQUE / PRESENTACIÓN ─── */}
+                <div className="rounded-lg border border-purple-100 bg-white p-5 shadow-sm">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="p-1.5 bg-purple-100 rounded-md">
+                      <Layers className="w-4 h-4 text-purple-600" />
                     </div>
-
-                    {/* Blíster */}
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
-                        <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Blíster / Tira</span>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Precio por blíster (C$)</label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={precioBlister}
-                          onChange={(e) => setPrecioBlister(e.target.value)}
-                          placeholder="Ej: 45.00"
-                        />
-                        {precioCompra && unidadesPorBlister && calcSugerido(precioCompra, unidadesPorBlister) && (
-                          <p className="text-xs text-emerald-600 font-medium mt-1">
-                            💡 Sugerido: C${calcSugerido(precioCompra, unidadesPorBlister)}
-                          </p>
-                        )}
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Unidades por blíster</label>
-                        <Input
-                          type="number"
-                          min="1"
-                          value={unidadesPorBlister}
-                          onChange={(e) => handleUnidadesPorBlisterChange(e.target.value)}
-                          placeholder="Ej: 10"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Caja */}
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-2 h-2 rounded-full bg-orange-400"></div>
-                        <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Caja Cerrada</span>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Precio por caja (C$)</label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={precioCaja}
-                          onChange={(e) => setPrecioCaja(e.target.value)}
-                          placeholder="Ej: 400.00"
-                        />
-                        {precioCompra && unidadesPorCaja && calcSugerido(precioCompra, unidadesPorCaja) && (
-                          <p className="text-xs text-emerald-600 font-medium mt-1">
-                            💡 Sugerido: C${calcSugerido(precioCompra, unidadesPorCaja)}
-                          </p>
-                        )}
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Unidades por caja</label>
-                        <Input
-                          type="number"
-                          min="1"
-                          value={unidadesPorCaja}
-                          onChange={(e) => handleUnidadesPorCajaChange(e.target.value)}
-                          placeholder="Ej: 100"
-                        />
-                      </div>
-                    </div>
-
+                    <h3 className="text-sm font-semibold text-purple-800">Empaque / Presentación</h3>
+                    <span className="ml-auto text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full">Opcional</span>
                   </div>
+                  <div className="flex items-start gap-2 bg-purple-50 border border-purple-100 rounded-lg px-3 py-2.5 mb-4 text-xs text-purple-700">
+                    <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                    <span>Define cuántas unidades tiene cada presentación. Esto permite que al vender por blíster o caja, el sistema descuente automáticamente las unidades correctas del stock.</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Unidades por blíster</label>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={unidadesPorBlister}
+                        onChange={(e) => handleUnidadesPorBlisterChange(e.target.value)}
+                        placeholder="Ej: 10"
+                      />
+                      <p className="text-xs text-gray-400 mt-1">¿Cuántas pastillas trae cada blíster?</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Unidades por caja</label>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={unidadesPorCaja}
+                        onChange={(e) => handleUnidadesPorCajaChange(e.target.value)}
+                        placeholder="Ej: 100"
+                      />
+                      <p className="text-xs text-gray-400 mt-1">¿Cuántas pastillas trae la caja completa?</p>
+                    </div>
+                  </div>
+                </div>
 
-                  <p className="text-xs text-amber-600 font-medium mt-3 flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3" />
-                    Debes ingresar al menos un precio de venta (unidad, blíster o caja) mayor a 0.
-                  </p>
+                {/* ─── SECCIÓN 5: ALERTAS DE STOCK ─── */}
+                <div className="rounded-lg border border-amber-100 bg-white p-5 shadow-sm">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="p-1.5 bg-amber-100 rounded-md">
+                      <BarChart3 className="w-4 h-4 text-amber-600" />
+                    </div>
+                    <h3 className="text-sm font-semibold text-amber-800">Alertas de Stock</h3>
+                  </div>
+                  <div className="flex items-start gap-2 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2.5 mb-4 text-xs text-amber-700">
+                    <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                    <span>El stock actual se gestiona automáticamente mediante compras. Aquí solo defines el umbral mínimo para recibir alertas de reabastecimiento.</span>
+                  </div>
+                  <div className="max-w-xs">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Stock mínimo <span className="text-gray-400 font-normal text-xs">— alerta automática</span>
+                    </label>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={stockMinimo}
+                      onChange={(e) => setStockMinimo(e.target.value)}
+                      placeholder="Ej: 50"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Si el stock baja de este número, recibirás una alerta para reabastecer.</p>
+                  </div>
                 </div>
 
                 {formError && (
@@ -977,10 +998,42 @@ export default function ProductosPage() {
                           {producto.categoria.nombre}
                         </td>
                         <td className="px-6 py-4 text-sm font-medium text-foreground">
-                          C${Number.parseFloat(String(producto.precioVenta)).toFixed(2)}
+                          {(() => {
+                            const pv = Number(producto.precioVenta)
+                            const pb = Number(producto.precioBlister)
+                            const pc = Number(producto.precioCaja)
+                            if (pv > 0) return `C$${pv.toFixed(2)}`
+                            if (pb > 0) return `C$${pb.toFixed(2)} /blis`
+                            if (pc > 0) return `C$${pc.toFixed(2)} /caja`
+                            return "—"
+                          })()}
                         </td>
                         <td className="px-6 py-4 text-sm text-foreground">
-                          {formatStock(producto)}
+                          {(() => {
+                            const s = formatStock(producto)
+                            return (
+                              <div className="flex flex-col gap-0.5">
+                                <span className="font-medium text-foreground">{s.total} <span className="text-xs text-muted-foreground font-normal">uds totales</span></span>
+                                {(s.cajas !== null || s.blisters !== null) && (
+                                  <div className="flex items-center gap-1 flex-wrap">
+                                    {s.cajas !== null && (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-100 text-orange-700">
+                                        {s.cajas} Caj
+                                      </span>
+                                    )}
+                                    {s.blisters !== null && (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-100 text-emerald-700">
+                                        {s.blisters} Blis
+                                      </span>
+                                    )}
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700">
+                                      {s.sueltas} Uds
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })()}
                         </td>
                         <td className="px-6 py-4 text-sm">
                           <span
