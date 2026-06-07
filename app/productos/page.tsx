@@ -714,18 +714,18 @@ export default function ProductosPage() {
 
                 {/* ─── SECCIÓN 2: PRESENTACIÓN Y PRECIOS ─── */}
                 <div className="rounded-lg border border-purple-100 bg-purple-50/30 p-4">
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="flex items-center gap-2 mb-1">
                     <div className="p-1.5 bg-purple-100 rounded-md">
                       <Layers className="w-4 h-4 text-purple-600" />
                     </div>
                     <h3 className="text-sm font-semibold text-purple-800">Presentaciones y Precios</h3>
                   </div>
                   <p className="text-xs text-gray-500 mb-4">
-                    Activa las presentaciones en las que se vende este producto. Puedes habilitar una o varias a la vez.
+                    Ingresa el costo y los precios de venta. Puedes definir precio por unidad, blíster y/o caja. Al menos uno es obligatorio.
                   </p>
 
-                  {/* ─ Precio de Compra + Stock Mínimo ─ */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  {/* ─ Fila 1: Precio de Compra + Stock Mínimo ─ */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 pb-4 border-b border-purple-100">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Precio de compra / costo (C$)
@@ -733,123 +733,133 @@ export default function ProductosPage() {
                       <Input
                         type="number"
                         step="0.01"
+                        min="0"
                         value={precioCompra}
                         onChange={(e) => handlePrecioCompraChange(e.target.value)}
                         placeholder="Ej: 2.00"
                       />
-                      <p className="text-xs text-gray-400 mt-1">Lo que pagaste al proveedor (costo unitario o por presentación).</p>
+                      <p className="text-xs text-gray-400 mt-1">Costo unitario o por presentación.</p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Stock mínimo
+                        Stock mínimo (unidades)
                       </label>
                       <Input
                         type="number"
+                        min="0"
                         value={stockMinimo}
                         onChange={(e) => setStockMinimo(e.target.value)}
                         placeholder="Ej: 50"
                       />
-                      <p className="text-xs text-gray-400 mt-1">Alerta de reabastecimiento cuando el stock baje de este número.</p>
+                      <p className="text-xs text-gray-400 mt-1">Alerta cuando el stock sea menor a este valor.</p>
                     </div>
                   </div>
 
-                  {/* ─ Campos de Presentación y Precios directos ─ */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* ─ Fila 2: Precios de Venta por Presentación ─ */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
                     {/* Unidad */}
-                    <div className="p-3 bg-white rounded-lg border border-gray-100 shadow-sm md:col-span-2">
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">
-                        Venta Individual (Unidad)
-                      </label>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs text-gray-500 mb-1">Precio de venta por unidad (C$)</label>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={precioVenta}
-                            onChange={(e) => handlePrecioVentaChange(e.target.value)}
-                            placeholder="Ej: 5.00"
-                            className={precioVentaError ? "border-red-400 focus:ring-red-200 focus:border-red-400" : ""}
-                          />
-                          {precioVentaError ? (
-                            <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
-                              <AlertTriangle className="w-3 h-3" />
-                              {precioVentaError}
-                            </p>
-                          ) : (
-                            <p className="text-xs text-gray-400 mt-1">Opcional. Deja vacío si no vendes pastillas sueltas.</p>
-                          )}
-                        </div>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full bg-blue-400"></div>
+                        <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Unidad</span>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Precio de venta (C$)</label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={precioVenta}
+                          onChange={(e) => handlePrecioVentaChange(e.target.value)}
+                          placeholder="Ej: 5.00"
+                          className={precioVentaError ? "border-red-400 focus:ring-red-200 focus:border-red-400" : ""}
+                        />
+                        {precioVentaError ? (
+                          <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" />
+                            {precioVentaError}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-gray-400 mt-1">Dejar vacío si no vendes por unidad.</p>
+                        )}
                       </div>
                     </div>
 
                     {/* Blíster */}
-                    <div className="p-3 bg-white rounded-lg border border-gray-100 shadow-sm">
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">
-                        Venta por Blíster (Tira)
-                      </label>
-                      <div className="space-y-2 mt-2">
-                        <div>
-                          <label className="block text-xs text-gray-500 mb-1">Precio por blíster (C$)</label>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={precioBlister}
-                            onChange={(e) => setPrecioBlister(e.target.value)}
-                            placeholder="Ej: 45.00"
-                          />
-                          {precioCompra && unidadesPorBlister && calcSugerido(precioCompra, unidadesPorBlister) && (
-                            <p className="text-xs text-emerald-600 font-medium mt-1">
-                              Sugerido (20%): C${calcSugerido(precioCompra, unidadesPorBlister)}
-                            </p>
-                          )}
-                        </div>
-                        <div>
-                          <label className="block text-xs text-gray-500 mb-1">Unidades por blíster</label>
-                          <Input
-                            type="number"
-                            value={unidadesPorBlister}
-                            onChange={(e) => handleUnidadesPorBlisterChange(e.target.value)}
-                            placeholder="Ej: 10"
-                          />
-                        </div>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
+                        <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Blíster / Tira</span>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Precio por blíster (C$)</label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={precioBlister}
+                          onChange={(e) => setPrecioBlister(e.target.value)}
+                          placeholder="Ej: 45.00"
+                        />
+                        {precioCompra && unidadesPorBlister && calcSugerido(precioCompra, unidadesPorBlister) && (
+                          <p className="text-xs text-emerald-600 font-medium mt-1">
+                            💡 Sugerido: C${calcSugerido(precioCompra, unidadesPorBlister)}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Unidades por blíster</label>
+                        <Input
+                          type="number"
+                          min="1"
+                          value={unidadesPorBlister}
+                          onChange={(e) => handleUnidadesPorBlisterChange(e.target.value)}
+                          placeholder="Ej: 10"
+                        />
                       </div>
                     </div>
 
                     {/* Caja */}
-                    <div className="p-3 bg-white rounded-lg border border-gray-100 shadow-sm">
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">
-                        Venta por Caja Cerrada
-                      </label>
-                      <div className="space-y-2 mt-2">
-                        <div>
-                          <label className="block text-xs text-gray-500 mb-1">Precio por caja (C$)</label>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={precioCaja}
-                            onChange={(e) => setPrecioCaja(e.target.value)}
-                            placeholder="Ej: 400.00"
-                          />
-                          {precioCompra && unidadesPorCaja && calcSugerido(precioCompra, unidadesPorCaja) && (
-                            <p className="text-xs text-emerald-600 font-medium mt-1">
-                              Sugerido (20%): C${calcSugerido(precioCompra, unidadesPorCaja)}
-                            </p>
-                          )}
-                        </div>
-                        <div>
-                          <label className="block text-xs text-gray-500 mb-1">Unidades por caja</label>
-                          <Input
-                            type="number"
-                            value={unidadesPorCaja}
-                            onChange={(e) => handleUnidadesPorCajaChange(e.target.value)}
-                            placeholder="Ej: 100"
-                          />
-                        </div>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full bg-orange-400"></div>
+                        <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Caja Cerrada</span>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Precio por caja (C$)</label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={precioCaja}
+                          onChange={(e) => setPrecioCaja(e.target.value)}
+                          placeholder="Ej: 400.00"
+                        />
+                        {precioCompra && unidadesPorCaja && calcSugerido(precioCompra, unidadesPorCaja) && (
+                          <p className="text-xs text-emerald-600 font-medium mt-1">
+                            💡 Sugerido: C${calcSugerido(precioCompra, unidadesPorCaja)}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Unidades por caja</label>
+                        <Input
+                          type="number"
+                          min="1"
+                          value={unidadesPorCaja}
+                          onChange={(e) => handleUnidadesPorCajaChange(e.target.value)}
+                          placeholder="Ej: 100"
+                        />
                       </div>
                     </div>
 
                   </div>
+
+                  <p className="text-xs text-amber-600 font-medium mt-3 flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3" />
+                    Debes ingresar al menos un precio de venta (unidad, blíster o caja) mayor a 0.
+                  </p>
                 </div>
 
                 {formError && (
