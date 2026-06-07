@@ -53,10 +53,12 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     const { id } = await params
     const body = await request.json()
+    console.log(`PUT /api/productos/${id} received body:`, body)
 
     // Zod validation
     const parsed = productoSchema.safeParse(body)
     if (!parsed.success) {
+      console.log(`PUT /api/productos/${id} validation failed:`, parsed.error.format())
       return NextResponse.json(
         { error: "Datos inválidos", details: parsed.error.format() },
         { status: 400 }
@@ -96,7 +98,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json(producto)
   } catch (error) {
     console.error("Error updating producto:", error)
-    return NextResponse.json({ error: "Error updating producto" }, { status: 500 })
+    return NextResponse.json({ 
+      error: "Error updating producto", 
+      details: { _errors: [error instanceof Error ? error.message : String(error)] } 
+    }, { status: 500 })
   }
 }
 

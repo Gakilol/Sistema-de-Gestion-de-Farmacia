@@ -59,10 +59,12 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
+    console.log("POST /api/productos received body:", body)
     
     // Zod validation
     const parsed = productoSchema.safeParse(body)
     if (!parsed.success) {
+      console.log("POST /api/productos validation failed:", parsed.error.format())
       return NextResponse.json(
         { error: "Datos inválidos", details: parsed.error.format() },
         { status: 400 }
@@ -102,6 +104,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(producto, { status: 201 })
   } catch (error) {
     console.error("Error creating producto:", error)
-    return NextResponse.json({ error: "Error creating producto" }, { status: 500 })
+    return NextResponse.json({ 
+      error: "Error creating producto", 
+      details: { _errors: [error instanceof Error ? error.message : String(error)] } 
+    }, { status: 500 })
   }
 }
