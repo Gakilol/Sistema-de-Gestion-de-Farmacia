@@ -121,6 +121,22 @@ export const productoSchema = z.object({
 }, {
   message: "Debes definir al menos un precio de venta (unidad, blíster o caja) mayor a 0",
   path: ["precioVenta"]
+}).refine(data => {
+  if (data.precioBlister && data.precioBlister > 0 && (!data.unidadesPorBlister || data.unidadesPorBlister <= 0)) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Las unidades por blíster son obligatorias si defines un precio de blíster",
+  path: ["unidadesPorBlister"]
+}).refine(data => {
+  if (data.precioCaja && data.precioCaja > 0 && (!data.unidadesPorCaja || data.unidadesPorCaja <= 0)) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Las unidades por caja son obligatorias si defines un precio de caja",
+  path: ["unidadesPorCaja"]
 });
 
 export const ventaSchema = z.object({

@@ -71,10 +71,6 @@ export default function ProductosPage() {
   const [descripcion, setDescripcion] = useState("")
   const [codigoBarras, setCodigoBarras] = useState("")
   const [idCategoria, setIdCategoria] = useState<string>("")
-  // Presentaciones activas (multi-selección independiente)
-  const [ventaUnidadExtra, setVentaUnidadExtra] = useState(false)
-  const [ventaBlisterExtra, setVentaBlisterExtra] = useState(false)
-  const [ventaCajaExtra, setVentaCajaExtra] = useState(false)
   const [precioCompra, setPrecioCompra] = useState("")
   const [precioVenta, setPrecioVenta] = useState("")
   const [precioBlister, setPrecioBlister] = useState("")
@@ -94,9 +90,6 @@ export default function ProductosPage() {
         idCategoria,
         codigoBarras,
         descripcion,
-        ventaUnidadExtra,
-        ventaBlisterExtra,
-        ventaCajaExtra,
         precioCompra,
         precioVenta,
         precioBlister,
@@ -109,7 +102,6 @@ export default function ProductosPage() {
     }
   }, [
     showForm, editingId, nombre, idCategoria, codigoBarras, descripcion,
-    ventaUnidadExtra, ventaBlisterExtra, ventaCajaExtra,
     precioCompra, precioVenta, precioBlister, precioCaja, unidadesPorBlister, unidadesPorCaja, stockMinimo
   ])
 
@@ -229,9 +221,6 @@ export default function ProductosPage() {
     setDescripcion("")
     setCodigoBarras("")
     setIdCategoria("")
-    setVentaUnidadExtra(false)
-    setVentaBlisterExtra(false)
-    setVentaCajaExtra(false)
     setPrecioCompra("")
     setPrecioVenta("")
     setPrecioBlister("")
@@ -259,16 +248,9 @@ export default function ProductosPage() {
       setCodigoBarras(p.codigoBarras || "")
       setIdCategoria(String(p.idCategoria))
       setPrecioCompra(p.precioCompra ? String(p.precioCompra) : "")
-      // Activar presentaciones según los precios guardados
-      const hasUnidad = p.precioVenta && Number(p.precioVenta) > 0
-      const hasBlister = p.precioBlister && Number(p.precioBlister) > 0
-      const hasCaja = p.precioCaja && Number(p.precioCaja) > 0
-      setVentaUnidadExtra(!!hasUnidad)
-      setVentaBlisterExtra(!!hasBlister)
-      setVentaCajaExtra(!!hasCaja)
-      setPrecioVenta(p.precioVenta ? String(p.precioVenta) : "")
-      setPrecioBlister(p.precioBlister ? String(p.precioBlister) : "")
-      setPrecioCaja(p.precioCaja ? String(p.precioCaja) : "")
+      setPrecioVenta(p.precioVenta && Number(p.precioVenta) > 0 ? String(p.precioVenta) : "")
+      setPrecioBlister(p.precioBlister && Number(p.precioBlister) > 0 ? String(p.precioBlister) : "")
+      setPrecioCaja(p.precioCaja && Number(p.precioCaja) > 0 ? String(p.precioCaja) : "")
       setUnidadesPorBlister(p.unidadesPorBlister != null ? String(p.unidadesPorBlister) : "")
       setUnidadesPorCaja(p.unidadesPorCaja != null ? String(p.unidadesPorCaja) : "")
       setStockMinimo(p.stockMinimo != null ? String(p.stockMinimo) : "")
@@ -291,9 +273,6 @@ export default function ProductosPage() {
         setIdCategoria(draft.idCategoria || "")
         setCodigoBarras(draft.codigoBarras || "")
         setDescripcion(draft.descripcion || "")
-        setVentaUnidadExtra(!!draft.ventaUnidadExtra)
-        setVentaBlisterExtra(!!draft.ventaBlisterExtra)
-        setVentaCajaExtra(!!draft.ventaCajaExtra)
         setPrecioCompra(draft.precioCompra || "")
         setPrecioVenta(draft.precioVenta || "")
         setPrecioBlister(draft.precioBlister || "")
@@ -423,44 +402,32 @@ export default function ProductosPage() {
     setFormError(null)
     setFormLoading(true)
 
-    // Validar que al menos una presentación esté activada
-    if (!ventaUnidadExtra && !ventaBlisterExtra && !ventaCajaExtra) {
-      setFormError("Debes activar al menos una presentación (Unidad, Blíster o Caja) antes de guardar")
-      toast.error("Activa al menos una presentación")
+    const pvNum = precioVenta ? parseFloat(precioVenta) : 0
+    const pbNum = precioBlister ? parseFloat(precioBlister) : 0
+    const pcNum = precioCaja ? parseFloat(precioCaja) : 0
+
+    // Validar que al menos una presentación esté activada (tenga precio > 0)
+    if (pvNum <= 0 && pbNum <= 0 && pcNum <= 0) {
+      setFormError("Debes ingresar un precio mayor a 0 para al menos una presentación (Unidad, Blíster o Caja)")
+      toast.error("Ingresa al menos un precio de venta")
       setFormLoading(false)
       return
     }
+
     // Validar campos de presentaciones activas
-    if (ventaUnidadExtra && (!precioVenta || parseFloat(precioVenta) <= 0)) {
-      setFormError("El precio de venta por unidad debe ser mayor a 0")
-      toast.error("El precio de venta por unidad debe ser mayor a 0")
-      setFormLoading(false)
-      return
-    }
-    if (ventaBlisterExtra) {
-      if (!precioBlister || parseFloat(precioBlister) <= 0) {
-        setFormError("El precio por blíster debe ser mayor a 0")
-        toast.error("El precio por blíster debe ser mayor a 0")
-        setFormLoading(false)
-        return
-      }
+    if (pbNum > 0) {
       if (!unidadesPorBlister || parseInt(unidadesPorBlister) <= 0) {
-        setFormError("Las unidades por blíster deben ser mayores a 0")
-        toast.error("Las unidades por blíster deben ser mayores a 0")
+        setFormError("Las unidades por blíster deben ser mayores a 0 si se define un precio de blíster")
+        toast.error("Ingresa las unidades por blíster")
         setFormLoading(false)
         return
       }
     }
-    if (ventaCajaExtra) {
-      if (!precioCaja || parseFloat(precioCaja) <= 0) {
-        setFormError("El precio por caja debe ser mayor a 0")
-        toast.error("El precio por caja debe ser mayor a 0")
-        setFormLoading(false)
-        return
-      }
+
+    if (pcNum > 0) {
       if (!unidadesPorCaja || parseInt(unidadesPorCaja) <= 0) {
-        setFormError("Las unidades por caja deben ser mayores a 0")
-        toast.error("Las unidades por caja deben ser mayores a 0")
+        setFormError("Las unidades por caja deben ser mayores a 0 si se define un precio de caja")
+        toast.error("Ingresa las unidades por caja")
         setFormLoading(false)
         return
       }
@@ -475,14 +442,12 @@ export default function ProductosPage() {
         precioCompra: precioCompra || null,
         stockMinimo: stockMinimo || null,
         activo: true,
+        precioVenta: precioVenta || null,
+        precioBlister: precioBlister || null,
+        precioCaja: precioCaja || null,
+        unidadesPorBlister: unidadesPorBlister || null,
+        unidadesPorCaja: unidadesPorCaja || null,
       }
-
-      // Enviar los precios de las presentaciones activas; null las inactivas
-      body.precioVenta = ventaUnidadExtra && precioVenta ? precioVenta : null
-      body.precioBlister = ventaBlisterExtra && precioBlister ? precioBlister : null
-      body.precioCaja = ventaCajaExtra && precioCaja ? precioCaja : null
-      body.unidadesPorBlister = ventaBlisterExtra && unidadesPorBlister ? unidadesPorBlister : null
-      body.unidadesPorCaja = ventaCajaExtra && unidadesPorCaja ? unidadesPorCaja : null
 
       const url = editingId ? `/api/productos/${editingId}` : "/api/productos"
       const method = editingId ? "PUT" : "POST"
@@ -788,164 +753,103 @@ export default function ProductosPage() {
                     </div>
                   </div>
 
-                  {/* ─ Tarjetas de presentación ─ */}
-                  <p className="text-xs font-semibold text-purple-700 mb-3 uppercase tracking-wide">
-                    Activa las presentaciones disponibles <span className="text-red-500">*</span>
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-
-                    {/* ── UNIDAD ── */}
-                    <div className={`rounded-xl border-2 p-4 transition-all cursor-pointer ${ventaUnidadExtra ? "border-blue-400 bg-blue-50/50 shadow-sm" : "border-gray-200 bg-gray-50/30 hover:border-blue-200"}`}>
-                      <label className="flex items-center gap-2 cursor-pointer mb-3">
-                        <input
-                          type="checkbox"
-                          checked={ventaUnidadExtra}
-                          onChange={(e) => {
-                            setVentaUnidadExtra(e.target.checked)
-                            if (!e.target.checked) { setPrecioVenta(""); }
-                          }}
-                          className="w-4 h-4 accent-blue-500"
-                        />
-                        <div>
-                          <span className="text-sm font-semibold text-gray-800">Unidad</span>
-                          <p className="text-xs text-gray-400 leading-tight">Por pastilla o unidad suelta</p>
-                        </div>
+                  {/* ─ Campos de Presentación y Precios directos ─ */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Unidad */}
+                    <div className="p-3 bg-white rounded-lg border border-gray-100 shadow-sm md:col-span-2">
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">
+                        Venta Individual (Unidad)
                       </label>
-                      {ventaUnidadExtra && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">
-                            Precio de venta (C$) <span className="text-red-500">*</span>
-                          </label>
+                          <label className="block text-xs text-gray-500 mb-1">Precio de venta por unidad (C$)</label>
                           <Input
                             type="number"
                             step="0.01"
                             value={precioVenta}
                             onChange={(e) => handlePrecioVentaChange(e.target.value)}
                             placeholder="Ej: 5.00"
-                            className={`text-sm ${precioVentaError ? "border-red-400" : ""}`}
+                            className={precioVentaError ? "border-red-400 focus:ring-red-200 focus:border-red-400" : ""}
                           />
-                          {precioVentaError && (
+                          {precioVentaError ? (
                             <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
-                              <AlertTriangle className="w-3 h-3" />{precioVentaError}
+                              <AlertTriangle className="w-3 h-3" />
+                              {precioVentaError}
+                            </p>
+                          ) : (
+                            <p className="text-xs text-gray-400 mt-1">Opcional. Deja vacío si no vendes pastillas sueltas.</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Blíster */}
+                    <div className="p-3 bg-white rounded-lg border border-gray-100 shadow-sm">
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">
+                        Venta por Blíster (Tira)
+                      </label>
+                      <div className="space-y-2 mt-2">
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Precio por blíster (C$)</label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={precioBlister}
+                            onChange={(e) => setPrecioBlister(e.target.value)}
+                            placeholder="Ej: 45.00"
+                          />
+                          {precioCompra && unidadesPorBlister && calcSugerido(precioCompra, unidadesPorBlister) && (
+                            <p className="text-xs text-emerald-600 font-medium mt-1">
+                              Sugerido (20%): C${calcSugerido(precioCompra, unidadesPorBlister)}
                             </p>
                           )}
                         </div>
-                      )}
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Unidades por blíster</label>
+                          <Input
+                            type="number"
+                            value={unidadesPorBlister}
+                            onChange={(e) => handleUnidadesPorBlisterChange(e.target.value)}
+                            placeholder="Ej: 10"
+                          />
+                        </div>
+                      </div>
                     </div>
 
-                    {/* ── BLÍSTER ── */}
-                    <div className={`rounded-xl border-2 p-4 transition-all cursor-pointer ${ventaBlisterExtra ? "border-violet-400 bg-violet-50/50 shadow-sm" : "border-gray-200 bg-gray-50/30 hover:border-violet-200"}`}>
-                      <label className="flex items-center gap-2 cursor-pointer mb-3">
-                        <input
-                          type="checkbox"
-                          checked={ventaBlisterExtra}
-                          onChange={(e) => {
-                            setVentaBlisterExtra(e.target.checked)
-                            if (!e.target.checked) { setPrecioBlister(""); setUnidadesPorBlister(""); }
-                          }}
-                          className="w-4 h-4 accent-violet-500"
-                        />
-                        <div>
-                          <span className="text-sm font-semibold text-gray-800">Blíster</span>
-                          <p className="text-xs text-gray-400 leading-tight">Por tira de pastillas</p>
-                        </div>
+                    {/* Caja */}
+                    <div className="p-3 bg-white rounded-lg border border-gray-100 shadow-sm">
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">
+                        Venta por Caja Cerrada
                       </label>
-                      {ventaBlisterExtra && (
-                        <div className="space-y-2">
-                          <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">
-                              Precio por blíster (C$) <span className="text-red-500">*</span>
-                            </label>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              value={precioBlister}
-                              onChange={(e) => setPrecioBlister(e.target.value)}
-                              placeholder="Ej: 45.00"
-                              className="text-sm"
-                            />
-                            {precioCompra && unidadesPorBlister && calcSugerido(precioCompra, unidadesPorBlister) && (
-                              <p className="text-xs text-emerald-600 font-medium mt-1">
-                                Sugerido (20%): C${calcSugerido(precioCompra, unidadesPorBlister)}
-                              </p>
-                            )}
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">
-                              Unidades por blíster <span className="text-red-500">*</span>
-                            </label>
-                            <Input
-                              type="number"
-                              value={unidadesPorBlister}
-                              onChange={(e) => handleUnidadesPorBlisterChange(e.target.value)}
-                              placeholder="Ej: 10"
-                              className="text-sm"
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* ── CAJA ── */}
-                    <div className={`rounded-xl border-2 p-4 transition-all cursor-pointer ${ventaCajaExtra ? "border-amber-400 bg-amber-50/50 shadow-sm" : "border-gray-200 bg-gray-50/30 hover:border-amber-200"}`}>
-                      <label className="flex items-center gap-2 cursor-pointer mb-3">
-                        <input
-                          type="checkbox"
-                          checked={ventaCajaExtra}
-                          onChange={(e) => {
-                            setVentaCajaExtra(e.target.checked)
-                            if (!e.target.checked) { setPrecioCaja(""); setUnidadesPorCaja(""); }
-                          }}
-                          className="w-4 h-4 accent-amber-500"
-                        />
+                      <div className="space-y-2 mt-2">
                         <div>
-                          <span className="text-sm font-semibold text-gray-800">Caja</span>
-                          <p className="text-xs text-gray-400 leading-tight">Por caja completa cerrada</p>
+                          <label className="block text-xs text-gray-500 mb-1">Precio por caja (C$)</label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={precioCaja}
+                            onChange={(e) => setPrecioCaja(e.target.value)}
+                            placeholder="Ej: 400.00"
+                          />
+                          {precioCompra && unidadesPorCaja && calcSugerido(precioCompra, unidadesPorCaja) && (
+                            <p className="text-xs text-emerald-600 font-medium mt-1">
+                              Sugerido (20%): C${calcSugerido(precioCompra, unidadesPorCaja)}
+                            </p>
+                          )}
                         </div>
-                      </label>
-                      {ventaCajaExtra && (
-                        <div className="space-y-2">
-                          <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">
-                              Precio por caja (C$) <span className="text-red-500">*</span>
-                            </label>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              value={precioCaja}
-                              onChange={(e) => setPrecioCaja(e.target.value)}
-                              placeholder="Ej: 400.00"
-                              className="text-sm"
-                            />
-                            {precioCompra && unidadesPorCaja && calcSugerido(precioCompra, unidadesPorCaja) && (
-                              <p className="text-xs text-emerald-600 font-medium mt-1">
-                                Sugerido (20%): C${calcSugerido(precioCompra, unidadesPorCaja)}
-                              </p>
-                            )}
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">
-                              Unidades por caja <span className="text-red-500">*</span>
-                            </label>
-                            <Input
-                              type="number"
-                              value={unidadesPorCaja}
-                              onChange={(e) => handleUnidadesPorCajaChange(e.target.value)}
-                              placeholder="Ej: 100"
-                              className="text-sm"
-                            />
-                          </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Unidades por caja</label>
+                          <Input
+                            type="number"
+                            value={unidadesPorCaja}
+                            onChange={(e) => handleUnidadesPorCajaChange(e.target.value)}
+                            placeholder="Ej: 100"
+                          />
                         </div>
-                      )}
+                      </div>
                     </div>
 
                   </div>
-                  {!ventaUnidadExtra && !ventaBlisterExtra && !ventaCajaExtra && (
-                    <p className="text-xs text-amber-600 mt-3 flex items-center gap-1">
-                      <AlertTriangle className="w-3 h-3 shrink-0" />
-                      Debes activar al menos una presentación para poder guardar el producto.
-                    </p>
-                  )}
                 </div>
 
                 {formError && (
