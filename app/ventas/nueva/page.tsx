@@ -413,7 +413,16 @@ export default function NuevaVentaPage() {
                         ) : (
                           filteredProductos.map((p) => {
                             let stockDisplay = `${p.stockActual} uds`
-                            if (p.unidadesPorCaja) stockDisplay += ` / ${Math.floor(p.stockActual / p.unidadesPorCaja)} cajas`
+                            const parts = []
+                            if (p.unidadesPorCaja && p.unidadesPorCaja > 0) {
+                              parts.push(`${Math.floor(p.stockActual / p.unidadesPorCaja)} cajas`)
+                            }
+                            if (p.unidadesPorBlister && p.unidadesPorBlister > 0) {
+                              parts.push(`${Math.floor(p.stockActual / p.unidadesPorBlister)} blísters`)
+                            }
+                            if (parts.length > 0) {
+                              stockDisplay += ` (${parts.join(" / ")})`
+                            }
                             const isLowStock = p.stockActual <= 10
                             return (
                               <button

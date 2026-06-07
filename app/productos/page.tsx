@@ -543,29 +543,19 @@ export default function ProductosPage() {
   }
 
   const formatStock = (p: Producto) => {
-    if (!p) return { total: 0, cajas: 0, blisters: 0, sueltas: 0 }
+    if (!p) return { total: 0, cajas: null, blisters: null, sueltas: 0 }
     const uds = p.stockActual || 0
     const upb = p.unidadesPorBlister ? Number(p.unidadesPorBlister) : null
     const upc = p.unidadesPorCaja ? Number(p.unidadesPorCaja) : null
 
-    let restantes = uds
-    let cajas = 0
-    let blisters = 0
-
-    if (upc && upc > 0) {
-      cajas = Math.floor(restantes / upc)
-      restantes = restantes % upc
-    }
-    if (upb && upb > 0) {
-      blisters = Math.floor(restantes / upb)
-      restantes = restantes % upb
-    }
+    const cajas = upc && upc > 0 ? Math.floor(uds / upc) : null
+    const blisters = upb && upb > 0 ? Math.floor(uds / upb) : null
 
     return { 
       total: uds, 
-      cajas: upc ? cajas : 0, 
-      blisters: upb ? blisters : 0, 
-      sueltas: restantes 
+      cajas, 
+      blisters, 
+      sueltas: uds 
     }
   }
 
@@ -580,20 +570,22 @@ export default function ProductosPage() {
       let stockStr = `${s.total} uds`
       if (s.cajas !== null || s.blisters !== null) {
         const parts = []
-        if (s.cajas !== null && s.cajas > 0) parts.push(`${s.cajas} Caj`)
-        if (s.blisters !== null && s.blisters > 0) parts.push(`${s.blisters} Blis`)
-        parts.push(`${s.sueltas} Uds`)
-        stockStr = `${s.total} (${parts.join(" + ")})`
+        if (s.cajas !== null) parts.push(`${s.cajas} Caj`)
+        if (s.blisters !== null) parts.push(`${s.blisters} Blis`)
+        parts.push(`${s.total} Uds`)
+        stockStr = `${s.total} uds (${parts.join(" / ")})`
       }
-      const precio = Number(p.precioVenta) > 0 ? Number(p.precioVenta)
-        : Number(p.precioBlister) > 0 ? Number(p.precioBlister)
-        : Number(p.precioCaja) > 0 ? Number(p.precioCaja) : 0
+      const prices = []
+      if (Number(p.precioVenta) > 0) prices.push(`C$${Number(p.precioVenta).toFixed(2)}/ud`)
+      if (Number(p.precioBlister) > 0) prices.push(`C$${Number(p.precioBlister).toFixed(2)}/blis`)
+      if (Number(p.precioCaja) > 0) prices.push(`C$${Number(p.precioCaja).toFixed(2)}/caja`)
+      const precioStr = prices.length > 0 ? prices.join(" | ") : "-"
       return {
         ID: p.id,
         Nombre: p.nombre,
         Categoría: p.categoria?.nombre || "Sin Categoría",
         Precio_Compra: p.precioCompra ? `C$${Number(p.precioCompra).toFixed(2)}` : "-",
-        Precio_Venta: `C$${precio.toFixed(2)}`,
+        Precio_Venta: precioStr,
         Stock_Actual: stockStr,
         Estado: p.activo ? "Activo" : "Inactivo"
       }
@@ -1025,15 +1017,26 @@ export default function ProductosPage() {
                           {producto.categoria.nombre}
                         </td>
                         <td className="px-6 py-4 text-sm font-medium text-foreground">
-                          {(() => {
-                            const pv = Number(producto.precioVenta)
-                            const pb = Number(producto.precioBlister)
-                            const pc = Number(producto.precioCaja)
-                            if (pv > 0) return `C$${pv.toFixed(2)}`
-                            if (pb > 0) return `C$${pb.toFixed(2)} /blis`
-                            if (pc > 0) return `C$${pc.toFixed(2)} /caja`
-                            return "—"
-                          })()}
+                          <div className="flex flex-col gap-0.5">
+                            {Number(producto.precioVenta) > 0 && (
+                              <span className="text-xs text-foreground">
+                                C${Number(producto.precioVenta).toFixed(2)} <span className="text-[10px] text-muted-foreground font-normal">/ud</span>
+                              </span>
+                            )}
+                            {Number(producto.precioBlister) > 0 && (
+                              <span className="text-xs text-emerald-600">
+                                C${Number(producto.precioBlister).toFixed(2)} <span className="text-[10px] text-emerald-500/80 font-normal">/blis</span>
+                              </span>
+                            )}
+                            {Number(producto.precioCaja) > 0 && (
+                              <span className="text-xs text-purple-600">
+                                C${Number(producto.precioCaja).toFixed(2)} <span className="text-[10px] text-purple-500/80 font-normal">/caja</span>
+                              </span>
+                            )}
+                            {!(Number(producto.precioVenta) > 0 || Number(producto.precioBlister) > 0 || Number(producto.precioCaja) > 0) && (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-4 text-sm text-foreground">
                           {(() => {
@@ -1043,17 +1046,23 @@ export default function ProductosPage() {
                                 <span className="font-semibold text-foreground text-sm">
                                   {s.total} <span className="text-xs text-muted-foreground font-normal">uds totales</span>
                                 </span>
-                                <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-100 text-orange-700 border border-orange-200 shadow-sm">
-                                    {s.cajas} Caj
-                                  </span>
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-sm">
-                                    {s.blisters} Blis
-                                  </span>
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-700 border border-blue-200 shadow-sm">
-                                    {s.sueltas} Uds
-                                  </span>
-                                </div>
+                                {(s.cajas !== null || s.blisters !== null) && (
+                                  <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                                    {s.cajas !== null && (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-100 text-orange-700 border border-orange-200 shadow-sm">
+                                        {s.cajas} Caj
+                                      </span>
+                                    )}
+                                    {s.blisters !== null && (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-sm">
+                                        {s.blisters} Blis
+                                      </span>
+                                    )}
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-700 border border-blue-200 shadow-sm">
+                                      {s.sueltas} Uds
+                                    </span>
+                                  </div>
+                                )}
                               </div>
                             )
                           })()}
@@ -1351,17 +1360,23 @@ export default function ProductosPage() {
                               return (
                                 <div className="space-y-1.5">
                                   <p className="text-base font-bold text-foreground">{s.total} <span className="text-xs text-muted-foreground font-normal">uds totales</span></p>
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-700 border border-orange-200">
-                                      {s.cajas} Caj
-                                    </span>
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200">
-                                      {s.blisters} Blis
-                                    </span>
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-200">
-                                      {s.sueltas} Uds
-                                    </span>
-                                  </div>
+                                  {(s.cajas !== null || s.blisters !== null) && (
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      {s.cajas !== null && (
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-700 border border-orange-200">
+                                          {s.cajas} Caj
+                                        </span>
+                                      )}
+                                      {s.blisters !== null && (
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200">
+                                          {s.blisters} Blis
+                                        </span>
+                                      )}
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-200">
+                                        {s.sueltas} Uds
+                                      </span>
+                                    </div>
+                                  )}
                                 </div>
                               )
                             })()}
