@@ -535,13 +535,10 @@ export default function ProductosPage() {
   }
 
   const formatStock = (p: Producto) => {
-    const uds = p.stockActual
+    if (!p) return { total: 0, cajas: 0, blisters: 0, sueltas: 0 }
+    const uds = p.stockActual || 0
     const upb = p.unidadesPorBlister ? Number(p.unidadesPorBlister) : null
     const upc = p.unidadesPorCaja ? Number(p.unidadesPorCaja) : null
-
-    if (!upc && !upb) {
-      return { total: uds, cajas: null, blisters: null, sueltas: uds }
-    }
 
     let restantes = uds
     let cajas = 0
@@ -556,7 +553,12 @@ export default function ProductosPage() {
       restantes = restantes % upb
     }
 
-    return { total: uds, cajas: upc ? cajas : null, blisters: upb ? blisters : null, sueltas: restantes }
+    return { 
+      total: uds, 
+      cajas: upc ? cajas : 0, 
+      blisters: upb ? blisters : 0, 
+      sueltas: restantes 
+    }
   }
 
   const handleExportExcel = () => {
@@ -1012,25 +1014,21 @@ export default function ProductosPage() {
                           {(() => {
                             const s = formatStock(producto)
                             return (
-                              <div className="flex flex-col gap-0.5">
-                                <span className="font-medium text-foreground">{s.total} <span className="text-xs text-muted-foreground font-normal">uds totales</span></span>
-                                {(s.cajas !== null || s.blisters !== null) && (
-                                  <div className="flex items-center gap-1 flex-wrap">
-                                    {s.cajas !== null && (
-                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-100 text-orange-700">
-                                        {s.cajas} Caj
-                                      </span>
-                                    )}
-                                    {s.blisters !== null && (
-                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-100 text-emerald-700">
-                                        {s.blisters} Blis
-                                      </span>
-                                    )}
-                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700">
-                                      {s.sueltas} Uds
-                                    </span>
-                                  </div>
-                                )}
+                              <div className="flex flex-col gap-1">
+                                <span className="font-semibold text-foreground text-sm">
+                                  {s.total} <span className="text-xs text-muted-foreground font-normal">uds totales</span>
+                                </span>
+                                <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-100 text-orange-700 border border-orange-200 shadow-sm">
+                                    {s.cajas} Caj
+                                  </span>
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-sm">
+                                    {s.blisters} Blis
+                                  </span>
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-700 border border-blue-200 shadow-sm">
+                                    {s.sueltas} Uds
+                                  </span>
+                                </div>
                               </div>
                             )
                           })()}
@@ -1322,7 +1320,27 @@ export default function ProductosPage() {
                       <div className="space-y-2">
                         <div>
                           <p className="text-xs text-muted-foreground">Stock Físico Real</p>
-                          <p className="text-lg font-bold text-foreground">{formatStock(selectedProduct)}</p>
+                          <div className="mt-1">
+                            {(() => {
+                              const s = formatStock(selectedProduct)
+                              return (
+                                <div className="space-y-1.5">
+                                  <p className="text-base font-bold text-foreground">{s.total} <span className="text-xs text-muted-foreground font-normal">uds totales</span></p>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-700 border border-orange-200">
+                                      {s.cajas} Caj
+                                    </span>
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200">
+                                      {s.blisters} Blis
+                                    </span>
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-200">
+                                      {s.sueltas} Uds
+                                    </span>
+                                  </div>
+                                </div>
+                              )
+                            })()}
+                          </div>
                         </div>
                         <div className="grid grid-cols-2 gap-2 pt-1 border-t border-amber-100">
                           <div>
