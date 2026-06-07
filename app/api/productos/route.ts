@@ -73,23 +73,54 @@ export async function POST(request: NextRequest) {
 
     const data = parsed.data
 
-    const producto = await prisma.producto.create({
-      data: {
-        nombre: data.nombre,
-        codigoBarras: emptyToNull(data.codigoBarras),
-        descripcion: emptyToNull(data.descripcion),
-        idCategoria: data.idCategoria,
-        precioCompra: data.precioCompra || 0,
-        precioVenta: data.precioVenta,
-        precioBlister: data.precioBlister,
-        precioCaja: data.precioCaja,
-        unidadesPorBlister: data.unidadesPorBlister,
-        unidadesPorCaja: data.unidadesPorCaja,
-        stockActual: 0,  // Stock starts at 0 — only increased via purchases
-        stockMinimo: data.stockMinimo,
-        activo: data.activo,
-      },
-      include: { categoria: true },
+    const producto = await prisma.$transaction(async (tx) => {
+      const prod = await tx.producto.create({
+        data: {
+          nombre: data.nombre,
+          codigoBarras: emptyToNull(data.codigoBarras),
+          descripcion: emptyToNull(data.descripcion),
+          idCategoria: data.idCategoria,
+          precioCompra: data.precioCompra || 0,
+          precioVenta: data.precioVenta,
+          precioBlister: data.precioBlister,
+          precioCaja: data.precioCaja,
+          unidadesPorBlister: data.unidadesPorBlister,
+          unidadesPorCaja: data.unidadesPorCaja,
+          stockActual: (data as any).stockInicial || 0,
+          stockMinimo: data.stockMinimo,
+          activo: data.activo,
+        },
+        include: { categoria: true },
+      })
+
+      const stockInicialVal = (data as any).stockInicial || 0
+      if (stockInicialVal > 0) {
+        const loteInicial = await tx.lote.create({
+          data: {
+            idProducto: prod.id,
+            codigoLote: `INICIAL-${Date.now()}`,
+            stockInicial: stockInicialVal,
+            stockActual: stockInicialVal,
+            costoCompra: prod.precioCompra,
+            activo: true,
+          },
+        })
+
+        await tx.movimientoInventario.create({
+          data: {
+            idProducto: prod.id,
+            idLote: loteInicial.id,
+            tipo: "AJUSTE_POSITIVO",
+            cantidad: stockInicialVal,
+            stockResultante: stockInicialVal,
+            costoUnitario: prod.precioCompra,
+            referencia: "Stock inicial al registrar producto",
+            idUsuario: user.id,
+          },
+        })
+      }
+
+      return prod
     })
 
     // Registrar auditoría
@@ -98,7 +129,7 @@ export async function POST(request: NextRequest) {
       entidad: "Producto",
       entidadId: producto.id,
       idUsuario: user.id,
-      detalles: { nombre: producto.nombre, precioVenta: producto.precioVenta },
+      detalles: { nombre: producto.nombre, precioVenta: producto.precioVenta, stockActual: producto.stockActual },
     })
 
     return NextResponse.json(producto, { status: 201 })

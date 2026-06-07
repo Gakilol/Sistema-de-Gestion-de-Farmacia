@@ -78,6 +78,7 @@ export default function ProductosPage() {
   const [unidadesPorBlister, setUnidadesPorBlister] = useState("")
   const [unidadesPorCaja, setUnidadesPorCaja] = useState("")
   const [stockMinimo, setStockMinimo] = useState("")
+  const [stockInicial, setStockInicial] = useState("")
   const [formLoading, setFormLoading] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [precioVentaError, setPrecioVentaError] = useState<string | null>(null)
@@ -97,12 +98,13 @@ export default function ProductosPage() {
         unidadesPorBlister,
         unidadesPorCaja,
         stockMinimo,
+        stockInicial,
       }
       localStorage.setItem("farmacia_producto_borrador", JSON.stringify(draft))
     }
   }, [
     showForm, editingId, nombre, idCategoria, codigoBarras, descripcion,
-    precioCompra, precioVenta, precioBlister, precioCaja, unidadesPorBlister, unidadesPorCaja, stockMinimo
+    precioCompra, precioVenta, precioBlister, precioCaja, unidadesPorBlister, unidadesPorCaja, stockMinimo, stockInicial
   ])
 
   const handleClearDraft = () => {
@@ -228,6 +230,7 @@ export default function ProductosPage() {
     setUnidadesPorBlister("")
     setUnidadesPorCaja("")
     setStockMinimo("")
+    setStockInicial("")
     setFormError(null)
     setPrecioVentaError(null)
   }
@@ -280,6 +283,7 @@ export default function ProductosPage() {
         setUnidadesPorBlister(draft.unidadesPorBlister || "")
         setUnidadesPorCaja(draft.unidadesPorCaja || "")
         setStockMinimo(draft.stockMinimo || "")
+        setStockInicial(draft.stockInicial || "")
         toast.success("Se restauró tu borrador anterior")
       } catch (e) {
         console.error("Error cargando borrador:", e)
@@ -447,6 +451,10 @@ export default function ProductosPage() {
         precioCaja: precioCaja || null,
         unidadesPorBlister: unidadesPorBlister || null,
         unidadesPorCaja: unidadesPorCaja || null,
+      }
+
+      if (!editingId) {
+        body.stockInicial = stockInicial ? parseInt(stockInicial) : 0
       }
 
       const url = editingId ? `/api/productos/${editingId}` : "/api/productos"
@@ -870,18 +878,35 @@ export default function ProductosPage() {
                     <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                     <span>El stock actual se gestiona automáticamente mediante compras. Aquí solo defines el umbral mínimo para recibir alertas de reabastecimiento.</span>
                   </div>
-                  <div className="max-w-xs">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Stock mínimo <span className="text-gray-400 font-normal text-xs">— alerta automática</span>
-                    </label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={stockMinimo}
-                      onChange={(e) => setStockMinimo(e.target.value)}
-                      placeholder="Ej: 50"
-                    />
-                    <p className="text-xs text-gray-400 mt-1">Si el stock baja de este número, recibirás una alerta para reabastecer.</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-xl">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Stock mínimo <span className="text-gray-400 font-normal text-xs">— alerta automática</span>
+                      </label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={stockMinimo}
+                        onChange={(e) => setStockMinimo(e.target.value)}
+                        placeholder="Ej: 50"
+                      />
+                      <p className="text-xs text-gray-400 mt-1">Si el stock baja de este número, recibirás una alerta para reabastecer.</p>
+                    </div>
+                    {!editingId && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Stock inicial <span className="text-gray-400 font-normal text-xs">— cantidad física</span>
+                        </label>
+                        <Input
+                          type="number"
+                          min="0"
+                          value={stockInicial}
+                          onChange={(e) => setStockInicial(e.target.value)}
+                          placeholder="Ej: 100"
+                        />
+                        <p className="text-xs text-gray-400 mt-1">Cantidad inicial de unidades físicas en inventario.</p>
+                      </div>
+                    )}
                   </div>
                 </div>
 

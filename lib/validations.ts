@@ -112,6 +112,7 @@ export const productoSchema = z.object({
   unidadesPorBlister: z.preprocess((a) => (a ? parseInt(String(a), 10) : null), z.number().int().min(1).nullable().optional()),
   unidadesPorCaja: z.preprocess((a) => (a ? parseInt(String(a), 10) : null), z.number().int().min(1).nullable().optional()),
   stockMinimo: z.preprocess((a) => (a ? parseInt(String(a), 10) : null), z.number().int().min(0).nullable().optional()),
+  stockInicial: z.preprocess((a) => (a !== null && a !== undefined && a !== "" ? parseInt(String(a), 10) : 0), z.number().int().min(0).optional().default(0)),
   activo: z.boolean().default(true),
 }).refine(data => {
   const pv = data.precioVenta || 0;
