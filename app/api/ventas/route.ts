@@ -66,7 +66,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { idCliente, detalles: validationDetalles, metodoPago, nombrePodologo, numeroReceta } = validation.data
+    const {
+      idCliente,
+      detalles: validationDetalles,
+      metodoPago,
+      nombrePodologo,
+      numeroReceta,
+      tipoComprobante,
+      estado,
+      montoRecibido,
+      cambio,
+      rucCliente
+    } = validation.data
     const detalles = validationDetalles as any[]
 
     // ── Pre-validación: cargar todos los productos de una sola consulta ──
@@ -183,6 +194,11 @@ export async function POST(request: NextRequest) {
           metodoPago,
           nombrePodologo: nombrePodologo || null,
           numeroReceta: numeroReceta || null,
+          tipoComprobante: tipoComprobante || "RECIBO",
+          estado: estado || "COMPLETADA",
+          montoRecibido: montoRecibido !== undefined && montoRecibido !== null ? Number(montoRecibido) : null,
+          cambio: cambio !== undefined && cambio !== null ? Number(cambio) : null,
+          rucCliente: rucCliente || null,
           detalles: {
             create: detalles.map((d: any) => ({
               idProducto: d.idProducto,
@@ -279,6 +295,11 @@ export async function POST(request: NextRequest) {
         total,
         metodoPago,
         idCliente: idCliente || null,
+        tipoComprobante: tipoComprobante || "RECIBO",
+        estado: estado || "COMPLETADA",
+        montoRecibido: montoRecibido || null,
+        cambio: cambio || null,
+        rucCliente: rucCliente || null,
         items: detalles.length,
         productos: detalles.map((d: any) => ({
           idProducto: d.idProducto,

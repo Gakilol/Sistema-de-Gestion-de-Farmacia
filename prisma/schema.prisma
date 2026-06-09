@@ -37,6 +37,7 @@ model Cliente {
   telefono        String?  @unique
   correo          String?  @unique
   cedula          String?  @unique
+  ruc             String?  @unique
   direccion       String?
   activo          Boolean  @default(true)
   createdAt       DateTime @default(now())
@@ -199,6 +200,11 @@ model Venta {
   numeroReceta    String?
   idUsuario       Int
   usuario         Usuario @relation(fields: [idUsuario], references: [id])
+  tipoComprobante String  @default("RECIBO")
+  estado          String  @default("COMPLETADA")
+  montoRecibido   Decimal? @db.Decimal(10, 2)
+  cambio          Decimal? @db.Decimal(10, 2)
+  rucCliente      String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

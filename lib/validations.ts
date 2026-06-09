@@ -1,6 +1,7 @@
 import { z } from "zod"
 
 export const nicaraguaCedulaRegex = /^\d{3}-\d{6}-\d{4}[A-Za-z]$/;
+export const nicaraguaRucRegex = /^\d{3}-\d{6}-\d{4}[A-Za-z0-9]$/;
 export const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&._\-#])[A-Za-z\d@$!%*?&._\-#]{8,}$/;
 
 export const emptyToNull = (val: string | undefined | null) => val === "" ? null : val;
@@ -22,6 +23,20 @@ export const clienteSchema = z.object({
       return trimmed;
     },
     z.string().trim().regex(nicaraguaCedulaRegex, "Formato de cédula de Nicaragua inválido (ej: 001-130605-1005A)").nullable().optional()
+  ),
+  ruc: z.preprocess(
+    (val) => {
+      if (val === null || val === undefined) return null;
+      if (typeof val !== "string") return val;
+      const trimmed = val.trim();
+      if (trimmed === "") return null;
+      const clean = trimmed.replace(/[\s-]/g, "").toUpperCase();
+      if (clean.length === 14 && /^\d{13}[A-Z0-9]$/.test(clean)) {
+        return `${clean.substring(0, 3)}-${clean.substring(3, 9)}-${clean.substring(9, 13)}${clean.charAt(13)}`;
+      }
+      return trimmed;
+    },
+    z.string().trim().regex(nicaraguaRucRegex, "Formato de RUC de Nicaragua inválido (ej: 001-130605-1005A)").nullable().optional()
   ),
   telefono: z.preprocess(
     (val) => {
@@ -145,6 +160,11 @@ export const ventaSchema = z.object({
   metodoPago: z.enum(["EFECTIVO", "TARJETA", "TRANSFERENCIA"]),
   nombrePodologo: z.string().optional().nullable(),
   numeroReceta: z.string().optional().nullable(),
+  tipoComprobante: z.enum(["RECIBO", "FACTURA"]).default("RECIBO"),
+  estado: z.enum(["COMPLETADA", "ANULADA", "PENDIENTE"]).default("COMPLETADA"),
+  montoRecibido: z.number().min(0, "El monto recibido no puede ser negativo").optional().nullable(),
+  cambio: z.number().min(0, "El cambio no puede ser negativo").optional().nullable(),
+  rucCliente: z.string().trim().optional().nullable(),
   detalles: z.array(z.object({
     idProducto: z.number().int().positive(),
     cantidad: z.number().int().positive("La cantidad debe ser mayor a 0"),

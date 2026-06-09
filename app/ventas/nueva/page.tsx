@@ -15,6 +15,14 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
+interface Lote {
+  id: number
+  codigoLote: string
+  fechaVencimiento?: string | null
+  stockActual: number
+  costoCompra: string
+}
+
 interface Producto {
   id: number
   nombre: string
@@ -24,12 +32,14 @@ interface Producto {
   stockActual: number
   unidadesPorBlister?: number | null
   unidadesPorCaja?: number | null
+  lotes?: Lote[]
 }
 
 interface Cliente {
   id: number
   nombreCompleto: string
   cedula?: string | null
+  ruc?: string | null
   telefono?: string | null
   correo?: string | null
   direccion?: string | null
@@ -60,6 +70,7 @@ function QuickClientModal({
 }) {
   const [nombre, setNombre] = useState("")
   const [cedula, setCedula] = useState(cedulaPre)
+  const [ruc, setRuc] = useState("")
   const [telefono, setTelefono] = useState("")
   const [loading, setLoading] = useState(false)
 
@@ -73,7 +84,12 @@ function QuickClientModal({
       const res = await fetch("/api/clientes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nombreCompleto: nombre.trim(), cedula: cedula || null, telefono: telefono || null }),
+        body: JSON.stringify({
+          nombreCompleto: nombre.trim(),
+          cedula: cedula || null,
+          ruc: ruc || null,
+          telefono: telefono || null
+        }),
       })
       if (!res.ok) {
         const data = await res.json()
@@ -82,7 +98,12 @@ function QuickClientModal({
       }
       const nuevo = await res.json()
       toast.success("Cliente creado exitosamente")
-      onCreated({ id: nuevo.id, nombreCompleto: nuevo.nombreCompleto, cedula: nuevo.cedula })
+      onCreated({
+        id: nuevo.id,
+        nombreCompleto: nuevo.nombreCompleto,
+        cedula: nuevo.cedula,
+        ruc: nuevo.ruc
+      })
       onClose()
     } catch {
       toast.error("Error al crear cliente")
@@ -116,6 +137,10 @@ function QuickClientModal({
             <Input value={cedula} onChange={(e) => setCedula(e.target.value)} placeholder="001-280599-1004A" className="bg-muted/30 border-border text-sm font-mono" />
           </div>
           <div>
+            <label className="block text-xs font-medium text-foreground mb-1.5">RUC (Opcional)</label>
+            <Input value={ruc} onChange={(e) => setRuc(e.target.value)} placeholder="001-280599-1004A" className="bg-muted/30 border-border text-sm font-mono" />
+          </div>
+          <div>
             <label className="block text-xs font-medium text-foreground mb-1.5">Teléfono</label>
             <Input value={telefono} onChange={(e) => setTelefono(e.target.value)} placeholder="8888-8888" className="bg-muted/30 border-border text-sm" />
           </div>
@@ -142,6 +167,9 @@ export default function NuevaVentaPage() {
   const [metodoPago, setMetodoPago] = useState("EFECTIVO")
   const [nombrePodologo, setNombrePodologo] = useState("")
   const [numeroReceta, setNumeroReceta] = useState("")
+  const [tipoComprobante, setTipoComprobante] = useState("RECIBO")
+  const [rucCliente, setRucCliente] = useState("")
+  const [montoRecibido, setMontoRecibido] = useState("")
 
   // Scanner states
   const [scannerOpen, setScannerOpen] = useState(false)
@@ -198,6 +226,34 @@ export default function NuevaVentaPage() {
     setBuscandoScanner(true)
 
     try {
+      // Intentar detectar si es una cédula nicaragüense primero
+      if (esPosibleCedula(code)) {
+        toast.info("Cédula detectada. Buscando cliente...")
+        const res = await fetch(`/api/clientes/by-cedula?cedula=${encodeURIComponent(code)}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.encontrado && data.cliente) {
+            const cli = data.cliente as Cliente
+            setSelectedCliente(String(cli.id))
+            setClienteSearch("")
+            if (cli.ruc) {
+              setRucCliente(cli.ruc)
+            } else {
+              setRucCliente("")
+            }
+            toast.success(`✓ Cliente asignado: ${cli.nombreCompleto}`)
+          } else {
+            // No encontrado, abrir modal de registro rápido con cédula
+            setCedulaParaCliente(data.cedulaFormateada || code)
+            setQuickClientOpen(true)
+            toast.info("Cliente no registrado. Ingrese sus datos.")
+          }
+        } else {
+          toast.error("Error al buscar cliente por cédula")
+        }
+        return
+      }
+
       // Buscar como código de barras de producto
       const res = await fetch(`/api/productos/by-barcode?code=${encodeURIComponent(code)}`)
       const data = await res.json()
@@ -272,8 +328,16 @@ export default function NuevaVentaPage() {
 
   const total = lineas.reduce((sum, l) => sum + l.subtotal, 0)
 
+  const cambio = (metodoPago === "EFECTIVO" && montoRecibido && Number(montoRecibido) >= total)
+    ? Number(montoRecibido) - total
+    : 0
+
   const handleRegistrarVenta = async () => {
     if (lineas.length === 0) { toast.error("Agregue al menos un producto"); return }
+    if (metodoPago === "EFECTIVO" && montoRecibido && Number(montoRecibido) < total) {
+      toast.error("El monto recibido no cubre el total de la venta")
+      return
+    }
     setProcesando(true)
     try {
       const res = await fetch("/api/ventas", {
@@ -281,7 +345,13 @@ export default function NuevaVentaPage() {
         body: JSON.stringify({
           idCliente: selectedCliente ? Number.parseInt(selectedCliente) : null,
           detalles: lineas.map((l) => ({ idProducto: l.idProducto, cantidad: l.cantidad, precioUnitario: l.precioUnitario, tipoUnidad: l.tipoUnidad })),
-          metodoPago, nombrePodologo: nombrePodologo || null, numeroReceta: numeroReceta || null,
+          metodoPago,
+          nombrePodologo: nombrePodologo || null,
+          numeroReceta: numeroReceta || null,
+          tipoComprobante,
+          montoRecibido: montoRecibido ? Number(montoRecibido) : null,
+          cambio: montoRecibido ? cambio : null,
+          rucCliente: tipoComprobante === "FACTURA" ? rucCliente : null,
         }),
       })
       const data = await res.json()
@@ -464,6 +534,24 @@ export default function NuevaVentaPage() {
                     </div>
                   )}
 
+                  {selectedProducto && selectedProducto.lotes && selectedProducto.lotes.length > 0 && (
+                    <div className="p-3 bg-muted/40 border border-border rounded-lg space-y-2">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Lotes disponibles (Despacho FIFO):</p>
+                      <div className="max-h-24 overflow-y-auto space-y-1.5 pr-1">
+                        {selectedProducto.lotes.map((lote) => {
+                          const dateStr = lote.fechaVencimiento ? new Date(lote.fechaVencimiento).toLocaleDateString("es-NI") : "Sin vencimiento"
+                          return (
+                            <div key={lote.id} className="flex justify-between items-center text-xs text-foreground bg-background/50 p-1.5 rounded border border-border/40 font-medium">
+                              <span className="font-mono">Lote: <span className="font-bold text-foreground">{lote.codigoLote}</span></span>
+                              <span className="text-muted-foreground">Vence: <span className="text-foreground">{dateStr}</span></span>
+                              <span className="font-bold text-primary">{lote.stockActual} u.</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-1">Cantidad</label>
@@ -609,6 +697,11 @@ export default function NuevaVentaPage() {
                                 setSelectedCliente(String(c.id))
                                 setShowClienteDropdown(false)
                                 setClienteSearch("")
+                                if (c.ruc) {
+                                  setRucCliente(c.ruc)
+                                } else {
+                                  setRucCliente("")
+                                }
                               }}
                               className="w-full text-left px-4 py-2.5 hover:bg-muted/40 transition-colors text-sm font-medium text-foreground border-b border-border/30 last:border-b-0"
                             >
@@ -622,6 +715,20 @@ export default function NuevaVentaPage() {
                   </div>
 
                   <div>
+                    <label className="block text-sm font-medium text-foreground mb-1">Tipo de Comprobante</label>
+                    <select value={tipoComprobante} onChange={(e) => setTipoComprobante(e.target.value)} className={selectClass}>
+                      <option value="RECIBO">Recibo</option>
+                      <option value="FACTURA">Factura Local (Nicaragua)</option>
+                    </select>
+                  </div>
+                  {tipoComprobante === "FACTURA" && (
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1">RUC del Cliente (Facturación)</label>
+                      <Input value={rucCliente} onChange={(e) => setRucCliente(e.target.value)} placeholder="001-280599-1004A" className="bg-muted/30 border-border text-sm font-mono" />
+                    </div>
+                  )}
+
+                  <div>
                     <label className="block text-sm font-medium text-foreground mb-1">Método de Pago</label>
                     <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)} className={selectClass}>
                       <option value="EFECTIVO">Efectivo</option>
@@ -629,6 +736,20 @@ export default function NuevaVentaPage() {
                       <option value="TRANSFERENCIA">Transferencia</option>
                     </select>
                   </div>
+
+                  {metodoPago === "EFECTIVO" && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-1">Monto Recibido</label>
+                        <Input type="number" step="0.01" min="0" value={montoRecibido} onChange={(e) => setMontoRecibido(e.target.value)} placeholder="C$0.00" className="bg-muted/30 border-border text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-1">Cambio (Vuelto)</label>
+                        <Input type="text" disabled value={montoRecibido && Number(montoRecibido) >= total ? `C$${cambio.toFixed(2)}` : "C$0.00"} className="bg-muted/30 border-border text-sm font-semibold text-emerald-500" />
+                      </div>
+                    </div>
+                  )}
+
                   <div>
                     <label className="block text-sm font-medium text-foreground mb-1">Podólogo (Opcional)</label>
                     <Input value={nombrePodologo} onChange={(e) => setNombrePodologo(e.target.value)} placeholder="Nombre del podólogo" className="bg-muted/30 border-border text-sm" />

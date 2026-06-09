@@ -45,7 +45,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       )
     }
 
-    const { nombreCompleto, telefono, correo, cedula, direccion, activo } = validation.data
+    const { nombreCompleto, telefono, correo, cedula, ruc, direccion, activo } = validation.data
 
     // 1. Validar duplicados de Cédula
     if (cedula) {
@@ -62,6 +62,24 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       });
       if (existing) {
         return NextResponse.json({ error: "La cédula ya está registrada en otro cliente" }, { status: 400 });
+      }
+    }
+
+    // 1.1. Validar duplicados de RUC
+    if (ruc) {
+      const cleanRuc = ruc.replace(/[\s-]/g, "").toUpperCase();
+      const formattedRuc = `${cleanRuc.substring(0, 3)}-${cleanRuc.substring(3, 9)}-${cleanRuc.substring(9, 13)}${cleanRuc.charAt(13)}`;
+      const existing = await prisma.cliente.findFirst({
+        where: {
+          id: { not: clientId },
+          OR: [
+            { ruc: formattedRuc },
+            { ruc: cleanRuc }
+          ]
+        }
+      });
+      if (existing) {
+        return NextResponse.json({ error: "El RUC ya está registrado en otro cliente" }, { status: 400 });
       }
     }
 
@@ -116,6 +134,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         telefono: emptyToNull(telefono),
         correo: emptyToNull(correo),
         cedula: emptyToNull(cedula),
+        ruc: emptyToNull(ruc),
         direccion: emptyToNull(direccion),
         activo: activo ?? true,
       },
@@ -126,6 +145,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (error.code === "P2002") {
       const target = error.meta?.target as string[];
       if (target?.includes("cedula")) return NextResponse.json({ error: "La cédula ya existe en otro cliente" }, { status: 400 });
+      if (target?.includes("ruc")) return NextResponse.json({ error: "El RUC ya existe en otro cliente" }, { status: 400 });
       if (target?.includes("correo")) return NextResponse.json({ error: "El correo electrónico ya está registrado en otro cliente" }, { status: 400 });
       if (target?.includes("telefono")) return NextResponse.json({ error: "El teléfono ya está registrado en otro cliente" }, { status: 400 });
       return NextResponse.json({ error: "El cliente ya existe (dato duplicado)" }, { status: 400 });

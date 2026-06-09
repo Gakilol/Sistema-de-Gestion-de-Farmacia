@@ -20,6 +20,7 @@ import {
   Sun,
   Truck,
   ClipboardList,
+  Sparkles,
 } from "lucide-react"
 
 import { useCurrentUser } from "../app/hooks/useCurrentUser"
@@ -79,6 +80,7 @@ export function Sidebar() {
     { href: "/clientes", label: "Clientes", icon: Users },
     { href: "/ventas/nueva", label: "Nueva Venta", icon: TrendingUp },
     { href: "/ventas/historial", label: "Historial Ventas", icon: ShoppingCart },
+    { href: "/ia", label: "Asistente IA", icon: Sparkles },
   ]
 
   // 🔹 Opciones SOLO ADMIN (van siempre en bloque y orden fijo)
