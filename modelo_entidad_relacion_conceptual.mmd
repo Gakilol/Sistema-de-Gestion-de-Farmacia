@@ -1,0 +1,102 @@
+flowchart TD
+    %% Estilos de Nodos
+    classDef entidad fill:#E3F2FD,stroke:#1565C0,stroke-width:2px;
+    classDef relacion fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px;
+    classDef atributo fill:#FFF8E1,stroke:#F57F17,stroke-width:1px;
+
+    %% Entidades (Rectángulos)
+    Usuario[Usuario]:::entidad
+    Rol[Rol]:::entidad
+    Cliente[Cliente]:::entidad
+    Producto[Producto]:::entidad
+    Proveedor[Proveedor]:::entidad
+    Compra[Compra]:::entidad
+    Venta[Venta]:::entidad
+    Lote[Lote]:::entidad
+    MovimientoInventario[MovimientoInventario]:::entidad
+    AuditoriaLog[AuditoriaLog]:::entidad
+
+    %% Relaciones (Rombos)
+    rel_rol{tiene}:::relacion
+    rel_compra{registra}:::relacion
+    rel_venta_usr{procesa}:::relacion
+    rel_venta_cli{realiza}:::relacion
+    rel_surtido{surtido_por}:::relacion
+    rel_contiene_c{contiene}:::relacion
+    rel_contiene_v{contiene}:::relacion
+    rel_clasificado{lotes}:::relacion
+    rel_afecta{afecta}:::relacion
+    rel_audita{genera}:::relacion
+
+    %% Conexiones Entidad - Relación - Entidad con Cardinalidades
+    Rol --- |1| rel_rol
+    rel_rol --- |N| Usuario
+    
+    Usuario --- |1| rel_compra
+    rel_compra --- |N| Compra
+    
+    Usuario --- |1| rel_venta_usr
+    rel_venta_usr --- |N| Venta
+    
+    Cliente --- |1| rel_venta_cli
+    rel_venta_cli --- |N| Venta
+    
+    Proveedor --- |1| rel_surtido
+    rel_surtido --- |N| Compra
+    
+    Compra --- |1| rel_contiene_c
+    rel_contiene_c --- |N| Producto
+    
+    Venta --- |1| rel_contiene_v
+    rel_contiene_v --- |N| Producto
+    
+    Producto --- |1| rel_clasificado
+    rel_clasificado --- |N| Lote
+    
+    Producto --- |1| rel_afecta
+    rel_afecta --- |N| MovimientoInventario
+
+    Usuario --- |1| rel_audita
+    rel_audita --- |N| AuditoriaLog
+
+    %% Atributos Clave (Óvalos)
+    usr_id((id)):::atributo
+    usr_nombre((nombreCompleto)):::atributo
+    usr_correo((correo)):::atributo
+    
+    cli_id((id)):::atributo
+    cli_nombre((nombreCompleto)):::atributo
+    cli_cedula((cedula)):::atributo
+    
+    prod_id((id)):::atributo
+    prod_nombre((nombre)):::atributo
+    prod_stock((stockActual)):::atributo
+
+    vnt_id((id)):::atributo
+    vnt_total((total)):::atributo
+    vnt_receta((numeroReceta)):::atributo
+
+    lot_id((id)):::atributo
+    lot_codigo((codigoLote)):::atributo
+    lot_vence((fechaVencimiento)):::atributo
+
+    %% Conexiones de Atributos
+    Usuario --- usr_id
+    Usuario --- usr_nombre
+    Usuario --- usr_correo
+
+    Cliente --- cli_id
+    Cliente --- cli_nombre
+    Cliente --- cli_cedula
+
+    Producto --- prod_id
+    Producto --- prod_nombre
+    Producto --- prod_stock
+
+    Venta --- vnt_id
+    Venta --- vnt_total
+    Venta --- vnt_receta
+
+    Lote --- lot_id
+    Lote --- lot_codigo
+    Lote --- lot_vence

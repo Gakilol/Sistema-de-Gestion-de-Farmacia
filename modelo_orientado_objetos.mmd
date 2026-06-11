@@ -1,0 +1,138 @@
+classDiagram
+    class Rol {
+        +int id
+        +string nombre
+        +create() Rol
+        +findUnique(id) Rol
+    }
+    class Usuario {
+        +int id
+        +string nombreCompleto
+        +string correo
+        +string passwordHash
+        +int idRol
+        +boolean activo
+        +datetime createdAt
+        +create() Usuario
+        +authenticate(correo, password) string
+    }
+    class Cliente {
+        +int id
+        +string nombreCompleto
+        +string telefono
+        +string correo
+        +string cedula
+        +string ruc
+        +string direccion
+        +boolean activo
+        +datetime createdAt
+        +validateCedula(cedula) boolean
+    }
+    class Producto {
+        +int id
+        +string nombre
+        +string codigoBarras
+        +string descripcion
+        +int idCategoria
+        +decimal precioCompra
+        +decimal precioVenta
+        +decimal precioBlister
+        +decimal precioCaja
+        +int unidadesPorBlister
+        +int unidadesPorCaja
+        +int stockActual
+        +int stockMinimo
+        +boolean activo
+        +create() Producto
+        +updatePrices(compra, venta) void
+    }
+    class Lote {
+        +int id
+        +int idProducto
+        +string codigoLote
+        +datetime fechaVencimiento
+        +int stockInicial
+        +int stockActual
+        +decimal costoCompra
+        +int idDetalleCompra
+        +boolean activo
+        +isExpired() boolean
+        +deductStock(cantidad) void
+    }
+    class Venta {
+        +int id
+        +datetime fecha
+        +int idCliente
+        +decimal total
+        +string metodoPago
+        +string nombrePodologo
+        +string numeroReceta
+        +int idUsuario
+        +string tipoComprobante
+        +string estado
+        +decimal montoRecibido
+        +decimal cambio
+        +create() Venta
+    }
+    class DetalleVenta {
+        +int id
+        +int idVenta
+        +int idProducto
+        +int cantidad
+        +decimal precioUnitario
+        +decimal subtotal
+        +string tipoUnidad
+    }
+    class Compra {
+        +int id
+        +datetime fecha
+        +string numeroFactura
+        +int idProveedor
+        +decimal total
+        +int idUsuario
+        +create() Compra
+    }
+    class DetalleCompra {
+        +int id
+        +int idCompra
+        +int idProducto
+        +int cantidad
+        +decimal precioUnitario
+        +decimal subtotal
+        +string lote
+        +datetime fechaVencimiento
+    }
+    class MovimientoInventario {
+        +int id
+        +int idProducto
+        +int idLote
+        +string tipo
+        +int cantidad
+        +int stockResultante
+        +decimal costoUnitario
+        +string referencia
+        +int idUsuario
+        +registerMovement() void
+    }
+    class DatabaseTriggers {
+        <<Service>>
+        +fn_rastrear_compras_cliente(DetalleVenta NEW) void
+        +fn_actualizar_stats_producto(DetalleVenta NEW) void
+        +fn_alerta_stock_bajo(Producto NEW) void
+        +fn_historial_precios(Producto OLD, Producto NEW) void
+    }
+
+    Usuario --> Rol : "Relación N a 1"
+    Venta --> Cliente : "Relación N a 1 (Opcional)"
+    Venta --> Usuario : "Relación N a 1"
+    DetalleVenta --> Venta : "Relación N a 1"
+    DetalleVenta --> Producto : "Relación N a 1"
+    Lote --> Producto : "Relación N a 1"
+    MovimientoInventario --> Lote : "Relación N a 1 (Opcional)"
+    MovimientoInventario --> Producto : "Relación N a 1"
+    Compra --> Proveedor : "Relación N a 1"
+    Compra --> Usuario : "Relación N a 1"
+    DetalleCompra --> Compra : "Relación N a 1"
+    DetalleCompra --> Producto : "Relación N a 1"
+    DatabaseTriggers ..> DetalleVenta : "Disparado por INSERT"
+    DatabaseTriggers ..> Producto : "Disparado por UPDATE"

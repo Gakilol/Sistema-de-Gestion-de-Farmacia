@@ -1,0 +1,218 @@
+erDiagram
+    Rol ||--o{ Usuario : "es asignado a"
+    Usuario ||--o{ Compra : "registra"
+    Usuario ||--o{ Venta : "procesa"
+    Usuario ||--o{ MovimientoInventario : "autoriza"
+    Usuario ||--o{ AuditoriaLog : "genera"
+    Cliente ||--o{ Venta : "realiza"
+    Proveedor ||--o{ Compra : "surtido_por"
+    Proveedor ||--o{ ProveedorProducto : "asociado_en"
+    Producto ||--o{ ProveedorProducto : "incluido_en"
+    Compra ||--|{ DetalleCompra : "contiene"
+    Producto ||--o{ DetalleCompra : "registrado_en"
+    DetalleCompra ||--o{ Lote : "crea"
+    Producto ||--|{ Lote : "clasificado_en"
+    Lote ||--o{ MovimientoInventario : "participa_en"
+    Producto ||--o{ MovimientoInventario : "afectado_por"
+    Venta ||--|{ DetalleVenta : "contiene"
+    Producto ||--o{ DetalleVenta : "incluido_en"
+    Cliente ||--o{ ClienteProductoStats : "monitorea"
+    Producto ||--o{ ClienteProductoStats : "rastreado_en"
+    Producto ||--o{ ProductoVentaStats : "acumula_en"
+    Producto ||--o{ AlertaStockBajo : "dispara"
+    Producto ||--o{ HistorialPrecios : "registra_en"
+
+    Rol {
+        int id PK
+        string nombre "UNIQUE"
+    }
+
+    Usuario {
+        int id PK
+        string nombreCompleto
+        string correo "UNIQUE"
+        string passwordHash
+        int idRol FK
+        boolean activo
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    Cliente {
+        int id PK
+        string nombreCompleto
+        string telefono "UNIQUE"
+        string correo "UNIQUE"
+        string cedula "UNIQUE"
+        string ruc "UNIQUE"
+        string direccion
+        boolean activo
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    CategoriaProducto {
+        int id PK
+        string nombre "UNIQUE"
+        string descripcion
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    Producto {
+        int id PK
+        string nombre "UNIQUE"
+        string codigoBarras "UNIQUE"
+        string descripcion
+        int idCategoria FK
+        decimal precioCompra
+        decimal precioVenta
+        decimal precioBlister
+        decimal precioCaja
+        int unidadesPorBlister
+        int unidadesPorCaja
+        int stockActual
+        int stockMinimo
+        boolean activo
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    Proveedor {
+        int id PK
+        string nombre "UNIQUE"
+        string telefono
+        string correo
+        string direccion
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    ProveedorProducto {
+        int id PK
+        int idProveedor FK
+        int idProducto FK
+        decimal precioCompra
+        datetime createdAt
+    }
+
+    Compra {
+        int id PK
+        datetime fecha
+        datetime fechaCompra
+        string numeroFactura
+        int idProveedor FK
+        decimal total
+        int idUsuario FK
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    DetalleCompra {
+        int id PK
+        int idCompra FK
+        int idProducto FK
+        int cantidad
+        decimal precioUnitario
+        decimal subtotal
+        string lote
+        datetime fechaVencimiento
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    Lote {
+        int id PK
+        int idProducto FK
+        string codigoLote
+        datetime fechaVencimiento
+        int stockInicial
+        int stockActual
+        decimal costoCompra
+        int idDetalleCompra FK
+        boolean activo
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    MovimientoInventario {
+        int id PK
+        int idProducto FK
+        int idLote FK
+        string tipo
+        int cantidad
+        int stockResultante
+        decimal costoUnitario
+        string referencia
+        int idUsuario FK
+        datetime createdAt
+    }
+
+    Venta {
+        int id PK
+        datetime fecha
+        int idCliente FK
+        decimal total
+        string metodoPago
+        string nombrePodologo
+        string numeroReceta
+        int idUsuario FK
+        string tipoComprobante
+        string estado
+        decimal montoRecibido
+        decimal cambio
+        string rucCliente
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    DetalleVenta {
+        int id PK
+        int idVenta FK
+        int idProducto FK
+        int cantidad
+        decimal precioUnitario
+        decimal subtotal
+        string tipoUnidad
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    ClienteProductoStats {
+        int id PK
+        int idCliente FK
+        int idProducto FK
+        int totalComprado
+        int vecesComprado
+        datetime ultimaCompra
+    }
+
+    ProductoVentaStats {
+        int id PK
+        int idProducto FK
+        int totalUnidadesVendidas
+        int totalVecesVendido
+        decimal ingresoTotal
+        datetime ultimaVenta
+    }
+
+    AlertaStockBajo {
+        int id PK
+        int idProducto FK
+        string nombreProducto
+        int stockActual
+        int stockMinimo
+        datetime fechaAlerta
+        boolean resuelta
+    }
+
+    HistorialPrecios {
+        int id PK
+        int idProducto FK
+        string nombreProducto
+        decimal precioVentaAnterior
+        decimal precioVentaNuevo
+        decimal precioCompraAnterior
+        decimal precioCompraNuevo
+        datetime fechaCambio
+    }
