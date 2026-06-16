@@ -44,9 +44,12 @@ export const clienteSchema = z.object({
       if (typeof val !== "string") return val;
       const trimmed = val.trim();
       if (trimmed === "") return null;
-      return trimmed.replace(/[\s-]/g, "");
+      // Mantener el signo + al inicio si lo tiene, remover espacios, guiones y paréntesis
+      const prefix = trimmed.startsWith("+") ? "+" : "";
+      const cleanDigits = trimmed.replace(/[^\d]/g, "");
+      return prefix + cleanDigits;
     },
-    z.string().trim().regex(/^\d{8}$/, "El teléfono debe tener exactamente 8 dígitos numéricos").nullable().optional()
+    z.string().trim().regex(/^(?:\d{8}|\+\d{8,15}|\d{9,15})$/, "El teléfono debe tener 8 dígitos o formato internacional válido").nullable().optional()
   ),
   correo: z.preprocess(
     (val) => {
@@ -128,6 +131,8 @@ export const productoSchema = z.object({
   unidadesPorCaja: z.preprocess((a) => (a ? parseInt(String(a), 10) : null), z.number().int().min(1).nullable().optional()),
   stockMinimo: z.preprocess((a) => (a ? parseInt(String(a), 10) : null), z.number().int().min(0).nullable().optional()),
   stockInicial: z.preprocess((a) => (a !== null && a !== undefined && a !== "" ? parseInt(String(a), 10) : 0), z.number().int().min(0).optional().default(0)),
+  loteInicial: z.string().optional().nullable(),
+  fechaVencimientoInicial: z.string().optional().nullable(),
   activo: z.boolean().default(true),
 }).refine(data => {
   const pv = data.precioVenta || 0;

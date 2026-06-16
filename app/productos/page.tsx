@@ -79,9 +79,63 @@ export default function ProductosPage() {
   const [unidadesPorCaja, setUnidadesPorCaja] = useState("")
   const [stockMinimo, setStockMinimo] = useState("")
   const [stockInicial, setStockInicial] = useState("")
+  const [loteInicial, setLoteInicial] = useState("")
+  const [fechaVencimientoInicial, setFechaVencimientoInicial] = useState("")
   const [formLoading, setFormLoading] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [precioVentaError, setPrecioVentaError] = useState<string | null>(null)
+
+  // Editar Lote States
+  const [showEditLoteModal, setShowEditLoteModal] = useState(false)
+  const [editLoteId, setEditLoteId] = useState<number | null>(null)
+  const [editLoteCodigo, setEditLoteCodigo] = useState("")
+  const [editLoteVencimiento, setEditLoteVencimiento] = useState("")
+  const [editLoteLoading, setEditLoteLoading] = useState(false)
+
+  const handleOpenEditLote = (lote: any) => {
+    setEditLoteId(lote.id)
+    setEditLoteCodigo(lote.codigoLote)
+    setEditLoteVencimiento(lote.fechaVencimiento ? new Date(lote.fechaVencimiento).toISOString().split("T")[0] : "")
+    setShowEditLoteModal(true)
+  }
+
+  const handleSaveLote = async () => {
+    if (!editLoteId || !editLoteCodigo.trim()) {
+      toast.error("El código de lote es requerido")
+      return
+    }
+    setEditLoteLoading(true)
+    try {
+      const res = await fetch(`/api/lotes/${editLoteId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          codigoLote: editLoteCodigo.trim(),
+          fechaVencimiento: editLoteVencimiento || null
+        })
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || "Error al actualizar el lote")
+        return
+      }
+      toast.success("Lote actualizado correctamente")
+      setShowEditLoteModal(false)
+      
+      // Actualizar detalles del producto seleccionado
+      if (selectedProduct) {
+        const detailsRes = await fetch(`/api/productos/${selectedProduct.id}`)
+        if (detailsRes.ok) {
+          setSelectedProduct(await detailsRes.json())
+        }
+      }
+      await mutateProductos()
+    } catch (e) {
+      toast.error("Error de conexión al actualizar lote")
+    } finally {
+      setEditLoteLoading(false)
+    }
+  }
 
   // Autoguardado de borrador
   useEffect(() => {
@@ -99,12 +153,15 @@ export default function ProductosPage() {
         unidadesPorCaja,
         stockMinimo,
         stockInicial,
+        loteInicial,
+        fechaVencimientoInicial,
       }
       localStorage.setItem("farmacia_producto_borrador", JSON.stringify(draft))
     }
   }, [
     showForm, editingId, nombre, idCategoria, codigoBarras, descripcion,
-    precioCompra, precioVenta, precioBlister, precioCaja, unidadesPorBlister, unidadesPorCaja, stockMinimo, stockInicial
+    precioCompra, precioVenta, precioBlister, precioCaja, unidadesPorBlister, unidadesPorCaja, stockMinimo, stockInicial,
+    loteInicial, fechaVencimientoInicial
   ])
 
   const handleClearDraft = () => {
@@ -188,11 +245,8 @@ export default function ProductosPage() {
   const noventaDias = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000)
   const countVencidos = allProducts.filter(p => {
     if (!p.activo) return false
-    // We need fechaVencimiento from the data but our interface doesn't have it.
-    // We'll use a type assertion since the API returns it.
-    const fv = (p as any).fechaVencimiento
-    if (!fv) return false
-    return new Date(fv).getTime() <= noventaDias.getTime()
+    const lotes = (p as any).lotes || []
+    return lotes.some((l: any) => l.fechaVencimiento && new Date(l.fechaVencimiento).getTime() <= noventaDias.getTime())
   }).length
 
   const filteredProductos = allProducts
@@ -208,9 +262,8 @@ export default function ProductosPage() {
         case "stock-bajo": return p.activo && p.stockMinimo != null && p.stockActual <= p.stockMinimo
         case "vencidos": {
           if (!p.activo) return false
-          const fv = (p as any).fechaVencimiento
-          if (!fv) return false
-          return new Date(fv).getTime() <= noventaDias.getTime()
+          const lotes = (p as any).lotes || []
+          return lotes.some((l: any) => l.fechaVencimiento && new Date(l.fechaVencimiento).getTime() <= noventaDias.getTime())
         }
         case "todos":
         default: return true
@@ -231,6 +284,8 @@ export default function ProductosPage() {
     setUnidadesPorCaja("")
     setStockMinimo("")
     setStockInicial("")
+    setLoteInicial("")
+    setFechaVencimientoInicial("")
     setFormError(null)
     setPrecioVentaError(null)
   }
@@ -284,6 +339,8 @@ export default function ProductosPage() {
         setUnidadesPorCaja(draft.unidadesPorCaja || "")
         setStockMinimo(draft.stockMinimo || "")
         setStockInicial(draft.stockInicial || "")
+        setLoteInicial(draft.loteInicial || "")
+        setFechaVencimientoInicial(draft.fechaVencimientoInicial || "")
         toast.success("Se restauró tu borrador anterior")
       } catch (e) {
         console.error("Error cargando borrador:", e)
@@ -455,6 +512,8 @@ export default function ProductosPage() {
 
       if (!editingId) {
         body.stockInicial = stockInicial ? parseInt(stockInicial) : 0
+        body.loteInicial = loteInicial || null
+        body.fechaVencimientoInicial = fechaVencimientoInicial || null
       }
 
       const url = editingId ? `/api/productos/${editingId}` : "/api/productos"
@@ -885,18 +944,47 @@ export default function ProductosPage() {
                       <p className="text-xs text-gray-400 mt-1">Si el stock baja de este número, recibirás una alerta para reabastecer.</p>
                     </div>
                     {!editingId && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Stock inicial <span className="text-gray-400 font-normal text-xs">— cantidad física</span>
-                        </label>
-                        <Input
-                          type="number"
-                          min="0"
-                          value={stockInicial}
-                          onChange={(e) => setStockInicial(e.target.value)}
-                          placeholder="Ej: 100"
-                        />
-                        <p className="text-xs text-gray-400 mt-1">Cantidad inicial de unidades físicas en inventario.</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:col-span-2">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Stock inicial <span className="text-gray-400 font-normal text-xs">— cantidad física</span>
+                          </label>
+                          <Input
+                            type="number"
+                            min="0"
+                            value={stockInicial}
+                            onChange={(e) => setStockInicial(e.target.value)}
+                            placeholder="Ej: 100"
+                          />
+                          <p className="text-xs text-gray-400 mt-1">Cantidad inicial de unidades físicas.</p>
+                        </div>
+                        {stockInicial && parseInt(stockInicial) > 0 && (
+                          <>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Código de Lote Inicial
+                              </label>
+                              <Input
+                                type="text"
+                                value={loteInicial}
+                                onChange={(e) => setLoteInicial(e.target.value)}
+                                placeholder="Ej: LOT-INICIAL-01"
+                              />
+                              <p className="text-xs text-gray-400 mt-1">Código del lote para el stock inicial.</p>
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Fecha de Vencimiento Inicial
+                              </label>
+                              <Input
+                                type="date"
+                                value={fechaVencimientoInicial}
+                                onChange={(e) => setFechaVencimientoInicial(e.target.value)}
+                              />
+                              <p className="text-xs text-gray-400 mt-1">Fecha de vencimiento del lote inicial.</p>
+                            </div>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1430,7 +1518,72 @@ export default function ProductosPage() {
                     </div>
                   </div>
 
-                  {/* Fila 3: Descripción */}
+                  {/* Fila 3: Lotes Activos */}
+                  <div className="rounded-lg border border-indigo-100 bg-indigo-50/20 p-4">
+                    <h3 className="text-sm font-semibold text-indigo-800 mb-3 flex items-center gap-2">
+                      <Calendar className="w-4 h-4" />
+                      Lotes Activos y Vencimientos
+                    </h3>
+                    <div className="space-y-2">
+                      {selectedProduct.lotes && selectedProduct.lotes.length > 0 ? (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b border-indigo-100 text-xs text-indigo-800 font-semibold">
+                                <th className="text-left py-2 font-semibold">Código de Lote</th>
+                                <th className="text-left py-2 font-semibold">Stock Actual</th>
+                                <th className="text-left py-2 font-semibold">Fecha Vencimiento</th>
+                                {isAdmin && <th className="text-right py-2 font-semibold">Acciones</th>}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-indigo-50/50">
+                              {selectedProduct.lotes.map((lote: any) => {
+                                const isExpired = lote.fechaVencimiento && new Date(lote.fechaVencimiento).getTime() <= new Date().getTime();
+                                const isExpiring = lote.fechaVencimiento && !isExpired && new Date(lote.fechaVencimiento).getTime() <= new Date().getTime() + (90 * 24 * 60 * 60 * 1000);
+                                return (
+                                  <tr key={lote.id} className="hover:bg-indigo-50/40">
+                                    <td className="py-2.5 font-medium text-foreground">{lote.codigoLote}</td>
+                                    <td className="py-2.5 text-foreground">{lote.stockActual} uds</td>
+                                    <td className="py-2.5">
+                                      {lote.fechaVencimiento ? (
+                                        <span className={`inline-flex items-center gap-1 font-semibold ${
+                                          isExpired ? "text-red-500" :
+                                          isExpiring ? "text-amber-500 animate-pulse" : "text-emerald-600"
+                                        }`}>
+                                          {new Date(lote.fechaVencimiento).toLocaleDateString('es-NI', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC' })}
+                                          {isExpired && " (Vencido)"}
+                                          {isExpiring && " (Próximo)"}
+                                        </span>
+                                      ) : (
+                                        <span className="text-muted-foreground">—</span>
+                                      )}
+                                    </td>
+                                    {isAdmin && (
+                                      <td className="py-2.5 text-right">
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={() => handleOpenEditLote(lote)}
+                                          className="text-primary hover:text-primary-foreground hover:bg-primary/20 h-8 px-2"
+                                        >
+                                          <Edit2 className="w-3.5 h-3.5 mr-1" />
+                                          Editar
+                                        </Button>
+                                      </td>
+                                    )}
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground text-center py-4 bg-background/60 rounded-lg border border-border">No hay lotes activos registrados para este producto.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Fila 4: Descripción */}
                   <div className="rounded-lg border border-blue-100 bg-blue-50/20 p-4 space-y-4">
                     <h3 className="text-sm font-semibold text-blue-800 mb-1 flex items-center gap-2">
                       <FileText className="w-4 h-4" />
@@ -1469,6 +1622,69 @@ export default function ProductosPage() {
         title="Escanear Código de Barras"
         hint="Apunta al código de barras del medicamento"
       />
+
+      {/* Modal Editar Lote */}
+      {showEditLoteModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <Card className="glass-card w-full max-w-md p-6 shadow-2xl rounded-2xl animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-primary/10 border border-primary/20">
+                  <Calendar className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-foreground">Editar Lote</h2>
+                  <p className="text-xs text-muted-foreground">Modifica la información de este lote</p>
+                </div>
+              </div>
+              <button onClick={() => setShowEditLoteModal(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Código de Lote</label>
+                <Input
+                  type="text"
+                  value={editLoteCodigo}
+                  onChange={e => setEditLoteCodigo(e.target.value)}
+                  className="w-full bg-input border-border"
+                  placeholder="Ej: LOT-123"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Fecha de Vencimiento</label>
+                <Input
+                  type="date"
+                  value={editLoteVencimiento}
+                  onChange={e => setEditLoteVencimiento(e.target.value)}
+                  className="w-full bg-input border-border"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 mt-6">
+              <Button variant="outline" className="flex-1" onClick={() => setShowEditLoteModal(false)} disabled={editLoteLoading}>
+                Cancelar
+              </Button>
+              <Button
+                className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
+                onClick={handleSaveLote}
+                disabled={editLoteLoading}
+              >
+                {editLoteLoading ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Guardando...</>
+                ) : (
+                  "Guardar Cambios"
+                )}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }

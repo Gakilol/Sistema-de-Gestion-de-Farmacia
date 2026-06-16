@@ -98,7 +98,8 @@ export async function POST(request: NextRequest) {
         const loteInicial = await tx.lote.create({
           data: {
             idProducto: prod.id,
-            codigoLote: `INICIAL-${Date.now()}`,
+            codigoLote: (data as any).loteInicial || `INICIAL-${Date.now()}`,
+            fechaVencimiento: (data as any).fechaVencimientoInicial ? new Date((data as any).fechaVencimientoInicial) : null,
             stockInicial: stockInicialVal,
             stockActual: stockInicialVal,
             costoCompra: prod.precioCompra,

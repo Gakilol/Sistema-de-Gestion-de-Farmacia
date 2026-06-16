@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Eye, X, ShoppingCart } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useCurrentUser } from "@/app/hooks/useCurrentUser"
+import { toast } from "sonner"
 
 interface Venta {
   id: number
@@ -15,6 +17,7 @@ interface Venta {
   total: string
   metodoPago: string
   numeroReceta: string | null
+  estado: string
   detalles: Array<{ producto: { nombre: string }; cantidad: number; precioUnitario: string }>
 }
 
@@ -23,6 +26,10 @@ export default function HistorialVentasPage() {
   const [loading, setLoading] = useState(true)
   const [selectedVenta, setSelectedVenta] = useState<Venta | null>(null)
   const [dateFilter, setDateFilter] = useState("")
+  const [anulando, setAnulando] = useState(false)
+
+  const { user } = useCurrentUser()
+  const isAdmin = user?.rolNombre === "ADMIN"
 
   useEffect(() => { fetchVentas() }, [])
 
@@ -31,6 +38,30 @@ export default function HistorialVentasPage() {
       const res = await fetch("/api/ventas")
       setVentas(await res.json())
     } catch (e) { console.error(e) } finally { setLoading(false) }
+  }
+
+  const handleAnularVenta = async (id: number) => {
+    const ok = window.confirm(`¿Seguro que deseas ANULAR la venta #${id}? Esta acción restablecerá el inventario a los lotes originales de forma permanente y registrará el ajuste en el Kardex.`)
+    if (!ok) return
+
+    setAnulando(true)
+    try {
+      const res = await fetch(`/api/ventas/${id}`, {
+        method: "DELETE",
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || "Error al anular la venta")
+        return
+      }
+      toast.success("Venta anulada correctamente")
+      setSelectedVenta(null)
+      await fetchVentas()
+    } catch (e) {
+      toast.error("Error de conexión al anular la venta")
+    } finally {
+      setAnulando(false)
+    }
   }
 
   const filteredVentas = ventas.filter((v) => {
@@ -69,7 +100,7 @@ export default function HistorialVentasPage() {
                 <table className="w-full">
                   <thead className="bg-muted/30 border-b border-border">
                     <tr>
-                      {["Fecha","Cliente","Items","Pago","Total","Ver"].map(h => (
+                      {["Fecha","Cliente","Items","Pago","Total","Estado","Ver"].map(h => (
                         <th key={h} className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">{h}</th>
                       ))}
                     </tr>
@@ -82,6 +113,15 @@ export default function HistorialVentasPage() {
                         <td className="px-6 py-4 text-sm text-muted-foreground">{v.detalles.length}</td>
                         <td className="px-6 py-4 text-sm"><span className="px-3 py-1 rounded-full text-xs font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">{v.metodoPago}</span></td>
                         <td className="px-6 py-4 text-sm font-semibold text-foreground">C${Number.parseFloat(v.total).toFixed(2)}</td>
+                        <td className="px-6 py-4 text-sm">
+                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${
+                            v.estado === "ANULADA"
+                              ? "bg-red-500/10 text-red-500 border-red-500/20"
+                              : "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                          }`}>
+                            {v.estado}
+                          </span>
+                        </td>
                         <td className="px-6 py-4"><Button size="sm" variant="ghost" onClick={() => setSelectedVenta(v)} className="text-muted-foreground hover:text-foreground"><Eye className="w-4 h-4" /></Button></td>
                       </tr>
                     ))}
@@ -100,9 +140,19 @@ export default function HistorialVentasPage() {
                 </div>
                 <Button variant="ghost" size="sm" onClick={() => setSelectedVenta(null)}><X className="w-5 h-5" /></Button>
               </div>
-              <div className="grid grid-cols-2 gap-4 mb-6">
+              <div className="grid grid-cols-3 gap-4 mb-6">
                 <div><p className="text-xs text-muted-foreground uppercase mb-1">Cliente</p><p className="font-medium text-foreground">{selectedVenta.cliente?.nombreCompleto || "—"}</p></div>
                 <div><p className="text-xs text-muted-foreground uppercase mb-1">Pago</p><p className="font-medium text-foreground">{selectedVenta.metodoPago}</p></div>
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase mb-1">Estado</p>
+                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${
+                    selectedVenta.estado === "ANULADA"
+                      ? "bg-red-500/10 text-red-500 border-red-500/20"
+                      : "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                  }`}>
+                    {selectedVenta.estado}
+                  </span>
+                </div>
               </div>
               <div className="border-t border-border pt-4">
                 <table className="w-full text-sm">
@@ -118,7 +168,18 @@ export default function HistorialVentasPage() {
                     ))}
                   </tbody>
                 </table>
-                <div className="mt-4 pt-4 border-t border-border text-right">
+                <div className="mt-6 pt-4 border-t border-border flex justify-between items-center">
+                  <div>
+                    {isAdmin && selectedVenta.estado !== "ANULADA" && (
+                      <Button
+                        onClick={() => handleAnularVenta(selectedVenta.id)}
+                        className="bg-red-600 hover:bg-red-700 text-white font-medium shadow-sm transition-colors"
+                        disabled={anulando}
+                      >
+                        {anulando ? "Anulando..." : "Anular Venta"}
+                      </Button>
+                    )}
+                  </div>
                   <p className="text-lg font-bold">Total: <span className="text-primary">C${Number.parseFloat(selectedVenta.total).toFixed(2)}</span></p>
                 </div>
               </div>

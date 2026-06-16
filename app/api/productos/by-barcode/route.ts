@@ -41,7 +41,6 @@ export async function GET(request: NextRequest) {
             stockActual: true,
           },
           orderBy: { fechaVencimiento: 'asc' },
-          take: 1,
         },
       },
     })
@@ -72,6 +71,7 @@ export async function GET(request: NextRequest) {
         unidadesPorBlister: producto.unidadesPorBlister,
         unidadesPorCaja: producto.unidadesPorCaja,
         stockMinimo: producto.stockMinimo,
+        lotes: producto.lotes,
       },
       alertaVencimiento: loteVencido
         ? {
