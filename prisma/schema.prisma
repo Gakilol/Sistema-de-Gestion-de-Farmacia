@@ -249,3 +249,19 @@ model PasswordResetToken {
   @@index([correo])
   @@index([tokenHash])
 }
+
+// ===== AUDITORÍA TRANSACCIONAL DML =====
+model Auditoria {
+  id              Int      @id @default(autoincrement())
+  usuario         String
+  fecha           DateTime @default(now()) @db.Date
+  hora            DateTime @default(now()) @db.Time
+  accion          String
+  modulo          String
+  ip              String?
+  datosAnteriores Json?    @map("datos_anteriores")
+  datosNuevos     Json?    @map("datos_nuevos")
+
+  @@map("Auditoria")
+}
+

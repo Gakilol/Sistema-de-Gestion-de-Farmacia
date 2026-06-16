@@ -218,6 +218,95 @@ export default function ReportesPage() {
     }
   }
 
+  const handleExportCSV = () => {
+    try {
+      let csvContent = ""
+      let filename = "Reporte"
+
+      if (activeTab === "resumen") {
+        if (!kpis) return
+        csvContent = [
+          ["Metrica", "Valor"],
+          ["Total Ventas", kpis.totalVentas.toFixed(2)],
+          ["Total Compras", kpis.totalCompras.toFixed(2)],
+          ["Ganancia Neta", kpis.gananciaNeta.toFixed(2)],
+          ["Transacciones Totales", kpis.transaccionesCount],
+          ["Productos Stock Bajo", kpis.stockBajo]
+        ].map(e => e.join(",")).join("\n")
+        filename = "Resumen_KPIs"
+      } else if (activeTab === "productos") {
+        csvContent = [
+          ["Puesto", "Producto", "Categoria", "Cantidad Vendida", "Total Recaudado"],
+          ...masVendidos.map((p, idx) => [
+            idx + 1,
+            `"${p.nombre.replace(/"/g, '""')}"`,
+            `"${p.categoria.replace(/"/g, '""')}"`,
+            p.cantidad,
+            p.total.toFixed(2)
+          ])
+        ].map(e => e.join(",")).join("\n")
+        filename = "Productos_Mas_Vendidos"
+      } else if (activeTab === "clientes") {
+        csvContent = [
+          ["Puesto", "Cliente", "Cedula", "Transacciones", "Total Comprado"],
+          ...clientesFrecuentes.map((c, idx) => [
+            c.id === 0 ? "—" : idx + 1,
+            `"${c.nombre.replace(/"/g, '""')}"`,
+            `"${c.cedula.replace(/"/g, '""')}"`,
+            c.comprasCount,
+            c.totalComprado.toFixed(2)
+          ])
+        ].map(e => e.join(",")).join("\n")
+        filename = "Clientes_Frecuentes"
+      } else if (activeTab === "stock") {
+        csvContent = [
+          ["Producto", "Categoria", "Stock Fisico", "Minimo Alerta", "Faltante"],
+          ...stockBajo.map(s => [
+            `"${s.nombre.replace(/"/g, '""')}"`,
+            `"${s.categoria.replace(/"/g, '""')}"`,
+            s.stockActual,
+            s.stockMinimo,
+            s.diferencia
+          ])
+        ].map(e => e.join(",")).join("\n")
+        filename = "Stock_Bajo"
+      } else if (activeTab === "movimientos") {
+        csvContent = [
+          ["ID", "Tipo", "Fecha", "Total", "Usuario", "Detalle"],
+          ...movimientos.map(m => [
+            m.id,
+            m.tipo,
+            new Date(m.fecha).toLocaleString(),
+            m.total.toFixed(2),
+            `"${m.usuario.replace(/"/g, '""')}"`,
+            `"${m.detalle.replace(/"/g, '""')}"`
+          ])
+        ].map(e => e.join(",")).join("\n")
+        filename = "Historial_Movimientos"
+      }
+
+      const blob = new Blob(["\ufeff" + csvContent], { type: "text/csv;charset=utf-8;" })
+      const link = document.createElement("a")
+      const url = URL.createObjectURL(blob)
+      link.setAttribute("href", url)
+      const startStr = startDate ? `_desde_${startDate}` : ""
+      const endStr = endDate ? `_hasta_${endDate}` : ""
+      link.setAttribute("download", `${filename}${startStr}${endStr}.csv`)
+      link.style.visibility = "hidden"
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      toast.success("CSV exportado exitosamente")
+    } catch (e) {
+      console.error(e)
+      toast.error("Error al exportar CSV")
+    }
+  }
+
+  const handleExportPDF = () => {
+    window.print()
+  }
+
   // Filters search queries inside tables
   const filterBySearch = (text: string) => {
     return text.toLowerCase().includes(searchQuery.toLowerCase())
@@ -238,7 +327,7 @@ export default function ReportesPage() {
               </h1>
               <p className="text-muted-foreground mt-1">Monitoreo dinámico del rendimiento físico y financiero</p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 no-print">
               <Button 
                 variant="outline" 
                 onClick={handleRefresh} 
@@ -252,7 +341,21 @@ export default function ReportesPage() {
                 className="bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-2"
               >
                 <Download className="w-4 h-4" />
-                Exportar Excel
+                Excel
+              </Button>
+              <Button 
+                onClick={handleExportCSV} 
+                className="bg-teal-600 hover:bg-teal-700 text-white flex items-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                CSV
+              </Button>
+              <Button 
+                onClick={handleExportPDF} 
+                className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-2"
+              >
+                <FileText className="w-4 h-4" />
+                PDF
               </Button>
             </div>
           </div>

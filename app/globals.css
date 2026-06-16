@@ -225,3 +225,93 @@
 .dark ::-webkit-scrollbar-thumb:hover {
   background: rgba(71, 85, 105, 0.8);
 }
+
+/* ══════════════════════════════════════
+   ESTILOS DE IMPRESIÓN PARA PDF / REPORTES
+   ══════════════════════════════════════ */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 12pt;
+    margin: 0;
+    padding: 0;
+  }
+  
+  /* Ocultar barra de navegación, filtros y botones */
+  aside,
+  header,
+  .no-print,
+  button,
+  .button-group,
+  input,
+  select,
+  button[role="tab"],
+  .border-b,
+  main > div > div:nth-of-type(1) > div:last-child {
+    display: none !important;
+  }
+
+  /* Ajustar contenedor principal y eliminar márgenes de pantalla */
+  main {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
+    background: transparent !important;
+  }
+
+  .p-4, .pt-16, .md\:p-8, .md\:pt-8 {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Estilos para las tarjetas del reporte */
+  .glass-card,
+  .card {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    margin-bottom: 20px !important;
+    padding: 0 !important;
+  }
+
+  /* Evitar saltos de página dentro de las tablas y títulos */
+  h1, h2, h3 {
+    color: #000000 !important;
+    page-break-after: avoid;
+    margin-top: 10px !important;
+    margin-bottom: 10px !important;
+  }
+
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    margin-top: 15px !important;
+  }
+
+  th, td {
+    border: 1px solid #9ca3af !important;
+    padding: 8px 12px !important;
+    text-align: left !important;
+    font-size: 10pt !important;
+    color: #000000 !important;
+  }
+
+  th {
+    background-color: #e5e7eb !important;
+    font-weight: bold !important;
+  }
+
+  tr {
+    page-break-inside: avoid;
+  }
+
+  /* Desactivar contenedores de gráficos dinámicos en impresión */
+  .recharts-responsive-container,
+  .h-\[300px\] {
+    display: none !important;
+  }
+}
+

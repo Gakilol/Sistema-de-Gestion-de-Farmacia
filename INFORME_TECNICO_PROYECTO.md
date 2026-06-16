@@ -62,21 +62,21 @@ La migración a **PostgreSQL** y **Prisma ORM** proporciona transacciones con pr
 ### 3.1 Modelo Entidad-Relación Conceptual (MER - Chen)
 El modelo conceptual representa el dominio del negocio a través de Entidades (rectángulos), Relaciones (rombos) y Atributos (óvalos), expresando las cardinalidades y asociaciones sin restricciones de implementación física.
 
-![Modelo Entidad-Relación Conceptual](./modelo_entidad_relacion_conceptual.png)
+![Modelo Entidad-Relación Conceptual (MER)](./modelo_entidad_relacion_conceptual.png)
 
 ---
 
 ### 3.2 Modelo Relacional Lógico (MR - Crow's Foot)
 El modelo relacional detalla la implementación lógica en tablas con tipos de datos concretos, llaves primarias (`PK`), llaves foráneas (`FK`), valores por defecto y relaciones cardinales en formato de patas de gallo.
 
-![Modelo Relacional](./modelo_relacional.png)
+![Modelo Relacional (MR)](./modelo_relacional.png)
 
 ---
 
 ### 3.3 Modelo Orientado a Objetos (MOO - Diagrama de Clases UML)
 Muestra el mapeo objeto-relacional (ORM) implementado en la capa de persistencia del backend, detallando atributos de clase, métodos CRUD y las operaciones automatizadas por los triggers en base de datos representadas como clases.
 
-![Modelo Orientado a Objetos](./modelo_orientado_objetos.png)
+![Modelo Orientado a Objetos (MOO)](./modelo_orientado_objetos.png)
 
 ---
 

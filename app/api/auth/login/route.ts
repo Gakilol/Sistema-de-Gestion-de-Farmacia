@@ -23,6 +23,11 @@ export async function POST(request: NextRequest) {
     })
 
     if (!usuario) {
+      registrarLog({
+        accion: "LOGIN_FALLIDO",
+        entidad: "Usuario",
+        detalles: { correo, motivo: "Usuario no registrado" },
+      })
       return NextResponse.json(
         { error: "Credenciales inválidas" },
         { status: 401 }
@@ -30,6 +35,12 @@ export async function POST(request: NextRequest) {
     }
 
     if (!usuario.activo) {
+      registrarLog({
+        accion: "LOGIN_FALLIDO",
+        entidad: "Usuario",
+        entidadId: usuario.id,
+        detalles: { correo, motivo: "Usuario inactivo" },
+      })
       return NextResponse.json(
         { error: "Usuario desactivado" },
         { status: 401 }
@@ -39,6 +50,12 @@ export async function POST(request: NextRequest) {
     // Verificar contraseña (campo passwordHash en tu schema)
     const passwordMatch = await bcrypt.compare(password, usuario.passwordHash)
     if (!passwordMatch) {
+      registrarLog({
+        accion: "LOGIN_FALLIDO",
+        entidad: "Usuario",
+        entidadId: usuario.id,
+        detalles: { correo, motivo: "Contraseña incorrecta" },
+      })
       return NextResponse.json(
         { error: "Credenciales inválidas" },
         { status: 401 }
@@ -75,9 +92,9 @@ export async function POST(request: NextRequest) {
       maxAge: 7 * 24 * 60 * 60, // 7 días
     })
 
-    // Registrar auditoría de inicio de sesión
+    // Registrar auditoría de inicio de sesión exitoso
     registrarLog({
-      accion: "INICIO_SESION",
+      accion: "LOGIN_EXITOSO",
       entidad: "Usuario",
       entidadId: usuario.id,
       idUsuario: usuario.id,
