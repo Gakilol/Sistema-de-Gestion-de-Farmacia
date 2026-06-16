@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Plus, Edit2, Trash2, Users, Search } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
+import { toast } from "sonner"
+import { clienteSchema } from "@/lib/validations"
 
 interface Cliente {
   id: number
@@ -51,13 +53,10 @@ export default function ClientesPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Importación dinámica o arriba
-    const { clienteSchema } = require("@/lib/validations");
     const validation = clienteSchema.safeParse(formData);
     
     if (!validation.success) {
-      const { toast } = require("sonner");
-      validation.error.errors.forEach((err: any) => {
+      validation.error.issues.forEach((err: any) => {
         toast.error(err.message);
       });
       return;
@@ -70,19 +69,16 @@ export default function ClientesPage() {
       
       const data = await res.json()
       if (res.ok) {
-        const { toast } = require("sonner");
         toast.success(editingId ? "Cliente actualizado" : "Cliente creado exitosamente");
         setFormData({ nombreCompleto: "", cedula: "", telefono: "", correo: "", direccion: "" })
         setEditingId(null)
         setShowForm(false)
         fetchClientes()
       } else {
-        const { toast } = require("sonner");
         toast.error(data.error || "Error al guardar el cliente");
       }
     } catch (error) { 
       console.error("Error:", error)
-      const { toast } = require("sonner");
       toast.error("Error de conexión");
     }
   }
@@ -121,12 +117,10 @@ export default function ClientesPage() {
     try {
       const res = await fetch(`/api/clientes/${cliente.id}`, { method: "DELETE" })
       if (res.ok) {
-        const { toast } = require("sonner");
         toast.success("Cliente eliminado permanentemente");
         fetchClientes();
       } else {
         const data = await res.json();
-        const { toast } = require("sonner");
         toast.error(data.error || "No se pudo eliminar el cliente");
       }
     } catch (error) {

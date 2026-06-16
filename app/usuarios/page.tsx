@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Plus, ToggleRight, ToggleLeft, Settings, Eye, EyeOff } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
+import { usuarioSchema } from "@/lib/validations"
 
 interface Usuario {
   id: number
@@ -48,11 +49,10 @@ export default function UsuariosPage() {
       return
     }
 
-    const { usuarioSchema } = require("@/lib/validations");
     const validation = usuarioSchema.safeParse(formData);
     
     if (!validation.success) {
-      validation.error.errors.forEach((err: any) => {
+      validation.error.issues.forEach((err: any) => {
         toast.error(err.message);
       });
       return;

@@ -1616,7 +1616,6 @@ export default function ProductosPage() {
         onScan={(code) => {
           setScannerOpen(false)
           setCodigoBarras(code)
-          const { toast } = require("sonner")
           toast.success("Código de barras escaneado")
         }}
         title="Escanear Código de Barras"
