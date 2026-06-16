@@ -715,16 +715,16 @@ export default function ProductosPage() {
               <form onSubmit={handleSaveProducto} className="space-y-5">
 
                 {/* ─── SECCIÓN 1: INFORMACIÓN BÁSICA ─── */}
-                <div className="rounded-lg border border-blue-100 bg-white p-5 shadow-sm">
+                <div className="rounded-lg border border-blue-100/30 dark:border-blue-950/40 bg-card p-5 shadow-sm text-card-foreground">
                   <div className="flex items-center gap-2 mb-4">
-                    <div className="p-1.5 bg-blue-100 rounded-md">
-                      <Package className="w-4 h-4 text-blue-600" />
+                    <div className="p-1.5 bg-blue-100/50 dark:bg-blue-950/50 rounded-md">
+                      <Package className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                     </div>
-                    <h3 className="text-sm font-semibold text-blue-800">Información Básica</h3>
+                    <h3 className="text-sm font-semibold text-blue-800 dark:text-blue-300">Información Básica</h3>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label className="block text-sm font-medium text-foreground/80 mb-1">
                         Nombre del producto <span className="text-red-500">*</span>
                       </label>
                       <Input
@@ -732,11 +732,12 @@ export default function ProductosPage() {
                         onChange={(e) => setNombre(e.target.value)}
                         placeholder="Ej: Paracetamol 500mg"
                         required
+                        className="bg-background border-border text-foreground"
                       />
-                      <p className="text-xs text-gray-400 mt-1">Nombre comercial o genérico del medicamento.</p>
+                      <p className="text-xs text-muted-foreground mt-1">Nombre comercial o genérico del medicamento.</p>
                     </div>
                     <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
+                      <label className="block text-sm font-medium text-foreground/80 mb-1 flex items-center justify-between">
                         <span>Categoría <span className="text-red-500">*</span></span>
                         <button type="button" onClick={() => setShowCategoryModal(true)} className="text-xs text-primary flex items-center hover:underline">
                           <Settings className="w-3 h-3 mr-1" />
@@ -744,47 +745,47 @@ export default function ProductosPage() {
                         </button>
                       </label>
                       <select
-                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-all bg-white text-foreground"
+                        className="w-full rounded-md border border-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all bg-background text-foreground"
                         value={idCategoria}
                         onChange={(e) => setIdCategoria(e.target.value)}
                         required
                       >
-                        <option value="">Selecciona una categoría</option>
+                        <option value="" className="bg-popover text-foreground">Selecciona una categoría</option>
                         {categorias.map((cat) => (
-                          <option key={cat.id} value={cat.id}>
+                          <option key={cat.id} value={cat.id} className="bg-popover text-foreground">
                             {cat.nombre}
                           </option>
                         ))}
                       </select>
-                      <p className="text-xs text-gray-400 mt-1">Grupo al que pertenece el producto (Analgésicos, Antibióticos, etc.).</p>
+                      <p className="text-xs text-muted-foreground mt-1">Grupo al que pertenece el producto (Analgésicos, Antibióticos, etc.).</p>
                     </div>
                   </div>
                 </div>
 
                 {/* ─── SECCIÓN 2: DESCRIPCIÓN Y DETALLES ─── */}
-                <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+                <div className="rounded-lg border border-border/60 dark:border-slate-800/40 bg-card p-5 shadow-sm text-card-foreground">
                   <div className="flex items-center gap-2 mb-4">
-                    <div className="p-1.5 bg-blue-50 rounded-md border border-blue-100">
-                      <Info className="w-4 h-4 text-blue-500" />
+                    <div className="p-1.5 bg-blue-50/50 dark:bg-blue-950/20 rounded-md border border-blue-100/30 dark:border-blue-950/50">
+                      <Info className="w-4 h-4 text-blue-500 dark:text-blue-400" />
                     </div>
-                    <h3 className="text-sm font-semibold text-gray-700">Descripción y Detalles</h3>
-                    <span className="ml-auto text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Opcional</span>
+                    <h3 className="text-sm font-semibold text-foreground/90">Descripción y Detalles</h3>
+                    <span className="ml-auto text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">Opcional</span>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
+                      <label className="block text-sm font-medium text-foreground/80 mb-1">Descripción</label>
                       <textarea
                         value={descripcion}
                         onChange={(e) => setDescripcion(e.target.value)}
-                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 outline-none min-h-[80px] bg-white text-foreground"
+                        className="w-full rounded-md border border-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 outline-none min-h-[80px] bg-background text-foreground"
                         placeholder="Ej: Analgésico y antipirético para el dolor y la fiebre."
                       />
-                      <p className="text-xs text-gray-400 mt-1">Indicaciones, observaciones o detalles especiales del producto.</p>
+                      <p className="text-xs text-muted-foreground mt-1">Indicaciones, observaciones o detalles especiales del producto.</p>
                     </div>
                     <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Código de Barras</label>
+                      <label className="block text-sm font-medium text-foreground/80 mb-1">Código de Barras</label>
                       <div className="flex gap-2">
-                        <Input value={codigoBarras} onChange={(e) => setCodigoBarras(e.target.value)} placeholder="Ej: 7441001123456" />
+                        <Input value={codigoBarras} onChange={(e) => setCodigoBarras(e.target.value)} placeholder="Ej: 7441001123456" className="bg-background border-border text-foreground" />
                         <Button
                           type="button"
                           variant="outline"
@@ -795,22 +796,22 @@ export default function ProductosPage() {
                           <ScanLine className="w-4 h-4" />
                         </Button>
                       </div>
-                      <p className="text-xs text-gray-400 mt-1">Opcional. Código de barras del producto.</p>
+                      <p className="text-xs text-muted-foreground mt-1">Opcional. Código de barras del producto.</p>
                     </div>
                   </div>
                 </div>
 
                 {/* ─── SECCIÓN 3: PRECIOS ─── */}
-                <div className="rounded-lg border border-green-100 bg-white p-5 shadow-sm">
+                <div className="rounded-lg border border-green-100/30 dark:border-emerald-950/40 bg-card p-5 shadow-sm text-card-foreground">
                   <div className="flex items-center gap-2 mb-4">
-                    <div className="p-1.5 bg-green-100 rounded-md">
-                      <DollarSign className="w-4 h-4 text-green-600" />
+                    <div className="p-1.5 bg-green-100/50 dark:bg-emerald-950/50 rounded-md">
+                      <DollarSign className="w-4 h-4 text-green-600 dark:text-emerald-400" />
                     </div>
-                    <h3 className="text-sm font-semibold text-green-800">Precios</h3>
+                    <h3 className="text-sm font-semibold text-green-800 dark:text-emerald-300">Precios</h3>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Precio de compra (C$)</label>
+                      <label className="block text-sm font-medium text-foreground/80 mb-1">Precio de compra (C$)</label>
                       <Input
                         type="number"
                         step="0.01"
@@ -818,11 +819,12 @@ export default function ProductosPage() {
                         value={precioCompra}
                         onChange={(e) => handlePrecioCompraChange(e.target.value)}
                         placeholder="Ej: 2.00"
+                        className="bg-background border-border text-foreground"
                       />
-                      <p className="text-xs text-gray-400 mt-1">Lo que pagaste al proveedor por unidad.</p>
+                      <p className="text-xs text-muted-foreground mt-1">Lo que pagaste al proveedor por unidad.</p>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label className="block text-sm font-medium text-foreground/80 mb-1">
                         Precio de venta por unidad (C$) <span className="text-red-500">*</span>
                         {precioVentaError && (
                           <span className="text-xs text-red-500 font-normal ml-1">— {precioVentaError}</span>
@@ -835,13 +837,13 @@ export default function ProductosPage() {
                         value={precioVenta}
                         onChange={(e) => handlePrecioVentaChange(e.target.value)}
                         placeholder="Ej: 5.00"
-                        className={precioVentaError ? "border-red-400 focus:ring-red-200 focus:border-red-400" : ""}
+                        className={precioVentaError ? "border-destructive focus:ring-destructive/20 bg-background text-foreground" : "bg-background border-border text-foreground"}
                       />
-                      <p className="text-xs text-gray-400 mt-1">Precio al público por 1 pastilla o unidad suelta.</p>
+                      <p className="text-xs text-muted-foreground mt-1">Precio al público por 1 pastilla o unidad suelta.</p>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Precio por blíster (C$) <span className="text-gray-400 font-normal text-xs">— opcional</span>
+                      <label className="block text-sm font-medium text-foreground/80 mb-1">
+                        Precio por blíster (C$) <span className="text-muted-foreground font-normal text-xs">— opcional</span>
                       </label>
                       <Input
                         type="number"
@@ -850,16 +852,17 @@ export default function ProductosPage() {
                         value={precioBlister}
                         onChange={(e) => setPrecioBlister(e.target.value)}
                         placeholder="Ej: 45.00"
+                        className="bg-background border-border text-foreground"
                       />
                       {precioCompra && unidadesPorBlister && calcSugerido(precioCompra, unidadesPorBlister) ? (
-                        <p className="text-xs text-emerald-600 font-medium mt-1">💡 Sugerido (20%): C${calcSugerido(precioCompra, unidadesPorBlister)}</p>
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-1">💡 Sugerido (20%): C${calcSugerido(precioCompra, unidadesPorBlister)}</p>
                       ) : (
-                        <p className="text-xs text-gray-400 mt-1">Precio al vender un blíster completo.</p>
+                        <p className="text-xs text-muted-foreground mt-1">Precio al vender un blíster completo.</p>
                       )}
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Precio por caja (C$) <span className="text-gray-400 font-normal text-xs">— opcional</span>
+                      <label className="block text-sm font-medium text-foreground/80 mb-1">
+                        Precio por caja (C$) <span className="text-muted-foreground font-normal text-xs">— opcional</span>
                       </label>
                       <Input
                         type="number"
@@ -868,71 +871,74 @@ export default function ProductosPage() {
                         value={precioCaja}
                         onChange={(e) => setPrecioCaja(e.target.value)}
                         placeholder="Ej: 400.00"
+                        className="bg-background border-border text-foreground"
                       />
                       {precioCompra && unidadesPorCaja && calcSugerido(precioCompra, unidadesPorCaja) ? (
-                        <p className="text-xs text-emerald-600 font-medium mt-1">💡 Sugerido (20%): C${calcSugerido(precioCompra, unidadesPorCaja)}</p>
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-1">💡 Sugerido (20%): C${calcSugerido(precioCompra, unidadesPorCaja)}</p>
                       ) : (
-                        <p className="text-xs text-gray-400 mt-1">Precio al vender la caja cerrada completa.</p>
+                        <p className="text-xs text-muted-foreground mt-1">Precio al vender la caja cerrada completa.</p>
                       )}
                     </div>
                   </div>
                 </div>
 
                 {/* ─── SECCIÓN 4: EMPAQUE / PRESENTACIÓN ─── */}
-                <div className="rounded-lg border border-purple-100 bg-white p-5 shadow-sm">
+                <div className="rounded-lg border border-purple-100/30 dark:border-purple-950/40 bg-card p-5 shadow-sm text-card-foreground">
                   <div className="flex items-center gap-2 mb-3">
-                    <div className="p-1.5 bg-purple-100 rounded-md">
-                      <Layers className="w-4 h-4 text-purple-600" />
+                    <div className="p-1.5 bg-purple-100/50 dark:bg-purple-950/50 rounded-md">
+                      <Layers className="w-4 h-4 text-purple-600 dark:text-purple-400" />
                     </div>
-                    <h3 className="text-sm font-semibold text-purple-800">Empaque / Presentación</h3>
-                    <span className="ml-auto text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full">Opcional</span>
+                    <h3 className="text-sm font-semibold text-purple-800 dark:text-purple-300">Empaque / Presentación</h3>
+                    <span className="ml-auto text-xs bg-purple-100/50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 px-2 py-0.5 rounded-full">Opcional</span>
                   </div>
-                  <div className="flex items-start gap-2 bg-purple-50 border border-purple-100 rounded-lg px-3 py-2.5 mb-4 text-xs text-purple-700">
+                  <div className="flex items-start gap-2 bg-purple-50/50 dark:bg-purple-950/20 border border-purple-100/30 dark:border-purple-900/30 rounded-lg px-3 py-2.5 mb-4 text-xs text-purple-700 dark:text-purple-300">
                     <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                     <span>Define cuántas unidades tiene cada presentación. Esto permite que al vender por blíster o caja, el sistema descuente automáticamente las unidades correctas del stock.</span>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Unidades por blíster</label>
+                      <label className="block text-sm font-medium text-foreground/80 mb-1">Unidades por blíster</label>
                       <Input
                         type="number"
                         min="1"
                         value={unidadesPorBlister}
                         onChange={(e) => handleUnidadesPorBlisterChange(e.target.value)}
                         placeholder="Ej: 10"
+                        className="bg-background border-border text-foreground"
                       />
-                      <p className="text-xs text-gray-400 mt-1">¿Cuántas pastillas trae cada blíster?</p>
+                      <p className="text-xs text-muted-foreground mt-1">¿Cuántas pastillas trae cada blíster?</p>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Unidades por caja</label>
+                      <label className="block text-sm font-medium text-foreground/80 mb-1">Unidades por caja</label>
                       <Input
                         type="number"
                         min="1"
                         value={unidadesPorCaja}
                         onChange={(e) => handleUnidadesPorCajaChange(e.target.value)}
                         placeholder="Ej: 100"
+                        className="bg-background border-border text-foreground"
                       />
-                      <p className="text-xs text-gray-400 mt-1">¿Cuántas pastillas trae la caja completa?</p>
+                      <p className="text-xs text-muted-foreground mt-1">¿Cuántas pastillas trae la caja completa?</p>
                     </div>
                   </div>
                 </div>
 
                 {/* ─── SECCIÓN 5: ALERTAS DE STOCK ─── */}
-                <div className="rounded-lg border border-amber-100 bg-white p-5 shadow-sm">
+                <div className="rounded-lg border border-amber-100/30 dark:border-amber-950/40 bg-card p-5 shadow-sm text-card-foreground">
                   <div className="flex items-center gap-2 mb-3">
-                    <div className="p-1.5 bg-amber-100 rounded-md">
-                      <BarChart3 className="w-4 h-4 text-amber-600" />
+                    <div className="p-1.5 bg-amber-100/50 dark:bg-amber-950/50 rounded-md">
+                      <BarChart3 className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                     </div>
-                    <h3 className="text-sm font-semibold text-amber-800">Alertas de Stock</h3>
+                    <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-300">Alertas de Stock</h3>
                   </div>
-                  <div className="flex items-start gap-2 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2.5 mb-4 text-xs text-amber-700">
+                  <div className="flex items-start gap-2 bg-amber-50/50 dark:bg-amber-950/20 border border-amber-100/30 dark:border-amber-900/30 rounded-lg px-3 py-2.5 mb-4 text-xs text-amber-700 dark:text-amber-300">
                     <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                     <span>El stock actual se gestiona automáticamente mediante compras. Aquí solo defines el umbral mínimo para recibir alertas de reabastecimiento.</span>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-xl">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Stock mínimo <span className="text-gray-400 font-normal text-xs">— alerta automática</span>
+                      <label className="block text-sm font-medium text-foreground/80 mb-1">
+                        Stock mínimo <span className="text-muted-foreground font-normal text-xs">— alerta automática</span>
                       </label>
                       <Input
                         type="number"
@@ -940,14 +946,15 @@ export default function ProductosPage() {
                         value={stockMinimo}
                         onChange={(e) => setStockMinimo(e.target.value)}
                         placeholder="Ej: 50"
+                        className="bg-background border-border text-foreground"
                       />
-                      <p className="text-xs text-gray-400 mt-1">Si el stock baja de este número, recibirás una alerta para reabastecer.</p>
+                      <p className="text-xs text-muted-foreground mt-1">Si el stock baja de este número, recibirás una alerta para reabastecer.</p>
                     </div>
                     {!editingId && (
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:col-span-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:col-span-2 border-t border-border/30 pt-4 mt-2">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Stock inicial <span className="text-gray-400 font-normal text-xs">— cantidad física</span>
+                          <label className="block text-sm font-medium text-foreground/80 mb-1">
+                            Stock inicial <span className="text-muted-foreground font-normal text-xs">— cantidad física</span>
                           </label>
                           <Input
                             type="number"
@@ -955,43 +962,42 @@ export default function ProductosPage() {
                             value={stockInicial}
                             onChange={(e) => setStockInicial(e.target.value)}
                             placeholder="Ej: 100"
+                            className="bg-background border-border text-foreground"
                           />
-                          <p className="text-xs text-gray-400 mt-1">Cantidad inicial de unidades físicas.</p>
+                          <p className="text-xs text-muted-foreground mt-1">Cantidad inicial de unidades físicas.</p>
                         </div>
-                        {stockInicial && parseInt(stockInicial) > 0 && (
-                          <>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Código de Lote Inicial
-                              </label>
-                              <Input
-                                type="text"
-                                value={loteInicial}
-                                onChange={(e) => setLoteInicial(e.target.value)}
-                                placeholder="Ej: LOT-INICIAL-01"
-                              />
-                              <p className="text-xs text-gray-400 mt-1">Código del lote para el stock inicial.</p>
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Fecha de Vencimiento Inicial
-                              </label>
-                              <Input
-                                type="date"
-                                value={fechaVencimientoInicial}
-                                onChange={(e) => setFechaVencimientoInicial(e.target.value)}
-                              />
-                              <p className="text-xs text-gray-400 mt-1">Fecha de vencimiento del lote inicial.</p>
-                            </div>
-                          </>
-                        )}
+                        <div>
+                          <label className="block text-sm font-medium text-foreground/80 mb-1">
+                            Código de Lote Inicial
+                          </label>
+                          <Input
+                            type="text"
+                            value={loteInicial}
+                            onChange={(e) => setLoteInicial(e.target.value)}
+                            placeholder="Ej: LOT-INICIAL-01"
+                            className="bg-background border-border text-foreground"
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">Código del lote para el stock inicial.</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-foreground/80 mb-1">
+                            Fecha de Vencimiento Inicial
+                          </label>
+                          <Input
+                            type="date"
+                            value={fechaVencimientoInicial}
+                            onChange={(e) => setFechaVencimientoInicial(e.target.value)}
+                            className="bg-background border-border text-foreground"
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">Fecha de vencimiento del lote inicial.</p>
+                        </div>
                       </div>
                     )}
                   </div>
                 </div>
 
                 {formError && (
-                  <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2">
+                  <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg flex items-center gap-2">
                     <HelpCircle className="w-4 h-4 shrink-0" />
                     {formError}
                   </div>
@@ -1003,7 +1009,7 @@ export default function ProductosPage() {
                   </Button>
                   <Button
                     type="submit"
-                    className="bg-green-600 hover:bg-green-700"
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground"
                     disabled={formLoading}
                   >
                     {formLoading
@@ -1112,13 +1118,13 @@ export default function ProductosPage() {
                               </span>
                             )}
                             {Number(producto.precioBlister) > 0 && (
-                              <span className="text-xs text-emerald-600">
-                                C${Number(producto.precioBlister).toFixed(2)} <span className="text-[10px] text-emerald-500/80 font-normal">/blis</span>
+                              <span className="text-xs text-emerald-600 dark:text-emerald-400">
+                                C${Number(producto.precioBlister).toFixed(2)} <span className="text-[10px] text-emerald-500/80 dark:text-emerald-400/80 font-normal">/blis</span>
                               </span>
                             )}
                             {Number(producto.precioCaja) > 0 && (
-                              <span className="text-xs text-purple-600">
-                                C${Number(producto.precioCaja).toFixed(2)} <span className="text-[10px] text-purple-500/80 font-normal">/caja</span>
+                              <span className="text-xs text-purple-600 dark:text-purple-400">
+                                C${Number(producto.precioCaja).toFixed(2)} <span className="text-[10px] text-purple-500/80 dark:text-purple-400/80 font-normal">/caja</span>
                               </span>
                             )}
                             {!(Number(producto.precioVenta) > 0 || Number(producto.precioBlister) > 0 || Number(producto.precioCaja) > 0) && (
@@ -1137,16 +1143,16 @@ export default function ProductosPage() {
                                 {(s.cajas !== null || s.blisters !== null) && (
                                   <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
                                     {s.cajas !== null && (
-                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-100 text-orange-700 border border-orange-200 shadow-sm">
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/20 shadow-sm">
                                         {s.cajas} Caj
                                       </span>
                                     )}
                                     {s.blisters !== null && (
-                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-sm">
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-sm">
                                         {s.blisters} Blis
                                       </span>
                                     )}
-                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-700 border border-blue-200 shadow-sm">
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200/30 dark:border-blue-500/20 shadow-sm">
                                       {s.sueltas} Uds
                                     </span>
                                   </div>
@@ -1393,8 +1399,8 @@ export default function ProductosPage() {
 
                 <div className="flex-1 overflow-y-auto space-y-6 pr-1">
                   {/* Fila 1: Presentaciones y Precios */}
-                  <div className="rounded-lg border border-emerald-100 bg-emerald-50/20 p-4">
-                    <h3 className="text-sm font-semibold text-emerald-800 mb-3 flex items-center gap-2">
+                  <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4">
+                    <h3 className="text-sm font-semibold text-emerald-800 dark:text-emerald-300 mb-3 flex items-center gap-2">
                       <DollarSign className="w-4 h-4" />
                       Precios y Presentaciones
                     </h3>
@@ -1403,8 +1409,8 @@ export default function ProductosPage() {
                       <div className="bg-background/60 p-3 rounded-lg border border-border">
                         <p className="text-xs text-muted-foreground font-medium">Unidad Individual</p>
                         <div className="mt-1 space-y-1">
-                          <p className="text-xs text-gray-500">Compra: <span className="font-semibold text-foreground">C${Number(selectedProduct.precioCompra || 0).toFixed(2)}</span></p>
-                          <p className="text-sm font-bold text-emerald-600">Venta: C${Number(selectedProduct.precioVenta).toFixed(2)}</p>
+                          <p className="text-xs text-muted-foreground">Compra: <span className="font-semibold text-foreground">C${Number(selectedProduct.precioCompra || 0).toFixed(2)}</span></p>
+                          <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">Venta: C${Number(selectedProduct.precioVenta).toFixed(2)}</p>
                         </div>
                       </div>
 
@@ -1412,8 +1418,8 @@ export default function ProductosPage() {
                       <div className="bg-background/60 p-3 rounded-lg border border-border">
                         <p className="text-xs text-muted-foreground font-medium">Por Blister</p>
                         <div className="mt-1 space-y-1">
-                          <p className="text-xs text-gray-500">Capacidad: <span className="font-medium text-foreground">{selectedProduct.unidadesPorBlister ? `${selectedProduct.unidadesPorBlister} uds` : "No define"}</span></p>
-                          <p className="text-sm font-bold text-emerald-600">
+                          <p className="text-xs text-muted-foreground">Capacidad: <span className="font-medium text-foreground">{selectedProduct.unidadesPorBlister ? `${selectedProduct.unidadesPorBlister} uds` : "No define"}</span></p>
+                          <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
                             Venta: {selectedProduct.precioBlister ? `C$${Number(selectedProduct.precioBlister).toFixed(2)}` : "—"}
                           </p>
                         </div>
@@ -1423,8 +1429,8 @@ export default function ProductosPage() {
                       <div className="bg-background/60 p-3 rounded-lg border border-border">
                         <p className="text-xs text-muted-foreground font-medium">Por Caja</p>
                         <div className="mt-1 space-y-1">
-                          <p className="text-xs text-gray-500">Capacidad: <span className="font-medium text-foreground">{selectedProduct.unidadesPorCaja ? `${selectedProduct.unidadesPorCaja} uds` : "No define"}</span></p>
-                          <p className="text-sm font-bold text-emerald-600">
+                          <p className="text-xs text-muted-foreground">Capacidad: <span className="font-medium text-foreground">{selectedProduct.unidadesPorCaja ? `${selectedProduct.unidadesPorCaja} uds` : "No define"}</span></p>
+                          <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
                             Venta: {selectedProduct.precioCaja ? `C$${Number(selectedProduct.precioCaja).toFixed(2)}` : "—"}
                           </p>
                         </div>
@@ -1434,8 +1440,8 @@ export default function ProductosPage() {
 
                   {/* Fila 2: Inventario y Alertas */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="rounded-lg border border-amber-100 bg-amber-50/20 p-4">
-                      <h3 className="text-sm font-semibold text-amber-800 mb-3 flex items-center gap-2">
+                    <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4">
+                      <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-300 mb-3 flex items-center gap-2">
                         <BarChart3 className="w-4 h-4" />
                         Inventario
                       </h3>
@@ -1451,16 +1457,16 @@ export default function ProductosPage() {
                                   {(s.cajas !== null || s.blisters !== null) && (
                                     <div className="flex items-center gap-1.5 flex-wrap">
                                       {s.cajas !== null && (
-                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-700 border border-orange-200">
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/20">
                                           {s.cajas} Caj
                                         </span>
                                       )}
                                       {s.blisters !== null && (
-                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200">
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                                           {s.blisters} Blis
                                         </span>
                                       )}
-                                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-200">
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200/30 dark:border-blue-500/20">
                                         {s.sueltas} Uds
                                       </span>
                                     </div>
@@ -1470,7 +1476,7 @@ export default function ProductosPage() {
                             })()}
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-2 pt-1 border-t border-amber-100">
+                        <div className="grid grid-cols-2 gap-2 pt-1 border-t border-amber-500/10">
                           <div>
                             <p className="text-xs text-muted-foreground">Mínimo Requerido</p>
                             <p className="text-sm font-semibold text-foreground">{selectedProduct.stockMinimo != null ? `${selectedProduct.stockMinimo} uds` : "—"}</p>
@@ -1478,18 +1484,18 @@ export default function ProductosPage() {
                           <div>
                             <p className="text-xs text-muted-foreground">Estado Stock</p>
                             {selectedProduct.stockActual <= (selectedProduct.stockMinimo || 0) ? (
-                              <span className="text-xs font-semibold text-red-500 bg-red-100 px-2 py-0.5 rounded-full inline-block animate-pulse">¡Stock Bajo!</span>
+                              <span className="text-xs font-semibold text-red-500 dark:text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded-full inline-block animate-pulse">¡Stock Bajo!</span>
                             ) : (
-                              <span className="text-xs font-semibold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full inline-block">Óptimo</span>
+                              <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full inline-block">Óptimo</span>
                             )}
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    <div className="rounded-lg border border-indigo-100 bg-indigo-50/20 p-4 flex flex-col justify-between">
+                    <div className="rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-4 flex flex-col justify-between">
                       <div>
-                        <h3 className="text-sm font-semibold text-indigo-800 mb-3 flex items-center gap-2">
+                        <h3 className="text-sm font-semibold text-indigo-800 dark:text-indigo-300 mb-3 flex items-center gap-2">
                           <Calendar className="w-4 h-4" />
                           Fechas Críticas
                         </h3>
@@ -1501,15 +1507,15 @@ export default function ProductosPage() {
                       {selectedProduct.fechaVencimiento && (
                         <div className="mt-2">
                           {new Date(selectedProduct.fechaVencimiento).getTime() <= new Date().getTime() ? (
-                            <span className="text-xs font-semibold text-red-600 bg-red-100 px-2 py-1 rounded-md block text-center border border-red-200">
+                            <span className="text-xs font-semibold text-red-500 dark:text-red-400 bg-red-500/10 px-2 py-1 rounded-md block text-center border border-red-500/20">
                               ⚠️ Medicamento Vencido
                             </span>
                           ) : new Date(selectedProduct.fechaVencimiento).getTime() <= new Date().getTime() + (30 * 24 * 60 * 60 * 1000) ? (
-                            <span className="text-xs font-semibold text-amber-600 bg-amber-100 px-2 py-1 rounded-md block text-center border border-amber-200 animate-pulse">
+                            <span className="text-xs font-semibold text-amber-500 dark:text-amber-400 bg-amber-500/10 px-2 py-1 rounded-md block text-center border border-amber-500/20 animate-pulse">
                               ⚠️ Vence en menos de 30 días
                             </span>
                           ) : (
-                            <span className="text-xs font-semibold text-emerald-600 bg-emerald-100 px-2 py-1 rounded-md block text-center border border-emerald-200">
+                            <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-md block text-center border border-emerald-500/20">
                               ✓ Vigente y Seguro
                             </span>
                           )}
@@ -1519,8 +1525,8 @@ export default function ProductosPage() {
                   </div>
 
                   {/* Fila 3: Lotes Activos */}
-                  <div className="rounded-lg border border-indigo-100 bg-indigo-50/20 p-4">
-                    <h3 className="text-sm font-semibold text-indigo-800 mb-3 flex items-center gap-2">
+                  <div className="rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-4">
+                    <h3 className="text-sm font-semibold text-indigo-800 dark:text-indigo-300 mb-3 flex items-center gap-2">
                       <Calendar className="w-4 h-4" />
                       Lotes Activos y Vencimientos
                     </h3>
@@ -1529,26 +1535,26 @@ export default function ProductosPage() {
                         <div className="overflow-x-auto">
                           <table className="w-full text-sm">
                             <thead>
-                              <tr className="border-b border-indigo-100 text-xs text-indigo-800 font-semibold">
+                              <tr className="border-b border-indigo-500/20 text-xs text-indigo-800 dark:text-indigo-300 font-semibold">
                                 <th className="text-left py-2 font-semibold">Código de Lote</th>
                                 <th className="text-left py-2 font-semibold">Stock Actual</th>
                                 <th className="text-left py-2 font-semibold">Fecha Vencimiento</th>
                                 {isAdmin && <th className="text-right py-2 font-semibold">Acciones</th>}
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-indigo-50/50">
+                            <tbody className="divide-y divide-indigo-500/10">
                               {selectedProduct.lotes.map((lote: any) => {
                                 const isExpired = lote.fechaVencimiento && new Date(lote.fechaVencimiento).getTime() <= new Date().getTime();
                                 const isExpiring = lote.fechaVencimiento && !isExpired && new Date(lote.fechaVencimiento).getTime() <= new Date().getTime() + (90 * 24 * 60 * 60 * 1000);
                                 return (
-                                  <tr key={lote.id} className="hover:bg-indigo-50/40">
+                                  <tr key={lote.id} className="hover:bg-indigo-500/5">
                                     <td className="py-2.5 font-medium text-foreground">{lote.codigoLote}</td>
                                     <td className="py-2.5 text-foreground">{lote.stockActual} uds</td>
                                     <td className="py-2.5">
                                       {lote.fechaVencimiento ? (
                                         <span className={`inline-flex items-center gap-1 font-semibold ${
-                                          isExpired ? "text-red-500" :
-                                          isExpiring ? "text-amber-500 animate-pulse" : "text-emerald-600"
+                                          isExpired ? "text-red-500 dark:text-red-400" :
+                                          isExpiring ? "text-amber-500 animate-pulse" : "text-emerald-600 dark:text-emerald-400"
                                         }`}>
                                           {new Date(lote.fechaVencimiento).toLocaleDateString('es-NI', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC' })}
                                           {isExpired && " (Vencido)"}
@@ -1584,8 +1590,8 @@ export default function ProductosPage() {
                   </div>
 
                   {/* Fila 4: Descripción */}
-                  <div className="rounded-lg border border-blue-100 bg-blue-50/20 p-4 space-y-4">
-                    <h3 className="text-sm font-semibold text-blue-800 mb-1 flex items-center gap-2">
+                  <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-4 space-y-4">
+                    <h3 className="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-1 flex items-center gap-2">
                       <FileText className="w-4 h-4" />
                       Descripción del Producto
                     </h3>

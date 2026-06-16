@@ -158,6 +158,37 @@ export const productoSchema = z.object({
 }, {
   message: "Las unidades por caja son obligatorias si defines un precio de caja",
   path: ["unidadesPorCaja"]
+}).refine(data => {
+  if (data.stockInicial && data.stockInicial > 0) {
+    return !!data.loteInicial && data.loteInicial.trim() !== "";
+  }
+  return true;
+}, {
+  message: "El código de lote es obligatorio cuando el stock inicial es mayor a 0",
+  path: ["loteInicial"]
+}).refine(data => {
+  if (data.stockInicial && data.stockInicial > 0) {
+    return !!data.fechaVencimientoInicial && data.fechaVencimientoInicial.trim() !== "";
+  }
+  return true;
+}, {
+  message: "La fecha de vencimiento es obligatoria cuando el stock inicial es mayor a 0",
+  path: ["fechaVencimientoInicial"]
+}).refine(data => {
+  if (data.fechaVencimientoInicial) {
+    const dateVal = new Date(data.fechaVencimientoInicial + 'T00:00:00');
+    if (isNaN(dateVal.getTime())) return false;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    dateVal.setHours(0, 0, 0, 0);
+    
+    return dateVal >= today;
+  }
+  return true;
+}, {
+  message: "La fecha de vencimiento no puede ser anterior al día de hoy",
+  path: ["fechaVencimientoInicial"]
 });
 
 export const ventaSchema = z.object({
