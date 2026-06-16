@@ -58,8 +58,13 @@ export async function POST(request: NextRequest) {
     })
 
     return NextResponse.json(proveedor, { status: 201 })
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error creating proveedor:", error)
-    return NextResponse.json({ error: "Error creating proveedor" }, { status: 500 })
+    // Expose real Prisma error in response for easier debugging
+    const message =
+      error?.meta?.target
+        ? `Ya existe un proveedor con ese ${error.meta.target.join(", ")}`
+        : error?.message || "Error al crear el proveedor"
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

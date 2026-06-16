@@ -32,9 +32,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     })
 
     return NextResponse.json(proveedor)
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error updating proveedor:", error)
-    return NextResponse.json({ error: "Error updating proveedor" }, { status: 500 })
+    const message =
+      error?.meta?.target
+        ? `Ya existe un proveedor con ese ${error.meta.target.join(", ")}`
+        : error?.message || "Error al actualizar el proveedor"
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
 

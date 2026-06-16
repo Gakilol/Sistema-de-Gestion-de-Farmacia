@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS "Auditoria" (
     "datos_nuevos" JSONB -- Estado posterior al cambio
 );
 
--- Función desencadenadora para auditoría DML genérica
+-- Función desencadenadora para auditoría DML genérica (tolerante a fallos)
 CREATE OR REPLACE FUNCTION fn_registrar_auditoria_dml()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -33,8 +33,14 @@ DECLARE
 BEGIN
     -- Capturar el usuario de la aplicación Next.js mediante variable local de sesión,
     -- o en su defecto, el usuario de la conexión de base de datos.
-    v_usuario := COALESCE(current_setting('app.current_user_id', true), session_user::text);
-    v_ip := COALESCE(current_setting('app.client_ip', true), '127.0.0.1');
+    v_usuario := COALESCE(
+        NULLIF(current_setting('app.current_user_id', true), ''),
+        session_user::text
+    );
+    v_ip := COALESCE(
+        NULLIF(current_setting('app.client_ip', true), ''),
+        '127.0.0.1'
+    );
 
     IF (TG_OP = 'DELETE') THEN
         v_datos_ant := to_jsonb(OLD);
@@ -45,8 +51,14 @@ BEGIN
         v_datos_nue := to_jsonb(NEW);
     END IF;
 
-    INSERT INTO "Auditoria" ("usuario", "accion", "modulo", "ip", "datos_anteriores", "datos_nuevos")
-    VALUES (v_usuario, TG_OP, TG_TABLE_NAME, v_ip, v_datos_ant, v_datos_nue);
+    -- Insertar en auditoría de forma tolerante a fallos
+    BEGIN
+        INSERT INTO "Auditoria" ("usuario", "accion", "modulo", "ip", "datos_anteriores", "datos_nuevos")
+        VALUES (v_usuario, TG_OP, TG_TABLE_NAME, v_ip, v_datos_ant, v_datos_nue);
+    EXCEPTION WHEN OTHERS THEN
+        -- Si falla la auditoría, NO interrumpir la operación principal
+        RAISE WARNING '[Auditoria] Error al registrar operación % en %: %', TG_OP, TG_TABLE_NAME, SQLERRM;
+    END;
 
     IF (TG_OP = 'DELETE') THEN
         RETURN OLD;
