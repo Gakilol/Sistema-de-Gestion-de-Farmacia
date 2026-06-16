@@ -23,7 +23,7 @@ export const clienteSchema = z.object({
       return trimmed;
     },
     z.string().trim().regex(nicaraguaCedulaRegex, "Formato de cédula de Nicaragua inválido (ej: 001-130605-1005A)").nullable().optional()
-  ),
+  ).nullable().optional(),
   ruc: z.preprocess(
     (val) => {
       if (val === null || val === undefined) return null;
@@ -37,7 +37,7 @@ export const clienteSchema = z.object({
       return trimmed;
     },
     z.string().trim().regex(nicaraguaRucRegex, "Formato de RUC de Nicaragua inválido (ej: 001-130605-1005A)").nullable().optional()
-  ),
+  ).nullable().optional(),
   telefono: z.preprocess(
     (val) => {
       if (val === null || val === undefined) return null;
@@ -50,7 +50,7 @@ export const clienteSchema = z.object({
       return prefix + cleanDigits;
     },
     z.string().trim().regex(/^(?:\d{8}|\+\d{8,15}|\d{9,15})$/, "El teléfono debe tener 8 dígitos o formato internacional válido").nullable().optional()
-  ),
+  ).nullable().optional(),
   correo: z.preprocess(
     (val) => {
       if (val === null || val === undefined) return null;
@@ -60,7 +60,7 @@ export const clienteSchema = z.object({
       return trimmed;
     },
     z.string().trim().email("El correo electrónico debe ser válido").nullable().optional()
-  ),
+  ).nullable().optional(),
   direccion: z.preprocess(
     (val) => {
       if (val === null || val === undefined) return null;
@@ -70,7 +70,7 @@ export const clienteSchema = z.object({
       return trimmed;
     },
     z.string().trim().nullable().optional()
-  ),
+  ).nullable().optional(),
   activo: z.boolean().optional().default(true),
 });
 
