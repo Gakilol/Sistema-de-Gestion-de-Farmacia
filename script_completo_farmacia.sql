@@ -333,12 +333,6 @@ CREATE TABLE "LogProcedimientos" (
 -- ─────────────────────────────────────────────────────────────────────────
 
 -- TRIGGER 1: RASTREO DE COMPRAS POR CLIENTE
-CREATE OR REPLACE FUNCTION fn_rastrear_compras_cliente()
-RETURNS TRIGGER AS $$
-DECLARE
-    v_id_cliente INT;
-END;
-$$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION fn_rastrear_compras_cliente()
 RETURNS TRIGGER AS $$
@@ -670,7 +664,12 @@ INSERT INTO "ProductoVentaStats" ("idProducto", "totalUnidadesVendidas", "totalV
 (4, 2, 1, 440.00, CURRENT_DATE - INTERVAL '3 days' + TIME '11:00:00'),
 (6, 1, 1, 250.00, CURRENT_DATE - INTERVAL '1 days' + TIME '09:20:00'),
 (8, 1, 1, 75.00, CURRENT_DATE - INTERVAL '2 days' + TIME '16:45:00'),
-(10, 3, 1, 105.00, CURRENT_DATE - INTERVAL '2 days' + TIME '16:45:00');
+(10, 3, 1, 105.00, CURRENT_DATE - INTERVAL '2 days' + TIME '16:45:00')
+ON CONFLICT ("idProducto") DO UPDATE SET
+    "totalUnidadesVendidas" = EXCLUDED."totalUnidadesVendidas",
+    "totalVecesVendido" = EXCLUDED."totalVecesVendido",
+    "ingresoTotal" = EXCLUDED."ingresoTotal",
+    "ultimaVenta" = EXCLUDED."ultimaVenta";
 
 INSERT INTO "ClienteProductoStats" ("idCliente", "idProducto", "totalComprado", "vecesComprado", "ultimaCompra") VALUES
 (1, 2, 1, 1, CURRENT_DATE - INTERVAL '5 days' + TIME '10:30:00'),
@@ -679,7 +678,11 @@ INSERT INTO "ClienteProductoStats" ("idCliente", "idProducto", "totalComprado", 
 (4, 3, 1, 1, CURRENT_DATE - INTERVAL '2 days' + TIME '16:45:00'),
 (4, 8, 1, 1, CURRENT_DATE - INTERVAL '2 days' + TIME '16:45:00'),
 (4, 10, 3, 1, CURRENT_DATE - INTERVAL '2 days' + TIME '16:45:00'),
-(1, 6, 1, 1, CURRENT_DATE - INTERVAL '1 days' + TIME '09:20:00');
+(1, 6, 1, 1, CURRENT_DATE - INTERVAL '1 days' + TIME '09:20:00')
+ON CONFLICT ("idCliente", "idProducto") DO UPDATE SET
+    "totalComprado" = EXCLUDED."totalComprado",
+    "vecesComprado" = EXCLUDED."vecesComprado",
+    "ultimaCompra" = EXCLUDED."ultimaCompra";
 
 -- Generar alerta inicial de stock bajo para PodoCare Crema (stockActual: 5, stockMinimo: 8)
 INSERT INTO "AlertaStockBajo" ("idProducto", "nombreProducto", "stockActual", "stockMinimo") VALUES
