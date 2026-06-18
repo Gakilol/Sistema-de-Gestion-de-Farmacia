@@ -789,3 +789,16 @@ INSERT INTO "MovimientoInventario" ("id", "idProducto", "idLote", "tipo", "canti
   (253, 3, 5, 'SALIDA_VENTA', 3, 190, 0.50, 'Venta #80', 'Salida de inventario por venta', 2, NOW());
 
 -- Carga masiva finalizada
+
+-- Sincronizar secuencias para evitar errores de llave primaria duplicada al insertar desde la UI
+SELECT setval('"Lote_id_seq"', COALESCE((SELECT MAX(id) FROM "Lote"), 0) + 1, false);
+SELECT setval('"Producto_id_seq"', COALESCE((SELECT MAX(id) FROM "Producto"), 0) + 1, false);
+SELECT setval('"MovimientoInventario_id_seq"', COALESCE((SELECT MAX(id) FROM "MovimientoInventario"), 0) + 1, false);
+SELECT setval('"Venta_id_seq"', COALESCE((SELECT MAX(id) FROM "Venta"), 0) + 1, false);
+SELECT setval('"DetalleVenta_id_seq"', COALESCE((SELECT MAX(id) FROM "DetalleVenta"), 0) + 1, false);
+SELECT setval('"Compra_id_seq"', COALESCE((SELECT MAX(id) FROM "Compra"), 0) + 1, false);
+SELECT setval('"DetalleCompra_id_seq"', COALESCE((SELECT MAX(id) FROM "DetalleCompra"), 0) + 1, false);
+SELECT setval('"CategoriaProducto_id_seq"', COALESCE((SELECT MAX(id) FROM "CategoriaProducto"), 0) + 1, false);
+SELECT setval('"Cliente_id_seq"', COALESCE((SELECT MAX(id) FROM "Cliente"), 0) + 1, false);
+SELECT setval('"Proveedor_id_seq"', COALESCE((SELECT MAX(id) FROM "Proveedor"), 0) + 1, false);
+SELECT setval('"Usuario_id_seq"', COALESCE((SELECT MAX(id) FROM "Usuario"), 0) + 1, false);
