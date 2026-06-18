@@ -8,16 +8,20 @@ export interface TokenPayload {
   nombreCompleto: string
 }
 
-if (!process.env.JWT_SECRET) {
-  throw new Error("FATAL: La variable de entorno JWT_SECRET no está definida. Configúrala en tu archivo .env.")
-}
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET)
+const secretKey = process.env.JWT_SECRET || "build_time_fallback_key_dont_use_in_production";
+const JWT_SECRET = new TextEncoder().encode(secretKey);
 
 export async function signToken(payload: TokenPayload): Promise<string> {
+  if (!process.env.JWT_SECRET && process.env.NODE_ENV === "production") {
+    throw new Error("FATAL: La variable de entorno JWT_SECRET no está definida en producción.");
+  }
   return await new SignJWT(payload as any).setProtectedHeader({ alg: "HS256" }).setExpirationTime("7d").sign(JWT_SECRET)
 }
 
 export async function verifyToken(token: string): Promise<TokenPayload | null> {
+  if (!process.env.JWT_SECRET && process.env.NODE_ENV === "production") {
+    throw new Error("FATAL: La variable de entorno JWT_SECRET no está definida en producción.");
+  }
   try {
     const verified = await jwtVerify(token, JWT_SECRET)
     return (verified.payload as unknown) as TokenPayload
