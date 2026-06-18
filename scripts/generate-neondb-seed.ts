@@ -11,8 +11,7 @@ async function generateSeed() {
   sqlStatements.push('-- Registros totales: ~350');
   sqlStatements.push('-- Generado el: ' + new Date().toISOString().split('T')[0]);
   sqlStatements.push('-- ============================================================');
-  sqlStatements.push('\n-- Desactivar triggers temporalmente para carga masiva rápida');
-  sqlStatements.push('SET session_replication_role = \'replica\';\n');
+  sqlStatements.push('\n-- Limpieza inicial de tablas');
 
   sqlStatements.push('-- Limpiar tablas existentes en orden de dependencia');
   sqlStatements.push('TRUNCATE TABLE "MovimientoInventario", "DetalleVenta", "Venta", "Lote", "DetalleCompra", "Compra", "ProveedorProducto", "Producto", "Proveedor", "CategoriaProducto", "Cliente", "Usuario", "Rol" RESTART IDENTITY CASCADE;\n');
@@ -303,8 +302,7 @@ async function generateSeed() {
   }
   sqlStatements.push(movementsStatements.join('\n') + '\n');
 
-  sqlStatements.push('-- Reactivar triggers');
-  sqlStatements.push('SET session_replication_role = \'origin\';\n');
+  sqlStatements.push('-- Carga masiva finalizada');
 
   // Guardar archivo seeds_neondb.sql
   const destPath = path.join(process.cwd(), 'prisma', 'seeds_neondb.sql');

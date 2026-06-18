@@ -4,9 +4,7 @@
 -- Generado el: 2026-06-18
 -- ============================================================
 
--- Desactivar triggers temporalmente para carga masiva rápida
-SET session_replication_role = 'replica';
-
+-- Limpieza inicial de tablas
 -- Limpiar tablas existentes en orden de dependencia
 TRUNCATE TABLE "MovimientoInventario", "DetalleVenta", "Venta", "Lote", "DetalleCompra", "Compra", "ProveedorProducto", "Producto", "Proveedor", "CategoriaProducto", "Cliente", "Usuario", "Rol" RESTART IDENTITY CASCADE;
 
@@ -790,5 +788,4 @@ INSERT INTO "MovimientoInventario" ("id", "idProducto", "idLote", "tipo", "canti
   (252, 42, 83, 'SALIDA_VENTA', 3, 190, 8.00, 'Venta #80', 'Salida de inventario por venta', 2, NOW()),
   (253, 3, 5, 'SALIDA_VENTA', 3, 190, 0.50, 'Venta #80', 'Salida de inventario por venta', 2, NOW());
 
--- Reactivar triggers
-SET session_replication_role = 'origin';
+-- Carga masiva finalizada
