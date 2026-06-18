@@ -119,7 +119,7 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
       }
 
       // Si hay detalles que por algún motivo no tuvieron movimiento registrado, hacemos un fallback seguro (no debería ocurrir)
-      const productosConMovimiento = new Set(movimientosSalida.map(m => m.idProducto))
+      const productosConMovimiento = new Set(movimientosSalida.map((m: any) => m.idProducto))
       for (const detalle of venta.detalles) {
         if (!productosConMovimiento.has(detalle.idProducto)) {
           // Devolver stock al producto

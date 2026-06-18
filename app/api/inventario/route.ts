@@ -58,10 +58,11 @@ export async function GET(request: NextRequest) {
 
     if (tab === "alertas") {
       const now = new Date()
-      const noventaDias = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000)
-      const treintaDias = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+      // Configurar días de vencimiento (por defecto 90 días)
+      const diasVencimiento = Number.parseInt(searchParams.get("diasVencimiento") || "90")
+      const maxDiasVencimiento = new Date(now.getTime() + diasVencimiento * 24 * 60 * 60 * 1000)
 
-      // Expired batches
+      // 1. Lotes vencidos
       const lotesVencidos = await prisma.lote.findMany({
         where: {
           activo: true,
@@ -72,48 +73,96 @@ export async function GET(request: NextRequest) {
         orderBy: { fechaVencimiento: "asc" },
       })
 
-      // Batches expiring within 90 days
-      const lotesPorVencer = await prisma.lote.findMany({
+      // 2. Lotes por vencer dentro del rango configurado
+      const lotesPorVencerRaw = await prisma.lote.findMany({
         where: {
           activo: true,
           stockActual: { gt: 0 },
           fechaVencimiento: {
             gt: now,
-            lte: noventaDias,
+            lte: maxDiasVencimiento,
           },
         },
         include: { producto: true },
         orderBy: { fechaVencimiento: "asc" },
       })
 
-      // Products with low stock
-      const productosStockBajo = await prisma.producto.findMany({
-        where: {
-          activo: true,
-          stockMinimo: { not: null },
-          stockActual: { lte: prisma.producto.fields.stockMinimo as any },
-        },
-        include: { categoria: true },
+      // Sub-clasificación de lotes por vencer
+      const lotesPorVencer = lotesPorVencerRaw.map(lote => {
+        let clasificacion = "informacion" // 61-90+ días
+        let diasRestantes = 0
+        if (lote.fechaVencimiento) {
+          const diffTime = new Date(lote.fechaVencimiento).getTime() - now.getTime()
+          diasRestantes = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+          if (diasRestantes <= 30) {
+            clasificacion = "critico"
+          } else if (diasRestantes <= 60) {
+            clasificacion = "advertencia"
+          }
+        }
+        return {
+          ...lote,
+          diasRestantes,
+          clasificacion,
+        }
       })
 
-      // Fallback: manual low stock filter since Prisma can't compare two columns directly
-      const todosProductos = await prisma.producto.findMany({
+      // 3. Optimización: Query de stock bajo por producto usando Raw SQL para comparar stockActual <= stockMinimo
+      // Evita cargar todos los productos en memoria.
+      const productosStockBajoRaw: any[] = await prisma.$queryRawUnsafe(`
+        SELECT p.id, p.nombre, p."stockActual", p."stockMinimo", c.nombre as "categoriaNombre"
+        FROM "Producto" p
+        INNER JOIN "CategoriaProducto" c ON p."idCategoria" = c.id
+        WHERE p.activo = true 
+          AND p."stockMinimo" IS NOT NULL 
+          AND p."stockActual" <= p."stockMinimo"
+      `)
+
+      const productosStockBajo = productosStockBajoRaw.map(p => ({
+        id: p.id,
+        nombre: p.nombre,
+        stockActual: p.stockActual,
+        stockMinimo: p.stockMinimo,
+        categoria: {
+          nombre: p.categoriaNombre
+        }
+      }))
+
+      // 4. Alertas de stock bajo por lote (Lote activo con stockActual <= 5 unidades)
+      const lotesStockBajo = await prisma.lote.findMany({
         where: {
           activo: true,
-          stockMinimo: { not: null },
+          stockActual: {
+            gt: 0,
+            lte: 5,
+          },
         },
-        include: { categoria: true },
+        include: { producto: true },
+        orderBy: { stockActual: "asc" },
       })
-      const stockBajo = todosProductos.filter(p => p.stockMinimo !== null && p.stockActual <= p.stockMinimo!)
+
+      // 5. Conteo de lotes por producto en el resumen general
+      const conteoLotesPorProductoRaw: any[] = await prisma.$queryRawUnsafe(`
+        SELECT "idProducto", COUNT(*)::int as "cantidadLotes"
+        FROM "Lote"
+        WHERE activo = true AND "stockActual" > 0
+        GROUP BY "idProducto"
+      `)
+      const conteoLotesPorProducto = Object.fromEntries(
+        conteoLotesPorProductoRaw.map(c => [c.idProducto, c.cantidadLotes])
+      )
 
       return NextResponse.json({
         lotesVencidos,
         lotesPorVencer,
-        productosStockBajo: stockBajo,
+        productosStockBajo,
+        lotesStockBajo,
+        conteoLotesPorProducto,
         resumen: {
           totalVencidos: lotesVencidos.length,
           totalPorVencer: lotesPorVencer.length,
-          totalStockBajo: stockBajo.length,
+          totalStockBajo: productosStockBajo.length,
+          totalLotesStockBajo: lotesStockBajo.length,
         },
       })
     }

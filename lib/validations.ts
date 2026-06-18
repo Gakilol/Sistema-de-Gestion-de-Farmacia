@@ -123,6 +123,9 @@ export const productoSchema = z.object({
   codigoBarras: z.string().optional().nullable(),
   descripcion: z.string().optional().nullable(),
   idCategoria: z.number({ message: "La categoría es obligatoria" }).int().positive("La categoría es obligatoria"),
+  laboratorio: z.string().optional().nullable(),
+  concentracion: z.string().optional().nullable(),
+  unidadMedida: z.string().optional().nullable(),
   precioCompra: z.preprocess((a) => (a ? parseFloat(String(a)) : null), z.number().min(0, "El precio de compra no puede ser negativo").nullable().optional()),
   precioVenta: z.preprocess((a) => (a !== null && a !== undefined && a !== "" ? parseFloat(String(a)) : 0), z.number().min(0, "El precio de venta no puede ser negativo").optional().default(0)),
   precioBlister: z.preprocess((a) => (a ? parseFloat(String(a)) : null), z.number().min(0.01, "El precio por blíster debe ser mayor a 0").nullable().optional()),
@@ -223,8 +226,16 @@ export const compraSchema = z.object({
     idProducto: z.number().int().positive("El producto es requerido"),
     cantidad: z.number().int().positive("La cantidad debe ser mayor a 0"),
     precioUnitario: z.number().min(0, "El precio unitario no puede ser negativo"),
-    lote: z.string().optional().nullable(),
-    fechaVencimiento: z.string().optional().nullable(),
+    lote: z.string().trim().min(1, "El código de lote es obligatorio y no puede estar vacío"),
+    fechaVencimiento: z.string().trim().min(1, "La fecha de vencimiento es obligatoria")
+      .refine(val => {
+        const dateVal = new Date(val + 'T00:00:00');
+        if (isNaN(dateVal.getTime())) return false;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        dateVal.setHours(0, 0, 0, 0);
+        return dateVal >= today;
+      }, { message: "La fecha de vencimiento no puede ser anterior al día de hoy" }),
   })).min(1, "La compra debe tener al menos un producto")
 });
 

@@ -16,6 +16,16 @@ import { ScannerModal } from "@/components/scanner-modal"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
+const formatDate = (d: string | null | undefined) => {
+  if (!d) return "—"
+  try {
+    const date = new Date(d)
+    return date.toLocaleDateString("es-NI", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: "UTC" })
+  } catch (e) {
+    return "—"
+  }
+}
+
 interface Categoria {
   id: number
   nombre: string
@@ -35,6 +45,12 @@ interface Producto {
   stockActual: number
   stockMinimo?: number | null
   activo: boolean
+  laboratorio?: string | null
+  concentracion?: string | null
+  unidadMedida?: string | null
+  cantidadLotes?: number
+  proximoVencimiento?: string | null
+  estadoProducto?: string
 }
 
 export default function ProductosPage() {
@@ -71,6 +87,9 @@ export default function ProductosPage() {
   const [descripcion, setDescripcion] = useState("")
   const [codigoBarras, setCodigoBarras] = useState("")
   const [idCategoria, setIdCategoria] = useState<string>("")
+  const [laboratorio, setLaboratorio] = useState("")
+  const [concentracion, setConcentracion] = useState("")
+  const [unidadMedida, setUnidadMedida] = useState("")
   const [precioCompra, setPrecioCompra] = useState("")
   const [precioVenta, setPrecioVenta] = useState("")
   const [precioBlister, setPrecioBlister] = useState("")
@@ -145,6 +164,9 @@ export default function ProductosPage() {
         idCategoria,
         codigoBarras,
         descripcion,
+        laboratorio,
+        concentracion,
+        unidadMedida,
         precioCompra,
         precioVenta,
         precioBlister,
@@ -160,6 +182,7 @@ export default function ProductosPage() {
     }
   }, [
     showForm, editingId, nombre, idCategoria, codigoBarras, descripcion,
+    laboratorio, concentracion, unidadMedida,
     precioCompra, precioVenta, precioBlister, precioCaja, unidadesPorBlister, unidadesPorCaja, stockMinimo, stockInicial,
     loteInicial, fechaVencimientoInicial
   ])
@@ -276,6 +299,9 @@ export default function ProductosPage() {
     setDescripcion("")
     setCodigoBarras("")
     setIdCategoria("")
+    setLaboratorio("")
+    setConcentracion("")
+    setUnidadMedida("")
     setPrecioCompra("")
     setPrecioVenta("")
     setPrecioBlister("")
@@ -305,6 +331,9 @@ export default function ProductosPage() {
       setDescripcion(p.descripcion || "")
       setCodigoBarras(p.codigoBarras || "")
       setIdCategoria(String(p.idCategoria))
+      setLaboratorio(p.laboratorio || "")
+      setConcentracion(p.concentracion || "")
+      setUnidadMedida(p.unidadMedida || "")
       setPrecioCompra(p.precioCompra ? String(p.precioCompra) : "")
       setPrecioVenta(p.precioVenta && Number(p.precioVenta) > 0 ? String(p.precioVenta) : "")
       setPrecioBlister(p.precioBlister && Number(p.precioBlister) > 0 ? String(p.precioBlister) : "")
@@ -331,6 +360,9 @@ export default function ProductosPage() {
         setIdCategoria(draft.idCategoria || "")
         setCodigoBarras(draft.codigoBarras || "")
         setDescripcion(draft.descripcion || "")
+        setLaboratorio(draft.laboratorio || "")
+        setConcentracion(draft.concentracion || "")
+        setUnidadMedida(draft.unidadMedida || "")
         setPrecioCompra(draft.precioCompra || "")
         setPrecioVenta(draft.precioVenta || "")
         setPrecioBlister(draft.precioBlister || "")
@@ -500,6 +532,9 @@ export default function ProductosPage() {
         codigoBarras: codigoBarras || null,
         descripcion: descripcion || null,
         idCategoria: Number(idCategoria),
+        laboratorio: laboratorio || null,
+        concentracion: concentracion || null,
+        unidadMedida: unidadMedida || null,
         precioCompra: precioCompra || null,
         stockMinimo: stockMinimo || null,
         activo: true,
@@ -735,6 +770,33 @@ export default function ProductosPage() {
                         className="bg-background border-border text-foreground"
                       />
                       <p className="text-xs text-muted-foreground mt-1">Nombre comercial o genérico del medicamento.</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground/80 mb-1">Laboratorio</label>
+                      <Input
+                        value={laboratorio}
+                        onChange={(e) => setLaboratorio(e.target.value)}
+                        placeholder="Ej: MK / Bayer"
+                        className="bg-background border-border text-foreground"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground/80 mb-1">Concentración</label>
+                      <Input
+                        value={concentracion}
+                        onChange={(e) => setConcentracion(e.target.value)}
+                        placeholder="Ej: 500 mg / 10 ml"
+                        className="bg-background border-border text-foreground"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground/80 mb-1">Unidad de Medida</label>
+                      <Input
+                        value={unidadMedida}
+                        onChange={(e) => setUnidadMedida(e.target.value)}
+                        placeholder="Ej: mg, ml, g, unidad"
+                        className="bg-background border-border text-foreground"
+                      />
                     </div>
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-foreground/80 mb-1 flex items-center justify-between">
@@ -1096,7 +1158,7 @@ export default function ProductosPage() {
                 <table className="w-full">
                   <thead className="bg-muted/30 border-b border-border">
                     <tr>
-                      {["Nombre", "Categoría", "Precio", "Stock", "Estado", ...(isAdmin ? ["Acciones"] : [])].map((h) => (
+                      {["Nombre", "Categoría", "Lotes", "Próx. Venc.", "Precio", "Stock", "Estado", ...(isAdmin ? ["Acciones"] : [])].map((h) => (
                         <th key={h} className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">{h}</th>
                       ))}
                     </tr>
@@ -1105,10 +1167,34 @@ export default function ProductosPage() {
                     {filteredProductos.map((producto) => (
                       <tr key={producto.id} className="hover:bg-muted/20 transition-colors">
                         <td className="px-6 py-4 text-sm font-medium text-foreground">
-                          {producto.nombre}
+                          <div>
+                            <p className="font-semibold text-foreground">{producto.nombre}</p>
+                            <div className="flex flex-wrap gap-x-2 text-[10px] text-muted-foreground mt-0.5">
+                              {producto.laboratorio && <span>Lab: {producto.laboratorio}</span>}
+                              {producto.concentracion && <span>Conc: {producto.concentracion}</span>}
+                            </div>
+                          </div>
                         </td>
                         <td className="px-6 py-4 text-sm text-muted-foreground">
-                          {producto.categoria.nombre}
+                          {producto.categoria?.nombre || "Sin Categoría"}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-foreground">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/20">
+                            {producto.cantidadLotes || 0} lotes
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm whitespace-nowrap">
+                          {producto.proximoVencimiento ? (
+                            <span className={`inline-flex items-center gap-1 font-semibold text-xs ${
+                              producto.estadoProducto === "vencido" ? "text-red-500" :
+                              producto.estadoProducto === "proximo_a_vencer" ? "text-amber-500" : "text-foreground"
+                            }`}>
+                              <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+                              {formatDate(producto.proximoVencimiento)}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-sm font-medium text-foreground">
                           <div className="flex flex-col gap-0.5">
@@ -1162,15 +1248,30 @@ export default function ProductosPage() {
                           })()}
                         </td>
                         <td className="px-6 py-4 text-sm">
-                          <span
-                            className={`px-3 py-1 rounded-full text-xs font-medium ${
-                              producto.activo
-                                ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
-                                : "bg-muted text-muted-foreground border border-border"
-                            }`}
-                          >
-                            {producto.activo ? "Activo" : "Inactivo"}
-                          </span>
+                          <div className="flex flex-col gap-1 items-start">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                                producto.activo
+                                  ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                                  : "bg-muted text-muted-foreground border border-border"
+                              }`}
+                            >
+                              {producto.activo ? "Activo" : "Inactivo"}
+                            </span>
+                            {producto.activo && (
+                              <>
+                                {producto.estadoProducto === "vencido" && (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/10 text-red-500 border border-red-500/20">Vencido</span>
+                                )}
+                                {producto.estadoProducto === "proximo_a_vencer" && (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20 animate-pulse">Por vencer</span>
+                                )}
+                                {producto.estadoProducto === "sin_stock" && (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-500 border border-rose-500/20">Sin stock</span>
+                                )}
+                              </>
+                            )}
+                          </div>
                         </td>
                         {isAdmin && (
                           <td className="px-6 py-4 text-sm">
@@ -1382,6 +1483,11 @@ export default function ProductosPage() {
                       </span>
                     </div>
                     <p className="text-sm text-primary font-medium mt-1">Categoría: {selectedProduct.categoria?.nombre || "Sin Categoría"}</p>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-xs text-muted-foreground">
+                      {selectedProduct.laboratorio && <span>Lab: <strong>{selectedProduct.laboratorio}</strong></span>}
+                      {selectedProduct.concentracion && <span>Conc: <strong>{selectedProduct.concentracion}</strong></span>}
+                      {selectedProduct.unidadMedida && <span>Medida: <strong>{selectedProduct.unidadMedida}</strong></span>}
+                    </div>
                   </div>
                   <div className="flex gap-2">
                     <Button 
@@ -1524,7 +1630,31 @@ export default function ProductosPage() {
                     </div>
                   </div>
 
-                  {/* Fila 3: Lotes Activos */}
+                  {/* Fila 3: Estadísticas de Ventas */}
+                  {selectedProduct.stats && (
+                    <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-4">
+                      <h3 className="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-3 flex items-center gap-2">
+                        <BarChart3 className="w-4 h-4" />
+                        Estadísticas de Ventas (Histórico)
+                      </h3>
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="bg-background/60 p-3 rounded-lg border border-border">
+                          <p className="text-xs text-muted-foreground font-medium">Unidades Vendidas</p>
+                          <p className="text-lg font-bold text-foreground mt-1">{selectedProduct.stats.totalVendidos || 0} uds</p>
+                        </div>
+                        <div className="bg-background/60 p-3 rounded-lg border border-border">
+                          <p className="text-xs text-muted-foreground font-medium">Ventas Realizadas</p>
+                          <p className="text-lg font-bold text-foreground mt-1">{selectedProduct.stats.ventasContadas || 0} trans.</p>
+                        </div>
+                        <div className="bg-background/60 p-3 rounded-lg border border-border">
+                          <p className="text-xs text-muted-foreground font-medium">Total Recaudado</p>
+                          <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-1">C${(selectedProduct.stats.totalRecaudado || 0).toFixed(2)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Fila 3.5: Lotes Activos */}
                   <div className="rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-4">
                     <h3 className="text-sm font-semibold text-indigo-800 dark:text-indigo-300 mb-3 flex items-center gap-2">
                       <Calendar className="w-4 h-4" />
@@ -1544,8 +1674,8 @@ export default function ProductosPage() {
                             </thead>
                             <tbody className="divide-y divide-indigo-500/10">
                               {selectedProduct.lotes.map((lote: any) => {
-                                const isExpired = lote.fechaVencimiento && new Date(lote.fechaVencimiento).getTime() <= new Date().getTime();
-                                const isExpiring = lote.fechaVencimiento && !isExpired && new Date(lote.fechaVencimiento).getTime() <= new Date().getTime() + (90 * 24 * 60 * 60 * 1000);
+                                const isExpired = lote.estadoLote === "vencido";
+                                const isExpiring = lote.estadoLote === "proximo_a_vencer";
                                 return (
                                   <tr key={lote.id} className="hover:bg-indigo-500/5">
                                     <td className="py-2.5 font-medium text-foreground">{lote.codigoLote}</td>
@@ -1558,7 +1688,7 @@ export default function ProductosPage() {
                                         }`}>
                                           {new Date(lote.fechaVencimiento).toLocaleDateString('es-NI', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC' })}
                                           {isExpired && " (Vencido)"}
-                                          {isExpiring && " (Próximo)"}
+                                          {isExpiring && ` (Vence en ${lote.diasRestantes}d)`}
                                         </span>
                                       ) : (
                                         <span className="text-muted-foreground">—</span>

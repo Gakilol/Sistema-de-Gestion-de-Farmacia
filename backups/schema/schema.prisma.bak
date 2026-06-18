@@ -67,9 +67,6 @@ model Producto {
   fechaVencimiento DateTime?  // Legacy field — now tracked per batch (Lote)
   idCategoria     Int
   categoria       CategoriaProducto @relation(fields: [idCategoria], references: [id])
-  laboratorio     String?
-  concentracion   String?
-  unidadMedida    String?  // "mg", "ml", "g", "unidad"
   precioCompra    Decimal @db.Decimal(10, 2)  // Average cost — auto-calculated from purchases
   precioVenta     Decimal @db.Decimal(10, 2)
   precioBlister   Decimal? @db.Decimal(10, 2)
@@ -168,9 +165,7 @@ model Lote {
 
   movimientos       MovimientoInventario[]
 
-  @@unique([idProducto, codigoLote])
   @@index([idProducto])
-  @@index([fechaVencimiento])
 }
 
 // ===== MOVIMIENTOS DE INVENTARIO (KARDEX) =====
@@ -180,12 +175,11 @@ model MovimientoInventario {
   producto        Producto  @relation(fields: [idProducto], references: [id], onDelete: Cascade)
   idLote          Int?
   lote            Lote?     @relation(fields: [idLote], references: [id], onDelete: SetNull)
-  tipo            String    // 'ENTRADA_COMPRA', 'SALIDA_VENTA', 'AJUSTE_POSITIVO', 'AJUSTE_NEGATIVO', 'DEVOLUCION', 'ELIMINACION'
+  tipo            String    // 'ENTRADA_COMPRA', 'SALIDA_VENTA', 'AJUSTE_POSITIVO', 'AJUSTE_NEGATIVO'
   cantidad        Int
   stockResultante Int       @default(0)
   costoUnitario   Decimal?  @db.Decimal(10, 2)
   referencia      String?   // e.g. 'Compra #12', 'Venta #45', 'Ajuste: Inventario Físico'
-  observacion     String?   // Motivo detallado del movimiento
   idUsuario       Int?
   usuario         Usuario?  @relation(fields: [idUsuario], references: [id], onDelete: SetNull)
   createdAt       DateTime  @default(now())
@@ -245,29 +239,15 @@ model AuditoriaLog {
 
 // ===== RECUPERACIÓN DE CONTRASEÑA =====
 model PasswordResetToken {
-  id               Int      @id @default(autoincrement())
-  correo           String
-  tokenHash        String   @unique   // SHA-256 hash del código de 6 dígitos
-  expiracion       DateTime
-  usado            Boolean  @default(false)
-  intentosFallidos Int      @default(0)  // Anti brute-force: max 5 intentos
-  ipOrigen         String?  // IP desde la cual se solicitó
-  createdAt        DateTime @default(now())
+  id         Int      @id @default(autoincrement())
+  correo     String
+  tokenHash  String   @unique   // SHA-256 hash del token real
+  expiracion DateTime
+  usado      Boolean  @default(false)
+  createdAt  DateTime @default(now())
 
   @@index([correo])
   @@index([tokenHash])
-}
-
-// ===== RATE LIMITING DE RESET DE CONTRASEÑA =====
-model PasswordResetRequest {
-  id        Int      @id @default(autoincrement())
-  correo    String
-  ip        String?
-  exitoso   Boolean  @default(false)
-  createdAt DateTime @default(now())
-
-  @@index([correo, createdAt])
-  @@index([ip, createdAt])
 }
 
 // ===== AUDITORÍA TRANSACCIONAL DML =====

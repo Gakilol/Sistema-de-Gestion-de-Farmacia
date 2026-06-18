@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-06-18T16:40:52.544Z",
+  "stats": {
+    "totalProductos": 12,
+    "productosActivos": 12,
+    "totalLotes": 12,
+    "lotesActivos": 12,
+    "totalMovimientos": 19,
+    "totalVentas": 5,
+    "totalCompras": 1,
+    "lotesVencidosConStock": 0
+  },
+  "issues": [],
+  "fixes": [],
+  "summary": {
+    "total": 0,
+    "critical": 0,
+    "warnings": 0,
+    "info": 0,
+    "autoFixed": 0
+  }
+}

@@ -11,7 +11,7 @@ import { toast } from "sonner"
 
 interface Compra { id: number; fecha: string; fechaCompra?: string; numeroFactura?: string; proveedor: { nombre: string }; total: string; detalles: Array<{ producto: { nombre: string }; cantidad: number; lote?: string; fechaVencimiento?: string; precioUnitario: string; subtotal: string }> }
 interface Proveedor { id: number; nombre: string }
-interface Producto { id: number; nombre: string; precioCompra?: string; stockActual?: number; stockMinimo?: number }
+interface Producto { id: number; nombre: string; precioCompra?: string; stockActual?: number; stockMinimo?: number; lotes?: any[] }
 interface DetalleForm { idProducto: string; cantidad: string; precioUnitario: string; lote: string; fechaVencimiento: string }
 interface ProductoStockBajo { id: number; nombre: string; stockActual: number; stockMinimo: number; cantidadOptima: number; precioCompra: number }
 
@@ -75,7 +75,7 @@ export default function ComprasPage() {
     setDetalles(nuevosDetalles)
     setReabastecimientoAplicado(true)
     setShowForm(true)
-    setWizardStep(2)
+    setWizardStep(1)
     toast.success(`✓ ${productosStockBajo.length} productos agregados al formulario de compra`)
   }
 
@@ -86,6 +86,13 @@ export default function ComprasPage() {
   }
   const handleToggleForm = () => { if (showForm) resetForm(); setShowForm(!showForm) }
 
+  const checkLoteExists = (productId: string, loteCode: string) => {
+    if (!productId || !loteCode.trim()) return false
+    const prod = productos.find(p => String(p.id) === productId)
+    if (!prod || !prod.lotes) return false
+    return prod.lotes.some((l: any) => l.codigoLote.trim().toUpperCase() === loteCode.trim().toUpperCase())
+  }
+
   const handleDetalleChange = (i: number, f: keyof DetalleForm, v: string) => {
     setDetalles(p => p.map((d, idx) => idx === i ? { ...d, [f]: v } : d))
   }
@@ -95,12 +102,32 @@ export default function ComprasPage() {
   const totalCalc = detalles.reduce((a, d) => a + Number.parseFloat(d.precioUnitario || "0") * Number.parseInt(d.cantidad || "0"), 0)
 
   const canNextStep1 = proveedorId !== ""
-  const canNextStep2 = detalles.some(d => d.idProducto && d.cantidad && d.precioUnitario)
+  const canNextStep2 = detalles.length > 0 && detalles.every(d => 
+    d.idProducto && 
+    d.cantidad && 
+    parseInt(d.cantidad) > 0 && 
+    d.precioUnitario && 
+    parseFloat(d.precioUnitario) >= 0 && 
+    d.lote.trim() !== "" && 
+    d.fechaVencimiento !== ""
+  )
 
   const handleSubmitCompra = async () => {
     setFormLoading(true)
-    const valid = detalles.filter(d => d.idProducto && d.cantidad && d.precioUnitario)
-    if (!valid.length) { toast.error("Agrega al menos un producto con cantidad y precio"); setFormLoading(false); return }
+    const valid = detalles.filter(d => d.idProducto && d.cantidad && d.precioUnitario && d.lote.trim() && d.fechaVencimiento)
+    if (valid.length !== detalles.length) {
+      toast.error("Por favor completa todos los campos (incluyendo lote y fecha de vencimiento) para cada producto.")
+      setFormLoading(false)
+      return
+    }
+
+    const todayStr = new Date().toISOString().split("T")[0]
+    const pastExpiry = detalles.find(d => d.fechaVencimiento && d.fechaVencimiento < todayStr)
+    if (pastExpiry) {
+      toast.error("La fecha de vencimiento no puede ser anterior al día de hoy.")
+      setFormLoading(false)
+      return
+    }
 
     try {
       const res = await fetch("/api/compras", {
@@ -334,15 +361,26 @@ export default function ComprasPage() {
                           </div>
                           <div>
                             <label className="block text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
-                              <Layers className="w-3 h-3" /> Código de Lote
+                              <Layers className="w-3 h-3" /> Código de Lote <span className="text-red-500">*</span>
                             </label>
                             <Input value={d.lote} onChange={e => handleDetalleChange(i, "lote", e.target.value)} placeholder="Ej: LOT-2026-A1" className="bg-muted/30 border-border" />
+                            {d.idProducto && d.lote && checkLoteExists(d.idProducto, d.lote) && (
+                              <p className="text-[10px] text-amber-500 font-semibold mt-1 leading-tight">
+                                ⚠️ Lote existente. Se sumará stock.
+                              </p>
+                            )}
                           </div>
                           <div className="sm:col-span-2">
                             <label className="block text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
-                              <Calendar className="w-3 h-3" /> Fecha de Vencimiento
+                              <Calendar className="w-3 h-3" /> Fecha de Vencimiento <span className="text-red-500">*</span>
                             </label>
-                            <Input type="date" value={d.fechaVencimiento} onChange={e => handleDetalleChange(i, "fechaVencimiento", e.target.value)} className="bg-muted/30 border-border" />
+                            <Input 
+                              type="date" 
+                              value={d.fechaVencimiento} 
+                              min={new Date().toISOString().split("T")[0]}
+                              onChange={e => handleDetalleChange(i, "fechaVencimiento", e.target.value)} 
+                              className="bg-muted/30 border-border" 
+                            />
                           </div>
                         </div>
                       </div>

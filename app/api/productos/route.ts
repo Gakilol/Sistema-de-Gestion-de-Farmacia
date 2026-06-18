@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
 import { productoSchema, emptyToNull } from "@/lib/validations"
-import { z } from "zod"
 import { registrarLog } from "@/lib/audit"
 
 // GET /api/productos?estado=activos|inactivos|todos
@@ -33,7 +32,48 @@ export async function GET(request: NextRequest) {
       orderBy: { nombre: "asc" },
     })
 
-    return NextResponse.json(productos)
+    const ahora = new Date()
+    const noventaDias = new Date(ahora.getTime() + 90 * 24 * 60 * 60 * 1000)
+
+    // Enriquecer la respuesta del GET con campos calculados profesionales
+    const productosEnriquecidos = productos.map(producto => {
+      const lotesActivos = producto.lotes || []
+      const stockTotal = lotesActivos.reduce((sum, l) => sum + l.stockActual, 0)
+      const cantidadLotes = lotesActivos.length
+
+      // Encontrar la fecha de vencimiento más próxima de los lotes activos con stock > 0
+      let proximoVencimiento: Date | null = null
+      for (const lote of lotesActivos) {
+        if (lote.fechaVencimiento && lote.stockActual > 0) {
+          const lDate = new Date(lote.fechaVencimiento)
+          if (!proximoVencimiento || lDate < proximoVencimiento) {
+            proximoVencimiento = lDate
+          }
+        }
+      }
+
+      // Determinar estadoProducto
+      let estadoProducto = "vigente"
+      if (stockTotal === 0) {
+        estadoProducto = "sin_stock"
+      } else if (proximoVencimiento) {
+        if (proximoVencimiento <= ahora) {
+          estadoProducto = "vencido"
+        } else if (proximoVencimiento <= noventaDias) {
+          estadoProducto = "proximo_a_vencer"
+        }
+      }
+
+      return {
+        ...producto,
+        stockTotal,
+        cantidadLotes,
+        proximoVencimiento: proximoVencimiento ? proximoVencimiento.toISOString() : null,
+        estadoProducto
+      }
+    })
+
+    return NextResponse.json(productosEnriquecidos)
   } catch (error) {
     console.error("Error fetching productos:", error)
     return NextResponse.json({ error: "Error fetching productos" }, { status: 500 })
@@ -53,7 +93,6 @@ export async function POST(request: NextRequest) {
       include: { rol: true },
     })
 
-    // si quieres que solo ADMIN pueda crear productos
     if (usuarioDb?.rol.nombre !== "ADMIN") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
@@ -80,6 +119,9 @@ export async function POST(request: NextRequest) {
           codigoBarras: emptyToNull(data.codigoBarras),
           descripcion: emptyToNull(data.descripcion),
           idCategoria: data.idCategoria,
+          laboratorio: emptyToNull(data.laboratorio),
+          concentracion: emptyToNull(data.concentracion),
+          unidadMedida: emptyToNull(data.unidadMedida),
           precioCompra: data.precioCompra || 0,
           precioVenta: data.precioVenta,
           precioBlister: data.precioBlister,
@@ -117,6 +159,7 @@ export async function POST(request: NextRequest) {
             costoUnitario: prod.precioCompra,
             referencia: "Stock inicial al registrar producto",
             idUsuario: user.id,
+            observacion: "Ajuste de stock inicial durante creación"
           },
         })
       }

@@ -8,7 +8,10 @@ export interface TokenPayload {
   nombreCompleto: string
 }
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || "secret_key_default_min_32_chars_long")
+if (!process.env.JWT_SECRET) {
+  throw new Error("FATAL: La variable de entorno JWT_SECRET no está definida. Configúrala en tu archivo .env.")
+}
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET)
 
 export async function signToken(payload: TokenPayload): Promise<string> {
   return await new SignJWT(payload as any).setProtectedHeader({ alg: "HS256" }).setExpirationTime("7d").sign(JWT_SECRET)
