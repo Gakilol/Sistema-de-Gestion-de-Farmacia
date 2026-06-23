@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs"
 const prisma = new PrismaClient()
 
 async function main() {
-  console.log("🌱 Iniciando seed de base de datos...")
+  console.log("🌱 Iniciando seed de base de datos de producción/limpia...")
 
   // Crear roles
   const rolAdmin = await prisma.rol.upsert({
@@ -19,7 +19,13 @@ async function main() {
     create: { nombre: "EMPLEADO" },
   })
 
-  console.log("✅ Roles creados:", rolAdmin, rolEmpleado)
+  const rolDoctor = await prisma.rol.upsert({
+    where: { nombre: "DOCTOR" },
+    update: {},
+    create: { nombre: "DOCTOR" },
+  })
+
+  console.log("✅ Roles creados:", rolAdmin.nombre, rolEmpleado.nombre, rolDoctor.nombre)
 
   // Crear usuario admin
   const passwordHash = await bcrypt.hash("password123", 10)
@@ -36,67 +42,22 @@ async function main() {
     },
   })
 
-  console.log("✅ Usuario admin creado:", adminUser)
+  console.log("✅ Usuario admin creado:", adminUser.correo)
 
-  // Crear categorías de productos
-  const categorias = [
-    { nombre: "Medicamentos", descripcion: "Medicamentos recetados" },
-    {
-      nombre: "Plantillas Ortopédicas",
-      descripcion: "Plantillas personalizadas",
-    },
-    { nombre: "Cremas y Ungüentos", descripcion: "Cremas tópicas" },
-    { nombre: "Vendajes", descripcion: "Vendajes y apósitos" },
-    { nombre: "Otros", descripcion: "Otros productos" },
-  ]
-
-  for (const cat of categorias) {
-    await prisma.categoriaProducto.upsert({
-      where: { nombre: cat.nombre },
-      update: {},
-      create: cat,
-    })
-  }
-
-  console.log("✅ Categorías creadas")
-
-  // Crear proveedor de ejemplo
-  const proveedor = await prisma.proveedor.upsert({
-    where: { nombre: "Proveedor General" },
+  // Crear usuario doctor
+  const doctorUser = await prisma.usuario.upsert({
+    where: { correo: "doctor@farmacia.com" },
     update: {},
     create: {
-      nombre: "Proveedor General",
-      telefono: "+34-900-000-000",
-      correo: "contacto@proveedor.com",
-      direccion: "Calle Principal 123",
+      nombreCompleto: "Doctor Clínica",
+      correo: "doctor@farmacia.com",
+      passwordHash,
+      idRol: rolDoctor.id,
+      activo: true,
     },
   })
 
-  console.log("✅ Proveedor creado")
-
-  // Crear productos de ejemplo
-  const catMedicamentos = await prisma.categoriaProducto.findFirst({
-    where: { nombre: "Medicamentos" },
-  })
-
-  if (catMedicamentos) {
-    await prisma.producto.upsert({
-      where: { nombre: "Ibuprofeno 400mg" },
-      update: {},
-      create: {
-        nombre: "Ibuprofeno 400mg",
-        descripcion: "Caja de 20 tabletas",
-        idCategoria: catMedicamentos.id,
-        precioCompra: 2.5,
-        precioVenta: 5.99,
-        stockActual: 100,
-        stockMinimo: 10,
-        activo: true,
-      },
-    })
-  }
-
-  console.log("✅ Productos de ejemplo creados")
+  console.log("✅ Usuario doctor creado:", doctorUser.correo)
 
   console.log("🎉 Seed completado exitosamente!")
 }
