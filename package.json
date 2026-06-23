@@ -13,7 +13,12 @@
     "prisma:seed": "prisma db seed",
     "prisma:studio": "prisma studio",
     "postinstall": "prisma generate",
-    "migrate:deploy": "prisma migrate deploy"
+    "migrate:deploy": "prisma migrate deploy",
+    "db:seed:test": "ts-node --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/seed-test-data.ts",
+    "db:cleanup:test": "ts-node --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/cleanup-test-data.ts",
+    "db:verify:test": "ts-node --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/verify-test-data.ts",
+    "test:audit": "ts-node --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/run-complete-audit-tests.ts",
+    "test:concurrency": "ts-node --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/test-concurrency.ts"
   },
   "dependencies": {
     "@prisma/client": "6.2.1",

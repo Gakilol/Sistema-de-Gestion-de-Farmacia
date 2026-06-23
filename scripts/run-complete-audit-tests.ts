@@ -21,6 +21,9 @@ function logSection(title: string) {
 async function main() {
   console.log('🏁 INICIANDO AUDITORÍA Y PRUEBAS AUTOMATIZADAS DE FARMAPOS DB...');
 
+  // Limpieza preventiva de residuos de ejecuciones fallidas previas
+  await prisma.cliente.deleteMany({ where: { nombreCompleto: 'Test Largo' } });
+
   // ==========================================
   // FASE 1: ANÁLISIS DE ESTRUCTURA
   // ==========================================
@@ -1036,7 +1039,7 @@ async function main() {
 
   // Limpiar clientes
   const clientIds = testClients.map(c => c.id);
-  await prisma.cliente.deleteMany({ where: { id: { in: clientIds } } });
+  await prisma.cliente.deleteMany({ where: { OR: [ { id: { in: clientIds } }, { nombreCompleto: 'Test Largo' } ] } });
 
   // Limpiar proveedores
   const providerIds = testProviders.map(p => p.id);
