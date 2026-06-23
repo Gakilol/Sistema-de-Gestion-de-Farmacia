@@ -22,6 +22,7 @@ model Usuario {
   idRol           Int
   rol             Rol     @relation(fields: [idRol], references: [id])
   activo          Boolean @default(true)
+  esDatoPrueba    Boolean @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -29,6 +30,9 @@ model Usuario {
   ventas          Venta[]
   auditoriaLogs   AuditoriaLog[]
   movimientos     MovimientoInventario[]
+  devoluciones    DevolucionProveedor[]
+  atenciones      AtencionPodologica[]
+  recetas         Receta[]
 }
 
 model Cliente {
@@ -40,10 +44,14 @@ model Cliente {
   ruc             String?  @unique
   direccion       String?
   activo          Boolean  @default(true)
+  esDatoPrueba    Boolean  @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   ventas          Venta[]
+  citas           Cita[]
+  atenciones      AtencionPodologica[]
+  recetas         Receta[]
 }
 
 
@@ -52,6 +60,7 @@ model CategoriaProducto {
   id              Int     @id @default(autoincrement())
   nombre          String  @unique
   descripcion     String?
+  esDatoPrueba    Boolean @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -79,6 +88,8 @@ model Producto {
   stockActual     Int     @default(0)  // Computed from Lote totals — read-only in UI
   stockMinimo     Int?
   activo          Boolean @default(true)
+  esServicio      Boolean @default(false)
+  esDatoPrueba    Boolean @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -87,6 +98,8 @@ model Producto {
   proveedores     ProveedorProducto[]
   lotes           Lote[]
   movimientos     MovimientoInventario[]
+  devoluciones    DevolucionProveedor[]
+  detallesReceta  DetalleReceta[]
 }
 
 // ===== PROVEEDORES =====
@@ -96,11 +109,13 @@ model Proveedor {
   telefono        String?
   correo          String?
   direccion       String?
+  esDatoPrueba    Boolean @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   compras         Compra[]
   productos       ProveedorProducto[]
+  devoluciones    DevolucionProveedor[]
 }
 
 // ===== CATÁLOGO PROVEEDOR-PRODUCTO =====
@@ -167,6 +182,8 @@ model Lote {
   updatedAt         DateTime  @updatedAt
 
   movimientos       MovimientoInventario[]
+  detallesVenta     DetalleVentaLote[]
+  devoluciones      DevolucionProveedor[]
 
   @@unique([idProducto, codigoLote])
   @@index([idProducto])
@@ -189,6 +206,8 @@ model MovimientoInventario {
   idUsuario       Int?
   usuario         Usuario?  @relation(fields: [idUsuario], references: [id], onDelete: SetNull)
   createdAt       DateTime  @default(now())
+
+  devoluciones    DevolucionProveedor[]
 
   @@index([idProducto])
   @@index([createdAt])
@@ -229,6 +248,8 @@ model DetalleVenta {
   tipoUnidad      String  @default("UNIDAD")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  lotes           DetalleVentaLote[]
 }
 
 // ===== AUDITORÍA =====
@@ -273,15 +294,122 @@ model PasswordResetRequest {
 // ===== AUDITORÍA TRANSACCIONAL DML =====
 model Auditoria {
   id              Int      @id @default(autoincrement())
-  usuario         String
+  usuario         String   @db.VarChar(255)
   fecha           DateTime @default(now()) @db.Date
   hora            DateTime @default(now()) @db.Time
-  accion          String
-  modulo          String
-  ip              String?
+  accion          String   @db.VarChar(50)
+  modulo          String   @db.VarChar(100)
+  ip              String?  @db.VarChar(50)
   datosAnteriores Json?    @map("datos_anteriores")
   datosNuevos     Json?    @map("datos_nuevos")
 
   @@map("Auditoria")
+}
+
+// ===== DETALLE VENTA LOTE =====
+model DetalleVentaLote {
+  id              Int          @id @default(autoincrement())
+  idDetalleVenta  Int
+  detalleVenta    DetalleVenta @relation(fields: [idDetalleVenta], references: [id], onDelete: Cascade)
+  idLote          Int
+  lote            Lote         @relation(fields: [idLote], references: [id], onDelete: Cascade)
+  cantidad        Int
+  createdAt       DateTime     @default(now())
+
+  @@unique([idDetalleVenta, idLote])
+  @@index([idDetalleVenta])
+  @@index([idLote])
+}
+
+// ===== DEVOLUCIÓN A PROVEEDOR =====
+model DevolucionProveedor {
+  id                      Int                   @id @default(autoincrement())
+  idempotencyKey          String                @unique
+  idProducto              Int
+  producto                Producto              @relation(fields: [idProducto], references: [id], onDelete: Cascade)
+  idLote                  Int
+  lote                    Lote                  @relation(fields: [idLote], references: [id], onDelete: Cascade)
+  idProveedor             Int?
+  proveedor               Proveedor?            @relation(fields: [idProveedor], references: [id], onDelete: SetNull)
+  cantidad                Int
+  motivo                  String // VENCIDO, PRÓXIMO_A_VENCER, DAÑADO, DEFECTUOSO, RETIRO_DE_LABORATORIO, ERROR_DE_COMPRA, OTRO
+  observacion             String?
+  estado                  String                @default("COMPLETADA") // COMPLETADA, ANULADA
+  idMovimientoInventario  Int?
+  movimientoInventario    MovimientoInventario? @relation(fields: [idMovimientoInventario], references: [id], onDelete: SetNull)
+  idUsuario               Int
+  usuario                 Usuario               @relation(fields: [idUsuario], references: [id])
+  fecha                   DateTime              @default(now())
+  motivoAnulacion         String?
+  esDatoPrueba            Boolean               @default(false)
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+}
+
+// ===== CITA CLÍNICA =====
+model Cita {
+  id              Int                 @id @default(autoincrement())
+  idCliente       Int
+  cliente         Cliente             @relation(fields: [idCliente], references: [id], onDelete: Cascade)
+  fecha           DateTime
+  motivo          String?
+  estado          String              @default("PENDIENTE") // PENDIENTE, COMPLETADA, CANCELADA
+  esDatoPrueba    Boolean             @default(false)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  atencion        AtencionPodologica?
+}
+
+// ===== ATENCIÓN PODOLÓGICA (SOAP) =====
+model AtencionPodologica {
+  id            Int       @id @default(autoincrement())
+  idCita        Int?      @unique
+  cita          Cita?     @relation(fields: [idCita], references: [id], onDelete: SetNull)
+  idCliente     Int
+  cliente       Cliente   @relation(fields: [idCliente], references: [id], onDelete: Cascade)
+  idUsuario     Int
+  usuario       Usuario   @relation(fields: [idUsuario], references: [id])
+  fecha         DateTime  @default(now())
+  subjetivo     String    @db.Text
+  objetivo      String    @db.Text
+  analisis      String    @db.Text
+  plan          String    @db.Text
+  esDatoPrueba  Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  receta        Receta?
+}
+
+// ===== RECETA CLÍNICA =====
+model Receta {
+  id                Int                 @id @default(autoincrement())
+  codigoReceta      String              @unique
+  idAtencion        Int                 @unique
+  atencion          AtencionPodologica  @relation(fields: [idAtencion], references: [id], onDelete: Cascade)
+  idCliente         Int
+  cliente           Cliente             @relation(fields: [idCliente], references: [id], onDelete: Cascade)
+  idUsuario         Int
+  usuario           Usuario             @relation(fields: [idUsuario], references: [id])
+  estado            String              @default("EMITIDA") // BORRADOR, EMITIDA, USADA_PARCIALMENTE, USADA_COMPLETAMENTE, ANULADA, VENCIDA
+  fechaVencimiento  DateTime?
+  observaciones     String?             @db.Text
+  esDatoPrueba      Boolean             @default(false)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  detalles          DetalleReceta[]
+}
+
+// ===== DETALLE DE RECETA =====
+model DetalleReceta {
+  id                  Int      @id @default(autoincrement())
+  idReceta            Int
+  receta              Receta   @relation(fields: [idReceta], references: [id], onDelete: Cascade)
+  idProducto          Int
+  producto            Producto @relation(fields: [idProducto], references: [id])
+  cantidad            Int
+  cantidadFacturada   Int      @default(0)
+  indicaciones        String?  @db.Text
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 }
 

@@ -1,27 +1,36 @@
 import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
-const PREFIX = 'QA_TEST_'
 
 async function main() {
-  console.log('🔎 INICIANDO VERIFICACIÓN DE INTEGRIDAD DE DATOS DE PRUEBA (QA)...')
+  console.log('🔎 INICIANDO VERIFICACIÓN DE INTEGRIDAD DE DATOS DE PRUEBA (esDatoPrueba: true)...')
 
   // Cargar datos de prueba
   const testUsers = await prisma.usuario.findMany({
-    where: { nombreCompleto: { startsWith: PREFIX } }
+    where: { esDatoPrueba: true }
   })
   const testClients = await prisma.cliente.findMany({
-    where: { nombreCompleto: { startsWith: PREFIX } }
+    where: { esDatoPrueba: true }
   })
   const testProviders = await prisma.proveedor.findMany({
-    where: { nombre: { startsWith: PREFIX } }
+    where: { esDatoPrueba: true }
   })
   const testCategories = await prisma.categoriaProducto.findMany({
-    where: { nombre: { startsWith: PREFIX } }
+    where: { esDatoPrueba: true }
   })
   const testProducts = await prisma.producto.findMany({
-    where: { nombre: { startsWith: PREFIX } },
+    where: { esDatoPrueba: true },
     include: { lotes: true }
+  })
+  const testCitas = await prisma.cita.findMany({
+    where: { esDatoPrueba: true }
+  })
+  const testAtenciones = await prisma.atencionPodologica.findMany({
+    where: { esDatoPrueba: true }
+  })
+  const testRecetas = await prisma.receta.findMany({
+    where: { esDatoPrueba: true },
+    include: { detalles: true }
   })
 
   const testUserIds = testUsers.map(u => u.id)
@@ -55,25 +64,28 @@ async function main() {
   console.log(`- Ventas creadas: ${testSales.length}`)
   console.log(`- Movimientos de Kardex creados: ${testMovements.length}`)
   console.log(`- Logs de Auditoría creados: ${testAuditLogs.length}`)
+  console.log(`- Citas creadas: ${testCitas.length}`)
+  console.log(`- Atenciones SOAP creadas: ${testAtenciones.length}`)
+  console.log(`- Recetas creadas: ${testRecetas.length}`)
 
   // Desglosar perfiles de stock de productos
   console.log('\n📋 CLASIFICACIÓN DE PRODUCTOS POR PERFIL DE STOCK:')
   
-  const normalProds = testProducts.filter(p => p.nombre.includes('Paracetamol_'))
-  const lowStockProds = testProducts.filter(p => p.nombre.includes('Amoxicilina_'))
-  const zeroStockProds = testProducts.filter(p => p.nombre.includes('Vitamina_C_'))
-  const expiringProds = testProducts.filter(p => p.nombre.includes('Jarabe_Tos_'))
-  const expiredProds = testProducts.filter(p => p.nombre.includes('Crema_Tópica_'))
-  const multiBatchProds = testProducts.filter(p => p.nombre.includes('Gasas_Estériles_'))
-  const concurrencyProds = testProducts.filter(p => p.nombre.includes('Alcohol_Glicerinado_'))
+  const normalProds = testProducts.filter(p => p.nombre.includes('Paracetamol'))
+  const lowStockProds = testProducts.filter(p => p.nombre.includes('Amoxicilina'))
+  const zeroStockProds = testProducts.filter(p => p.nombre.includes('Vitamina_C') || p.nombre.includes('Vitamina C'))
+  const expiringProds = testProducts.filter(p => p.nombre.includes('Jarabe_Tos') || p.nombre.includes('Jarabe para la Tos'))
+  const expiredProds = testProducts.filter(p => p.nombre.includes('Crema_Tópica') || p.nombre.includes('Clotrimazol Crema') || p.nombre.includes('Hidrocortisona Crema') || p.nombre.includes('Barmicil Crema') || p.nombre.includes('Baycuten Crema') || p.nombre.includes('Quadriderm Crema'))
+  const multiBatchProds = testProducts.filter(p => p.nombre.includes('Gasas') || p.nombre.includes('Vendas') || p.nombre.includes('Esparadrapo') || p.nombre.includes('Curitas') || p.nombre.includes('Algodón') || p.nombre.includes('Guantes') || p.nombre.includes('Mascarillas') || p.nombre.includes('Jeringas'))
+  const concurrencyProds = testProducts.filter(p => p.nombre.includes('Alcohol') || p.nombre.includes('Gel Antiséptico') || p.nombre.includes('Jabón Líquido') || p.nombre.includes('Toallitas') || p.nombre.includes('Sanitizante'))
 
-  console.log(`  - Stock normal (Paracetamol): ${normalProds.length} (Esperado: 40)`)
-  console.log(`  - Stock bajo (Amoxicilina): ${lowStockProds.length} (Esperado: 10)`)
-  console.log(`  - Stock cero (Vitamina C): ${zeroStockProds.length} (Esperado: 5)`)
-  console.log(`  - Próximos a vencer (Jarabe Tos): ${expiringProds.length} (Esperado: 5)`)
-  console.log(`  - Vencidos (Crema Tópica): ${expiredProds.length} (Esperado: 5)`)
-  console.log(`  - Múltiples lotes (Gasas Estériles): ${multiBatchProds.length} (Esperado: 10)`)
-  console.log(`  - Alta rotación/concurrencia (Alcohol Glic.): ${concurrencyProds.length} (Esperado: 5)`)
+  console.log(`  - Stock normal (Paracetamol/Acetaminofén): ${normalProds.length}`)
+  console.log(`  - Stock bajo (Amoxicilina/Antibióticos): ${lowStockProds.length}`)
+  console.log(`  - Stock cero (Vitamina C): ${zeroStockProds.length}`)
+  console.log(`  - Próximos a vencer: ${expiringProds.length}`)
+  console.log(`  - Vencidos: ${expiredProds.length}`)
+  console.log(`  - Múltiples lotes: ${multiBatchProds.length}`)
+  console.log(`  - Alta rotación/concurrencia: ${concurrencyProds.length}`)
 
   // Validaciones de Lógica de Negocio
   console.log('\n🛡️ INICIANDO COMPROBACIONES DE INTEGRIDAD LÓGICA:')
@@ -98,9 +110,10 @@ async function main() {
     console.log('✅ Correcto: No hay productos con stock negativo.')
   }
 
-  // 3. Verificar que stockActual en Producto equivalga a la suma de stockActual en sus lotes activos
+  // 3. Verificar que stockActual en Producto equivalga a la suma de stockActual en sus lotes activos (excluyendo servicios)
   let mismatchStockCount = 0
   for (const p of testProducts) {
+    if (p.esServicio) continue; // Los servicios no tienen lotes reales
     const sumLotes = p.lotes.reduce((acc, l) => acc + l.stockActual, 0)
     if (p.stockActual !== sumLotes) {
       console.error(`❌ FALLA: Desbalance de stock en producto "${p.nombre}" (ID: ${p.id}). Producto stock: ${p.stockActual}, Suma lotes stock: ${sumLotes}`)
@@ -109,7 +122,7 @@ async function main() {
     }
   }
   if (mismatchStockCount === 0) {
-    console.log('✅ Correcto: El stock general coincide al 100% con la sumatoria de sus lotes.')
+    console.log('✅ Correcto: El stock general de productos físicos coincide al 100% con la sumatoria de sus lotes.')
   }
 
   // 4. Verificar que no haya ventas vacías (sin detalles)
@@ -154,7 +167,6 @@ async function main() {
   for (const sale of testSales) {
     if (sale.estado === 'ANULADA') continue
     for (const det of sale.detalles) {
-      // Buscar movimientos asociados a esta venta y producto
       const movs = testMovements.filter(m => m.referencia === `Venta #${sale.id}` && m.idProducto === det.idProducto)
       for (const m of movs) {
         if (m.idLote) {

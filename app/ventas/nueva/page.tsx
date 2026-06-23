@@ -754,9 +754,84 @@ export default function NuevaVentaPage() {
                     <label className="block text-sm font-medium text-foreground mb-1">Podólogo (Opcional)</label>
                     <Input value={nombrePodologo} onChange={(e) => setNombrePodologo(e.target.value)} placeholder="Nombre del podólogo" className="bg-muted/30 border-border text-sm" />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-1"># Receta (Opcional)</label>
-                    <Input value={numeroReceta} onChange={(e) => setNumeroReceta(e.target.value)} placeholder="Número de receta" className="bg-muted/30 border-border text-sm" />
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-foreground">Cargar Receta Médica</label>
+                    <div className="flex gap-2">
+                      <Input
+                        value={numeroReceta}
+                        onChange={(e) => setNumeroReceta(e.target.value)}
+                        placeholder="RECETA-YYYYMMDD-XXXX"
+                        className="bg-muted/30 border-border text-sm"
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={async () => {
+                          if (!numeroReceta.trim()) {
+                            toast.error("Ingresa el código de la receta")
+                            return
+                          }
+                          try {
+                            const res = await fetch(`/api/clinica/recetas?codigoReceta=${encodeURIComponent(numeroReceta.trim())}`)
+                            const data = await res.json()
+                            if (!res.ok || !data || data.length === 0) {
+                              toast.error("Receta no encontrada o inválida")
+                              return
+                            }
+                            
+                            const receta = data[0]
+                            if (receta.estado === "USADA_COMPLETAMENTE" || receta.estado === "ANULADA") {
+                              toast.error(`La receta ya está en estado: ${receta.estado}`)
+                              return
+                            }
+                            
+                            if (receta.fechaVencimiento && new Date(receta.fechaVencimiento).getTime() < new Date().getTime()) {
+                              toast.error("La receta está vencida")
+                              return
+                            }
+
+                            // Cargar paciente
+                            setSelectedCliente(String(receta.idCliente))
+                            if (receta.cliente?.ruc) {
+                              setRucCliente(receta.cliente.ruc)
+                            }
+                            if (receta.usuario?.nombreCompleto) {
+                              setNombrePodologo(receta.usuario.nombreCompleto)
+                            }
+
+                            // Cargar líneas de venta correspondientes
+                            const lineasReceta: LineaVenta[] = []
+                            for (const d of receta.detalles) {
+                              const pendiente = d.cantidad - d.cantidadFacturada
+                              if (pendiente <= 0) continue
+
+                              lineasReceta.push({
+                                idProducto: d.idProducto,
+                                nombre: d.producto.nombre,
+                                cantidad: d.producto.esServicio ? d.cantidad : Math.min(pendiente, d.producto.stockActual || 0), // Si es servicio no limita por stock físico
+                                precioUnitario: Number(d.producto.precioVenta),
+                                subtotal: Number(d.producto.precioVenta) * Math.min(pendiente, d.producto.esServicio ? d.cantidad : (d.producto.stockActual || 0)),
+                                tipoUnidad: "UNIDAD"
+                              })
+                            }
+
+                            if (lineasReceta.length === 0) {
+                              toast.error("Todos los artículos de esta receta ya han sido facturados o no cuentan con stock físico.")
+                              return
+                            }
+
+                            setLineas(lineasReceta)
+                            setNumeroReceta(receta.codigoReceta)
+                            toast.success(`✓ Receta cargada. ${lineasReceta.length} artículos agregados al carrito.`)
+                          } catch (err) {
+                            toast.error("Error al buscar la receta")
+                          }
+                        }}
+                        className="text-xs shrink-0"
+                      >
+                        Cargar
+                      </Button>
+                    </div>
                   </div>
 
                   <div className="pt-4 border-t border-border">

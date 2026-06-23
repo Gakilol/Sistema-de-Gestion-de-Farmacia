@@ -136,6 +136,8 @@ export const productoSchema = z.object({
   stockInicial: z.preprocess((a) => (a !== null && a !== undefined && a !== "" ? parseInt(String(a), 10) : 0), z.number().int().min(0).optional().default(0)),
   loteInicial: z.string().optional().nullable(),
   fechaVencimientoInicial: z.string().optional().nullable(),
+  esServicio: z.boolean().optional().default(false),
+  esDatoPrueba: z.boolean().optional().default(false),
   activo: z.boolean().default(true),
 }).refine(data => {
   const pv = data.precioVenta || 0;
@@ -162,6 +164,7 @@ export const productoSchema = z.object({
   message: "Las unidades por caja son obligatorias si defines un precio de caja",
   path: ["unidadesPorCaja"]
 }).refine(data => {
+  if (data.esServicio) return true;
   if (data.stockInicial && data.stockInicial > 0) {
     return !!data.loteInicial && data.loteInicial.trim() !== "";
   }
@@ -170,6 +173,7 @@ export const productoSchema = z.object({
   message: "El código de lote es obligatorio cuando el stock inicial es mayor a 0",
   path: ["loteInicial"]
 }).refine(data => {
+  if (data.esServicio) return true;
   if (data.stockInicial && data.stockInicial > 0) {
     return !!data.fechaVencimientoInicial && data.fechaVencimientoInicial.trim() !== "";
   }
@@ -178,6 +182,7 @@ export const productoSchema = z.object({
   message: "La fecha de vencimiento es obligatoria cuando el stock inicial es mayor a 0",
   path: ["fechaVencimientoInicial"]
 }).refine(data => {
+  if (data.esServicio) return true;
   if (data.fechaVencimientoInicial) {
     const dateVal = new Date(data.fechaVencimientoInicial + 'T00:00:00');
     if (isNaN(dateVal.getTime())) return false;
@@ -237,5 +242,43 @@ export const compraSchema = z.object({
         return dateVal >= today;
       }, { message: "La fecha de vencimiento no puede ser anterior al día de hoy" }),
   })).min(1, "La compra debe tener al menos un producto")
+});
+
+export const devolucionSchema = z.object({
+  idempotencyKey: z.string().min(1, "Clave de idempotencia es requerida"),
+  idProducto: z.number().int().positive("El producto es requerido"),
+  idLote: z.number().int().positive("El lote es requerido"),
+  idProveedor: z.number().int().positive().optional().nullable(),
+  cantidad: z.number().int().positive("La cantidad debe ser mayor a 0"),
+  motivo: z.enum(["VENCIDO", "PRÓXIMO_A_VENCER", "DAÑADO", "DEFECTUOSO", "RETIRO_DE_LABORATORIO", "ERROR_DE_COMPRA", "OTRO"]),
+  observacion: z.string().optional().nullable(),
+});
+
+export const citaSchema = z.object({
+  idCliente: z.number().int().positive("El cliente es requerido"),
+  fecha: z.string().trim().min(1, "La fecha es requerida").refine(val => !isNaN(new Date(val).getTime()), "Fecha inválida"),
+  motivo: z.string().optional().nullable(),
+  estado: z.enum(["PENDIENTE", "COMPLETADA", "CANCELADA"]).default("PENDIENTE"),
+});
+
+export const atencionSchema = z.object({
+  idCita: z.number().int().positive().optional().nullable(),
+  idCliente: z.number().int().positive("El cliente es requerido"),
+  subjetivo: z.string().trim().min(1, "El componente subjetivo es requerido"),
+  objetivo: z.string().trim().min(1, "El componente objetivo es requerido"),
+  analisis: z.string().trim().min(1, "El componente de análisis es requerido"),
+  plan: z.string().trim().min(1, "El plan es requerido"),
+});
+
+export const recetaSchema = z.object({
+  idAtencion: z.number().int().positive("La atención podológica es requerida"),
+  idCliente: z.number().int().positive("El cliente es requerido"),
+  fechaVencimiento: z.string().optional().nullable().refine(val => !val || !isNaN(new Date(val).getTime()), "Fecha de vencimiento inválida"),
+  observaciones: z.string().optional().nullable(),
+  detalles: z.array(z.object({
+    idProducto: z.number().int().positive("El producto es requerido"),
+    cantidad: z.number().int().positive("La cantidad debe ser mayor a 0"),
+    indicaciones: z.string().optional().nullable(),
+  })).min(1, "La receta debe contener al menos un producto/servicio"),
 });
 

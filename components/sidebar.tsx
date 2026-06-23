@@ -169,6 +169,18 @@ export function Sidebar() {
             ))}
           </div>
 
+          {/* Sección clínica (ADMIN o DOCTOR) */}
+          {(isAdmin || role === "DOCTOR") && (
+            <div className="mt-4">
+              <p className="text-[11px] font-semibold text-muted-foreground/60 uppercase tracking-widest mb-2 px-4">
+                Podología Clínica
+              </p>
+              <div className="space-y-0.5">
+                <NavLink item={{ href: "/clinica", label: "Clínica", icon: ClipboardList }} />
+              </div>
+            </div>
+          )}
+
           {/* Sección administración (solo ADMIN) */}
           {isAdmin && (
             <div className="mt-6">

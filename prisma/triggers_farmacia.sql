@@ -91,6 +91,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS tr_rastrear_compras_cliente ON "DetalleVenta";
 CREATE TRIGGER tr_rastrear_compras_cliente
 AFTER INSERT ON "DetalleVenta"
 FOR EACH ROW
@@ -118,6 +119,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS tr_actualizar_stats_producto ON "DetalleVenta";
 CREATE TRIGGER tr_actualizar_stats_producto
 AFTER INSERT ON "DetalleVenta"
 FOR EACH ROW
@@ -155,6 +157,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS tr_alerta_stock_bajo ON "Producto";
 CREATE TRIGGER tr_alerta_stock_bajo
 AFTER UPDATE OF "stockActual" ON "Producto"
 FOR EACH ROW
@@ -194,6 +197,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS tr_historial_precios ON "Producto";
 CREATE TRIGGER tr_historial_precios
 AFTER UPDATE ON "Producto"
 FOR EACH ROW

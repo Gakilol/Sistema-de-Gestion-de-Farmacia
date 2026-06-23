@@ -6,14 +6,16 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { toast } from "sonner"
+import { useCurrentUser } from "@/app/hooks/useCurrentUser"
 import {
   ClipboardList, Package, AlertTriangle, Clock, Search,
   ChevronLeft, ChevronRight, ArrowUpCircle, ArrowDownCircle,
   Calendar, Layers, ShieldAlert, TrendingDown, ChevronDown, ChevronUp,
-  LayoutGrid, List, Sliders
+  LayoutGrid, List, Sliders, RotateCcw, X, Loader2
 } from "lucide-react"
 
-type Tab = "lotes" | "movimientos" | "alertas"
+type Tab = "lotes" | "movimientos" | "alertas" | "devoluciones"
 type ViewMode = "grouped" | "detailed"
 
 interface Lote {
@@ -26,7 +28,7 @@ interface Lote {
   createdAt: string
   diasRestantes?: number
   clasificacion?: string
-  producto: { id: number; nombre: string; stockMinimo?: number; categoria?: { nombre: string } }
+  producto: { id: number; nombre: string; stockMinimo?: number; categoria?: { nombre: string }; esServicio?: boolean }
 }
 
 interface Movimiento {
@@ -63,6 +65,9 @@ interface GroupedProducto {
 }
 
 export default function InventarioPage() {
+  const { user } = useCurrentUser()
+  const isAdmin = user?.rolNombre === "ADMIN"
+
   const [activeTab, setActiveTab] = useState<Tab>("lotes")
   const [viewMode, setViewMode] = useState<ViewMode>("grouped")
   const [loading, setLoading] = useState(true)
@@ -84,6 +89,21 @@ export default function InventarioPage() {
   // Alertas data
   const [alertas, setAlertas] = useState<Alerta | null>(null)
 
+  // Devoluciones data and modal states
+  const [devoluciones, setDevoluciones] = useState<any[]>([])
+  const [showDevModal, setShowDevModal] = useState(false)
+  const [devProductos, setDevProductos] = useState<any[]>([])
+  const [devProveedores, setDevProveedores] = useState<any[]>([])
+  const [devLotes, setDevLotes] = useState<any[]>([])
+
+  const [selectedProdId, setSelectedProdId] = useState<string>("")
+  const [selectedLoteId, setSelectedLoteId] = useState<string>("")
+  const [selectedProvId, setSelectedProvId] = useState<string>("")
+  const [devCantidad, setDevCantidad] = useState<string>("")
+  const [devMotivo, setDevMotivo] = useState<string>("VENCIDO")
+  const [devObservacion, setDevObservacion] = useState<string>("")
+  const [devSubmitLoading, setDevSubmitLoading] = useState(false)
+
   const LIMIT = 30
 
   useEffect(() => {
@@ -93,6 +113,28 @@ export default function InventarioPage() {
   useEffect(() => {
     fetchData()
   }, [activeTab, page, diasAlerta])
+
+  // Load product lotes reactively
+  useEffect(() => {
+    if (selectedProdId) {
+      fetch(`/api/productos/${selectedProdId}`)
+        .then(res => res.json())
+        .then(data => {
+          const activeLotes = data.lotes ? data.lotes.filter((l: any) => l.activo && l.stockActual > 0) : []
+          setDevLotes(activeLotes)
+          setSelectedLoteId("")
+          setDevCantidad("")
+        })
+        .catch(err => {
+          console.error("Error loading product lotes:", err)
+          setDevLotes([])
+        })
+    } else {
+      setDevLotes([])
+      setSelectedLoteId("")
+      setDevCantidad("")
+    }
+  }, [selectedProdId])
 
   const fetchData = async () => {
     setLoading(true)
@@ -111,6 +153,10 @@ export default function InventarioPage() {
         const res = await fetch(`/api/inventario?tab=alertas&diasVencimiento=${diasAlerta}`)
         const data = await res.json()
         setAlertas(data)
+      } else if (activeTab === "devoluciones") {
+        const res = await fetch("/api/devoluciones")
+        const data = await res.json()
+        setDevoluciones(data || [])
       }
     } catch (e) {
       console.error("Error fetching inventario:", e)
@@ -144,6 +190,7 @@ export default function InventarioPage() {
     SALIDA_VENTA: { label: "Venta", color: "text-red-400 bg-red-500/10", icon: ArrowDownCircle },
     AJUSTE_POSITIVO: { label: "Ajuste +", color: "text-blue-500 bg-blue-500/10", icon: ArrowUpCircle },
     AJUSTE_NEGATIVO: { label: "Ajuste −", color: "text-orange-500 bg-orange-500/10", icon: ArrowDownCircle },
+    DEVOLUCION: { label: "Devolución Prov.", color: "text-orange-400 bg-orange-500/10", icon: RotateCcw }
   }
 
   const totalPages = Math.ceil(
@@ -158,11 +205,17 @@ export default function InventarioPage() {
     !search || m.producto.nombre.toLowerCase().includes(search.toLowerCase()) || (m.referencia || "").toLowerCase().includes(search.toLowerCase())
   )
 
+  const filteredDevoluciones = devoluciones.filter(d =>
+    !search || d.producto.nombre.toLowerCase().includes(search.toLowerCase()) || d.lote.codigoLote.toLowerCase().includes(search.toLowerCase())
+  )
+
   // Compute Grouped Products
   const getGroupedProducts = (): GroupedProducto[] => {
     const map = new Map<number, GroupedProducto>()
 
     for (const lote of filteredLotes) {
+      if (lote.producto.esServicio) continue // Ignorar servicios
+
       const prod = lote.producto
       const existing = map.get(prod.id)
 
@@ -218,10 +271,97 @@ export default function InventarioPage() {
     }))
   }
 
+  const handleCreateDevolucion = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedProdId || !selectedLoteId || !devCantidad || !devMotivo) {
+      toast.error("Por favor completa los campos obligatorios")
+      return
+    }
+    const cant = parseInt(devCantidad)
+    if (isNaN(cant) || cant <= 0) {
+      toast.error("La cantidad debe ser mayor a 0")
+      return
+    }
+    const loteObj = devLotes.find(l => l.id === parseInt(selectedLoteId))
+    if (loteObj && cant > loteObj.stockActual) {
+      toast.error(`La cantidad no puede superar el stock actual del lote (${loteObj.stockActual} uds)`)
+      return
+    }
+
+    setDevSubmitLoading(true)
+    const idempotencyKey = `dev-key-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+    
+    try {
+      const res = await fetch("/api/devoluciones", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idempotencyKey,
+          idProducto: parseInt(selectedProdId),
+          idLote: parseInt(selectedLoteId),
+          idProveedor: selectedProvId ? parseInt(selectedProvId) : null,
+          cantidad: cant,
+          motivo: devMotivo,
+          observacion: devObservacion || null
+        })
+      })
+      
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || "Error al registrar la devolución")
+        return
+      }
+      
+      toast.success("Devolución registrada correctamente")
+      setShowDevModal(false)
+      setSelectedProdId("")
+      setSelectedLoteId("")
+      setSelectedProvId("")
+      setDevCantidad("")
+      setDevMotivo("VENCIDO")
+      setDevObservacion("")
+      
+      fetchData()
+    } catch (err) {
+      toast.error("Error de red al registrar devolución")
+    } finally {
+      setDevSubmitLoading(false)
+    }
+  }
+
+  const handleAnularDevolucion = async (id: number) => {
+    const motivo = window.prompt("Ingresa el motivo de anulación de esta devolución:")
+    if (motivo === null) return 
+    if (!motivo.trim()) {
+      toast.error("Debes ingresar un motivo para anular la devolución")
+      return
+    }
+
+    try {
+      const res = await fetch(`/api/devoluciones/${id}/anular`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ motivoAnulacion: motivo.trim() })
+      })
+
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || "Error al anular la devolución")
+        return
+      }
+
+      toast.success("Devolución anulada y stock retornado correctamente")
+      fetchData()
+    } catch (err) {
+      toast.error("Error de conexión al anular devolución")
+    }
+  }
+
   const tabs = [
     { id: "lotes" as Tab, label: "Lotes Activos", icon: Layers },
     { id: "movimientos" as Tab, label: "Kardex", icon: ClipboardList },
     { id: "alertas" as Tab, label: "Alertas", icon: ShieldAlert },
+    { id: "devoluciones" as Tab, label: "Devoluciones", icon: RotateCcw },
   ]
 
   const groupedProductsData = getGroupedProducts()
@@ -237,7 +377,7 @@ export default function InventarioPage() {
               <ClipboardList className="w-8 h-8 text-primary" />
               Inventario
             </h1>
-            <p className="text-muted-foreground mt-1">Control de lotes, movimientos y alertas de stock</p>
+            <p className="text-muted-foreground mt-1">Control de lotes, movimientos, alertas y devoluciones a laboratorio</p>
           </div>
 
           {/* Tab Navigation */}
@@ -295,7 +435,11 @@ export default function InventarioPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 type="text"
-                placeholder={activeTab === "lotes" ? "Buscar por producto o lote..." : "Buscar por producto o referencia..."}
+                placeholder={
+                  activeTab === "lotes" ? "Buscar por producto o lote..." :
+                  activeTab === "devoluciones" ? "Buscar devolución por producto o lote..." :
+                  "Buscar por producto o referencia..."
+                }
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-10 bg-muted/30 border-border shadow-inner"
@@ -364,7 +508,6 @@ export default function InventarioPage() {
                                     <span className="text-xs text-muted-foreground block">Stock Total</span>
                                   </div>
                                   <div className="flex items-center gap-3">
-                                    {/* Badge general del producto */}
                                     {prod.estadoProducto === "vencido" && <span className="text-xs px-2.5 py-1 rounded bg-red-500/10 text-red-500 font-bold border border-red-500/20">LOTE VENCIDO</span>}
                                     {prod.estadoProducto === "proximo_a_vencer" && <span className="text-xs px-2.5 py-1 rounded bg-amber-500/10 text-amber-500 font-bold border border-amber-500/20">PRONTO A VENCER</span>}
                                     {prod.estadoProducto === "sin_stock" && <span className="text-xs px-2.5 py-1 rounded bg-muted text-muted-foreground font-bold border border-border">SIN STOCK</span>}
@@ -786,10 +929,243 @@ export default function InventarioPage() {
                   )}
                 </div>
               )}
+
+              {/* ═══ TAB: DEVOLUCIONES ═══ */}
+              {activeTab === "devoluciones" && (
+                <div className="space-y-4">
+                  {isAdmin && (
+                    <div className="flex justify-end">
+                      <Button
+                        onClick={async () => {
+                          try {
+                            const [pRes, provRes] = await Promise.all([
+                              fetch("/api/productos?estado=activos"),
+                              fetch("/api/proveedores")
+                            ])
+                            const pData = await pRes.json()
+                            const provData = await provRes.json()
+                            setDevProductos(pData.filter((p: any) => !p.esServicio))
+                            setDevProveedores(provData)
+                            setShowDevModal(true)
+                          } catch (err) {
+                            toast.error("Error al cargar datos para el formulario")
+                          }
+                        }}
+                        className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                      >
+                        Registrar Devolución a Laboratorio
+                      </Button>
+                    </div>
+                  )}
+
+                  <Card className="glass-card overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-muted/30 border-b border-border">
+                          <tr>
+                            {["Fecha", "Producto", "Lote", "Proveedor", "Cantidad", "Motivo", "Estado", "Responsable", "Acciones"].map(h => (
+                              <th key={h} className="px-4 py-3.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                          {filteredDevoluciones.length === 0 ? (
+                            <tr>
+                              <td colSpan={9} className="px-5 py-12 text-center text-muted-foreground">
+                                <RotateCcw className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                                No hay devoluciones registradas
+                              </td>
+                            </tr>
+                          ) : filteredDevoluciones.map(dev => (
+                            <tr key={dev.id} className="hover:bg-muted/20 transition-colors">
+                              <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{formatDateTime(dev.createdAt)}</td>
+                              <td className="px-4 py-3 text-sm font-medium text-foreground">{dev.producto.nombre}</td>
+                              <td className="px-4 py-3">
+                                <span className="px-2 py-0.5 rounded bg-muted/40 text-xs font-mono text-foreground">{dev.lote.codigoLote}</span>
+                              </td>
+                              <td className="px-4 py-3 text-xs text-muted-foreground">{dev.proveedor?.nombre || "—"}</td>
+                              <td className="px-4 py-3 text-sm text-foreground font-semibold">{dev.cantidad} uds</td>
+                              <td className="px-4 py-3 text-xs">
+                                <span className="px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-500 font-bold border border-orange-500/20">{dev.motivo}</span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                                  dev.estado === "COMPLETADA"
+                                    ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                                    : "bg-red-500/10 text-red-500 border border-red-500/20"
+                                }`}>
+                                  {dev.estado}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-xs text-muted-foreground">{dev.usuario.nombreCompleto}</td>
+                              <td className="px-4 py-3 text-sm">
+                                {dev.estado === "COMPLETADA" && isAdmin && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => handleAnularDevolucion(dev.id)}
+                                    className="text-red-400 hover:text-red-300 hover:bg-red-500/10 px-2 h-8"
+                                    title="Anular Devolución"
+                                  >
+                                    Anular
+                                  </Button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </Card>
+                </div>
+              )}
             </>
           )}
         </div>
       </main>
+
+      {/* Modal Registrar Devolución */}
+      {showDevModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="glass-card w-full max-w-lg p-6 relative max-h-[90vh] flex flex-col shadow-2xl rounded-2xl animate-in fade-in zoom-in duration-200">
+            <button
+              onClick={() => setShowDevModal(false)}
+              className="absolute top-4 right-4 text-muted-foreground hover:text-foreground p-1 hover:bg-muted/40 rounded-full transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="mb-5 flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-primary/10 border border-primary/20">
+                <RotateCcw className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-foreground">Nueva Devolución a Laboratorio</h2>
+                <p className="text-xs text-muted-foreground">Retirar stock y registrar devolución al proveedor</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleCreateDevolucion} className="space-y-4 overflow-y-auto pr-1 flex-1">
+              <div>
+                <label className="block text-sm font-medium text-foreground/80 mb-1">
+                  Producto <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={selectedProdId}
+                  onChange={e => setSelectedProdId(e.target.value)}
+                  required
+                  className="w-full rounded-md border border-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all bg-background text-foreground"
+                >
+                  <option value="">Selecciona un producto...</option>
+                  {devProductos.map(p => (
+                    <option key={p.id} value={p.id}>{p.nombre}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground/80 mb-1">
+                  Lote <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={selectedLoteId}
+                  onChange={e => setSelectedLoteId(e.target.value)}
+                  required
+                  disabled={!selectedProdId}
+                  className="w-full rounded-md border border-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all bg-background text-foreground"
+                >
+                  <option value="">Selecciona un lote...</option>
+                  {devLotes.map(l => (
+                    <option key={l.id} value={l.id}>
+                      {l.codigoLote} (Disponible: {l.stockActual} uds {l.fechaVencimiento ? `| Vence: ${formatDate(l.fechaVencimiento)}` : ""})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground/80 mb-1">
+                  Proveedor / Laboratorio <span className="text-muted-foreground font-normal text-xs">— opcional</span>
+                </label>
+                <select
+                  value={selectedProvId}
+                  onChange={e => setSelectedProvId(e.target.value)}
+                  className="w-full rounded-md border border-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all bg-background text-foreground"
+                >
+                  <option value="">Selecciona el proveedor...</option>
+                  {devProveedores.map(prov => (
+                    <option key={prov.id} value={prov.id}>{prov.nombre}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-foreground/80 mb-1">
+                    Cantidad a devolver <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={devCantidad}
+                    onChange={e => setDevCantidad(e.target.value)}
+                    required
+                    placeholder="Ej: 10"
+                    className="bg-background border-border text-foreground"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-foreground/80 mb-1">
+                    Motivo <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={devMotivo}
+                    onChange={e => setDevMotivo(e.target.value)}
+                    required
+                    className="w-full rounded-md border border-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all bg-background text-foreground"
+                  >
+                    <option value="VENCIDO">Vencido</option>
+                    <option value="PRÓXIMO_A_VENCER">Próximo a Vencer</option>
+                    <option value="DAÑADO">Dañado</option>
+                    <option value="DEFECTUOSO">Defectuoso</option>
+                    <option value="RETIRO_DE_LABORATORIO">Retiro de Laboratorio</option>
+                    <option value="ERROR_DE_COMPRA">Error de Compra</option>
+                    <option value="OTRO">Otro</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground/80 mb-1">Observación</label>
+                <textarea
+                  value={devObservacion}
+                  onChange={e => setDevObservacion(e.target.value)}
+                  placeholder="Detalles adicionales sobre la devolución..."
+                  className="w-full rounded-md border border-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 outline-none min-h-[70px] bg-background text-foreground"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-4">
+                <Button type="button" variant="outline" className="flex-1" onClick={() => setShowDevModal(false)}>
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={devSubmitLoading}
+                  className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
+                >
+                  {devSubmitLoading ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Registrando...</>
+                  ) : (
+                    "Confirmar Devolución"
+                  )}
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }

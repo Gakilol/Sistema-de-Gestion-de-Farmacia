@@ -16,7 +16,16 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       include: {
         cliente: true,
         usuario: { include: { rol: true } },
-        detalles: { include: { producto: true } },
+        detalles: {
+          include: {
+            producto: true,
+            lotes: {
+              include: {
+                lote: true
+              }
+            }
+          }
+        },
       },
     })
 
@@ -64,7 +73,14 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
         ventaAnulada = await prisma.$transaction(async (tx: any) => {
           const venta = await tx.venta.findUnique({
             where: { id: ventaId },
-            include: { detalles: true }
+            include: {
+              detalles: {
+                include: {
+                  producto: true,
+                  lotes: true
+                }
+              }
+            }
           })
 
           if (!venta) {
@@ -76,82 +92,128 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
             return venta
           }
 
-          // 1. Encontrar todos los movimientos de salida correspondientes a esta venta
-          const movimientosSalida = await tx.movimientoInventario.findMany({
-            where: {
-              referencia: { startsWith: `Venta #${ventaId}` },
-              tipo: "SALIDA_VENTA"
-            }
-          })
-
-          // 2. Por cada movimiento, devolver la cantidad al stock del Lote y del Producto
-          for (const mov of movimientosSalida) {
-            if (mov.idLote) {
-              // Devolver stock al lote
-              await tx.lote.update({
-                where: { id: mov.idLote },
-                data: {
-                  stockActual: { increment: mov.cantidad },
-                  activo: true // Reactivar el lote si estaba agotado
-                }
-              })
-            }
-
-            // Devolver stock al producto
-            await tx.producto.update({
-              where: { id: mov.idProducto },
-              data: {
-                stockActual: { increment: mov.cantidad }
-              }
-            })
-
-            // Obtener el stock actualizado del producto para el Kardex
-            const prod = await tx.producto.findUnique({
-              where: { id: mov.idProducto },
-              select: { stockActual: true }
-            })
-
-            // Crear movimiento de entrada para registrar la devolución en el Kardex
-            await tx.movimientoInventario.create({
-              data: {
-                idProducto: mov.idProducto,
-                idLote: mov.idLote,
-                tipo: "AJUSTE_POSITIVO",
-                cantidad: mov.cantidad,
-                stockResultante: prod?.stockActual || 0,
-                costoUnitario: mov.costoUnitario,
-                referencia: `Anulación de Venta #${ventaId}`,
-                idUsuario: user.id
-              }
-            })
-          }
-
-          // Si hay detalles que por algún motivo no tuvieron movimiento registrado, hacemos un fallback seguro (no debería ocurrir)
-          const productosConMovimiento = new Set(movimientosSalida.map((m: any) => m.idProducto))
+          // 1. Restaurar stock a partir de DetalleVentaLote
           for (const detalle of venta.detalles) {
-            if (!productosConMovimiento.has(detalle.idProducto)) {
-              // Devolver stock al producto
-              await tx.producto.update({
-                where: { id: detalle.idProducto },
-                data: {
-                  stockActual: { increment: detalle.cantidad }
-                }
-              })
+            const prod = detalle.producto
 
-              const prod = await tx.producto.findUnique({
+            if (prod.esServicio) {
+              // Si es servicio, no tiene stock físico ni lotes que restaurar
+              continue
+            }
+
+            let totalRestauradoProducto = 0
+
+            if (detalle.lotes && detalle.lotes.length > 0) {
+              for (const detLote of detalle.lotes) {
+                // Devolver stock al lote
+                await tx.lote.update({
+                  where: { id: detLote.idLote },
+                  data: {
+                    stockActual: { increment: detLote.cantidad },
+                    activo: true // Reactivar el lote si estaba inactivo
+                  }
+                })
+
+                totalRestauradoProducto += detLote.cantidad
+
+                // Registrar movimiento de entrada en el Kardex
+                const dbProduct = await tx.producto.findUnique({
+                  where: { id: detalle.idProducto },
+                  select: { stockActual: true }
+                })
+                const stockInicial = dbProduct ? dbProduct.stockActual : prod.stockActual
+
+                await tx.movimientoInventario.create({
+                  data: {
+                    idProducto: detalle.idProducto,
+                    idLote: detLote.idLote,
+                    tipo: "AJUSTE_POSITIVO",
+                    cantidad: detLote.cantidad,
+                    stockResultante: stockInicial + detLote.cantidad,
+                    referencia: `Anulación de Venta #${ventaId}`,
+                    idUsuario: user.id,
+                    observacion: `Retorno de lote por anulación de venta`
+                  }
+                })
+              }
+            } else {
+              // Fallback para ventas sin desglose de lotes (legacy o fallas excepcionales)
+              totalRestauradoProducto = detalle.cantidad
+              
+              const dbProduct = await tx.producto.findUnique({
                 where: { id: detalle.idProducto },
                 select: { stockActual: true }
               })
+              const stockInicial = dbProduct ? dbProduct.stockActual : prod.stockActual
 
               await tx.movimientoInventario.create({
                 data: {
                   idProducto: detalle.idProducto,
                   tipo: "AJUSTE_POSITIVO",
                   cantidad: detalle.cantidad,
-                  stockResultante: prod?.stockActual || 0,
+                  stockResultante: stockInicial + detalle.cantidad,
                   referencia: `Anulación de Venta #${ventaId} (fallback)`,
-                  idUsuario: user.id
+                  idUsuario: user.id,
+                  observacion: `Retorno de stock general sin lote`
                 }
+              })
+            }
+
+            // Devolver stock al producto
+            await tx.producto.update({
+              where: { id: detalle.idProducto },
+              data: {
+                stockActual: { increment: totalRestauradoProducto }
+              }
+            })
+          }
+
+          // 2. Si hay receta asociada, restaurar cantidades de la receta
+          if (venta.numeroReceta) {
+            const receta = await tx.receta.findUnique({
+              where: { codigoReceta: venta.numeroReceta },
+              include: { detalles: true }
+            })
+
+            if (receta) {
+              for (const detalle of venta.detalles) {
+                // Calcular cantidad en unidades base vendidas
+                const tipoUnidad = detalle.tipoUnidad || "UNIDAD"
+                let cantidadUnidades = detalle.cantidad
+                if (tipoUnidad === "BLISTER") {
+                  cantidadUnidades = cantidadUnidades * (detalle.producto.unidadesPorBlister || 1)
+                } else if (tipoUnidad === "CAJA") {
+                  cantidadUnidades = cantidadUnidades * (detalle.producto.unidadesPorCaja || 1)
+                }
+
+                const recDet = receta.detalles.find((rd: any) => rd.idProducto === detalle.idProducto)
+                if (recDet) {
+                  const nuevaCantFacturada = Math.max(0, recDet.cantidadFacturada - cantidadUnidades)
+                  await tx.detalleReceta.update({
+                    where: { id: recDet.id },
+                    data: { cantidadFacturada: nuevaCantFacturada }
+                  })
+                }
+              }
+
+              // Actualizar estado de la receta según el nuevo saldo
+              const updatedDetalles = await tx.detalleReceta.findMany({
+                where: { idReceta: receta.id }
+              })
+
+              const totalPrescribed = updatedDetalles.reduce((acc: number, cur: any) => acc + cur.cantidad, 0)
+              const totalFacturado = updatedDetalles.reduce((acc: number, cur: any) => acc + cur.cantidadFacturada, 0)
+
+              let nuevoEstado = "EMITIDA"
+              if (totalFacturado >= totalPrescribed) {
+                nuevoEstado = "USADA_COMPLETAMENTE"
+              } else if (totalFacturado > 0) {
+                nuevoEstado = "USADA_PARCIALMENTE"
+              }
+
+              await tx.receta.update({
+                where: { id: receta.id },
+                data: { estado: nuevoEstado }
               })
             }
           }
@@ -160,7 +222,13 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
           const ventaActualizada = await tx.venta.update({
             where: { id: ventaId },
             data: { estado: "ANULADA" },
-            include: { detalles: { include: { producto: true } } }
+            include: {
+              detalles: {
+                include: {
+                  producto: true
+                }
+              }
+            }
           })
 
           return ventaActualizada

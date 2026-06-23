@@ -37,7 +37,16 @@ export async function GET(request: NextRequest) {
       include: {
         cliente: true,
         usuario: { include: { rol: true } },
-        detalles: { include: { producto: true } },
+        detalles: {
+          include: {
+            producto: true,
+            lotes: {
+              include: {
+                lote: true
+              }
+            }
+          }
+        },
       },
       orderBy: { fecha: "desc" },
     })
@@ -108,18 +117,20 @@ export async function POST(request: NextRequest) {
       cantidadTotalPorProducto.set(detalle.idProducto, prev + cantidadDeducir)
     }
 
-    // Validar stock suficiente usando totales agregados
+    // Validar stock suficiente usando totales agregados (SOLO para productos físicos)
     for (const [idProducto, cantidadTotal] of cantidadTotalPorProducto) {
       const producto = productoMap.get(idProducto)!
+      if (producto.esServicio) continue // Ignorar servicios
       if (producto.stockActual < cantidadTotal) {
         return NextResponse.json({ error: `Stock insuficiente para ${producto.nombre}` }, { status: 400 })
       }
     }
 
-    // ── BLOQUEO DE SEGURIDAD SANITARIA: verificar que no haya lotes vencidos activos ──
+    // ── BLOQUEO DE SEGURIDAD SANITARIA: verificar que no haya lotes vencidos activos (Ignorar servicios) ──
     const ahora = new Date()
     for (const detalle of detalles) {
       const producto = productoMap.get(detalle.idProducto)!
+      if (producto.esServicio) continue // Ignorar servicios
 
       const loteMasAntiguo = await prisma.lote.findFirst({
         where: {
@@ -219,36 +230,90 @@ export async function POST(request: NextRequest) {
     // ── Reintentos controlados para errores transitorios de concurrencia ──
     while (attempts < maxAttempts) {
       try {
-        // ── Transacción atómica: venta + detalles + FIFO batch deduction + movimientos ──
+        // ── Transacción atómica: venta + detalles + FEFO batch deduction + receta + movimientos ──
         venta = await prisma.$transaction(async (tx: any) => {
-          // 1. Bloqueo pesimista de productos y lotes en orden determinista para evitar Deadlocks
-          const sortedProductIds = [...productIds].sort((a, b) => a - b)
+          // 1. Bloqueo pesimista de productos y lotes en orden determinista para evitar Deadlocks (SOLO físicos)
+          const physicalProductIds = productIds.filter((id: number) => !productoMap.get(id)!.esServicio)
+          const sortedPhysicalProductIds = [...physicalProductIds].sort((a, b) => a - b)
           
-          // SELECT ... FOR UPDATE en Postgres
-          await tx.$executeRawUnsafe(
-            `SELECT id FROM "Producto" WHERE id IN (${sortedProductIds.join(",")}) FOR UPDATE`
-          )
-          
-          // Locking the corresponding lotes
-          await tx.$executeRawUnsafe(
-            `SELECT id FROM "Lote" WHERE "idProducto" IN (${sortedProductIds.join(",")}) FOR UPDATE`
-          )
+          if (sortedPhysicalProductIds.length > 0) {
+            // SELECT ... FOR UPDATE en Postgres
+            await tx.$executeRawUnsafe(
+              `SELECT id FROM "Producto" WHERE id IN (${sortedPhysicalProductIds.join(",")}) FOR UPDATE`
+            )
+            
+            // Locking the corresponding lotes
+            await tx.$executeRawUnsafe(
+              `SELECT id FROM "Lote" WHERE "idProducto" IN (${sortedPhysicalProductIds.join(",")}) FOR UPDATE`
+            )
+          }
 
-          // 2. Re-verificación de stock tras adquirir el bloqueo
+          // 2. Re-verificación de stock tras adquirir el bloqueo (SOLO físicos)
           for (const [idProducto, cantidadTotal] of cantidadTotalPorProducto) {
-            const prod = await tx.producto.findUnique({
+            const prod = productoMap.get(idProducto)!
+            if (prod.esServicio) continue // Ignorar servicios
+
+            const dbProd = await tx.producto.findUnique({
               where: { id: idProducto },
               select: { nombre: true, stockActual: true, activo: true }
             })
-            if (!prod || !prod.activo) {
+            if (!dbProd || !dbProd.activo) {
               throw new Error(`Producto #${idProducto} no disponible o inactivo`)
             }
-            if (prod.stockActual < cantidadTotal) {
-              throw new Error(`Stock insuficiente para ${prod.nombre} (actualizado: ${prod.stockActual})`)
+            if (dbProd.stockActual < cantidadTotal) {
+              throw new Error(`Stock insuficiente para ${prod.nombre} (actualizado: ${dbProd.stockActual})`)
             }
           }
 
-          // 3. Crear cabecera y detalles de la venta
+          // 3. Integración Atómica de Recetas (Bloqueo y actualización de receta)
+          if (numeroReceta) {
+            const ahoraTransaction = new Date()
+            const recetas = await tx.$queryRawUnsafe(
+              `SELECT id, estado, "fechaVencimiento" FROM "Receta" WHERE "codigoReceta" = $1 FOR UPDATE`,
+              numeroReceta
+            )
+            if (!recetas || recetas.length === 0) {
+              throw new Error(`Receta con código ${numeroReceta} no encontrada`)
+            }
+            const rObj = recetas[0]
+            if (rObj.estado !== "EMITIDA" && rObj.estado !== "USADA_PARCIALMENTE") {
+              throw new Error(`La receta con código ${numeroReceta} no está activa o ya fue usada`)
+            }
+            if (rObj.fechaVencimiento && new Date(rObj.fechaVencimiento) < ahoraTransaction) {
+              throw new Error(`La receta con código ${numeroReceta} está vencida`)
+            }
+
+            const recetaDetalles = await tx.detalleReceta.findMany({
+              where: { idReceta: rObj.id },
+            })
+
+            for (const dDet of recetaDetalles) {
+              const saleQty = cantidadTotalPorProducto.get(dDet.idProducto) || 0
+              if (saleQty > 0) {
+                const remaining = dDet.cantidad - dDet.cantidadFacturada
+                if (saleQty > remaining) {
+                  const prod = productoMap.get(dDet.idProducto)
+                  throw new Error(`La cantidad a facturar (${saleQty}) supera el saldo pendiente (${remaining}) de la receta para el producto ${prod?.nombre || dDet.idProducto}`)
+                }
+                
+                await tx.detalleReceta.update({
+                  where: { id: dDet.id },
+                  data: { cantidadFacturada: { increment: saleQty } },
+                })
+              }
+            }
+
+            const updatedDetalles = await tx.detalleReceta.findMany({
+              where: { idReceta: rObj.id },
+            })
+            const allUsed = updatedDetalles.every((d: any) => d.cantidadFacturada >= d.cantidad)
+            await tx.receta.update({
+              where: { id: rObj.id },
+              data: { estado: allUsed ? "USADA_COMPLETAMENTE" : "USADA_PARCIALMENTE" },
+            })
+          }
+
+          // 4. Crear cabecera y detalles de la venta
           const nuevaVenta = await tx.venta.create({
             data: {
               fecha: new Date(),
@@ -280,33 +345,57 @@ export async function POST(request: NextRequest) {
             },
           })
 
-          // 4. Deducción por lote siguiendo FEFO (Vencimiento asc, luego creado asc)
-          for (const detalle of detalles) {
-            let pendiente = detalle.cantidadDeducir
-            const producto = productoMap.get(detalle.idProducto)!
+          // 5. Deducción por lote siguiendo FEFO (Vencimiento asc nulls last, luego creado asc) (SOLO físicos)
+          const ahoraTransaction = new Date()
+          for (const d of detalles) {
+            const prod = productoMap.get(d.idProducto)!
+            const createdDetalle = nuevaVenta.detalles.find((cd: any) => cd.idProducto === d.idProducto)!
+
+            if (prod.esServicio) {
+              // Si es servicio, omitir deducción de lotes y Kardex
+              continue
+            }
+
+            let pendiente = d.cantidadDeducir
             
-            // Obtener stock del producto en base de datos bajo lock
             const dbProduct = await tx.producto.findUnique({
-              where: { id: detalle.idProducto },
+              where: { id: d.idProducto },
               select: { stockActual: true }
             })
             
-            const stockInicialProducto = dbProduct ? dbProduct.stockActual : producto.stockActual
-            const nuevoStockProducto = stockInicialProducto - detalle.cantidadDeducir
+            const stockInicialProducto = dbProduct ? dbProduct.stockActual : prod.stockActual
+            const nuevoStockProducto = stockInicialProducto - d.cantidadDeducir
 
             if (nuevoStockProducto < 0) {
-              throw new Error(`El stock resultante para ${producto.nombre} sería negativo (${nuevoStockProducto})`)
+              throw new Error(`El stock resultante para ${prod.nombre} sería negativo (${nuevoStockProducto})`)
             }
 
+            // Cargar todos los lotes activos con stock del producto
             const lotes = await tx.lote.findMany({
-              where: { idProducto: detalle.idProducto, activo: true, stockActual: { gt: 0 } },
-              orderBy: [
-                { fechaVencimiento: "asc" },
-                { createdAt: "asc" },
-              ],
+              where: { idProducto: d.idProducto, activo: true, stockActual: { gt: 0 } },
             })
 
-            for (const lote of lotes) {
+            // Ordenar por FEFO en memoria (fechaVencimiento asc nulls last, luego createdAt asc)
+            lotes.sort((a: any, b: any) => {
+              if (a.fechaVencimiento && b.fechaVencimiento) {
+                const timeA = new Date(a.fechaVencimiento).getTime()
+                const timeB = new Date(b.fechaVencimiento).getTime()
+                if (timeA !== timeB) return timeA - timeB
+              } else if (a.fechaVencimiento) {
+                return -1 // a va primero (tiene vencimiento)
+              } else if (b.fechaVencimiento) {
+                return 1 // b va primero (tiene vencimiento)
+              }
+              return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+            })
+
+            // Filtrar lotes vigentes (fechaVencimiento > ahoraTransaction o null)
+            const lotesVigentes = lotes.filter((l: any) => {
+              if (!l.fechaVencimiento) return true
+              return new Date(l.fechaVencimiento) > ahoraTransaction
+            })
+
+            for (const lote of lotesVigentes) {
               if (pendiente <= 0) break
 
               const deducir = Math.min(pendiente, lote.stockActual)
@@ -321,14 +410,23 @@ export async function POST(request: NextRequest) {
                 },
               })
 
+              // Crear detalle lote de venta
+              await tx.detalleVentaLote.create({
+                data: {
+                  idDetalleVenta: createdDetalle.id,
+                  idLote: lote.id,
+                  cantidad: deducir,
+                }
+              })
+
               // Registrar movimiento en KARDEX
               await tx.movimientoInventario.create({
                 data: {
-                  idProducto: detalle.idProducto,
+                  idProducto: d.idProducto,
                   idLote: lote.id,
                   tipo: "SALIDA_VENTA",
                   cantidad: deducir,
-                  stockResultante: stockInicialProducto - (detalle.cantidadDeducir - pendiente + deducir),
+                  stockResultante: stockInicialProducto - (d.cantidadDeducir - pendiente + deducir),
                   costoUnitario: lote.costoCompra,
                   referencia: `Venta #${nuevaVenta.id}`,
                   idUsuario: user.id,
@@ -337,7 +435,7 @@ export async function POST(request: NextRequest) {
               })
 
               lotesDeducidosAudit.push({
-                idProducto: detalle.idProducto,
+                idProducto: d.idProducto,
                 lote: lote.codigoLote,
                 cantidad: deducir
               })
@@ -345,31 +443,15 @@ export async function POST(request: NextRequest) {
               pendiente -= deducir
             }
 
-            // Si por alguna inconsistencia queda stock pendiente de deducir sin lote
+            // Si por alguna inconsistencia queda stock pendiente sin lote vigente
             if (pendiente > 0) {
-              await tx.movimientoInventario.create({
-                data: {
-                  idProducto: detalle.idProducto,
-                  tipo: "SALIDA_VENTA",
-                  cantidad: pendiente,
-                  stockResultante: nuevoStockProducto,
-                  referencia: `Venta #${nuevaVenta.id} (sin lote)`,
-                  idUsuario: user.id,
-                  observacion: `Salida de stock legado sin lote (${pendiente} unds)`
-                },
-              })
-              
-              lotesDeducidosAudit.push({
-                idProducto: detalle.idProducto,
-                lote: "SIN_LOTE",
-                cantidad: pendiente
-              })
+              throw new Error(`Stock vigente insuficiente en lotes para el producto ${prod.nombre}`)
             }
 
             // Decrementar el stock general del producto
             await tx.producto.update({
-              where: { id: detalle.idProducto },
-              data: { stockActual: { decrement: detalle.cantidadDeducir } },
+              where: { id: d.idProducto },
+              data: { stockActual: { decrement: d.cantidadDeducir } },
             })
           }
 
@@ -434,7 +516,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: errorMsg }, { status: 404 })
     }
     
-    if (errorMsg.includes("Stock insuficiente") || errorMsg.includes("sería negativo")) {
+    if (errorMsg.includes("Stock insuficiente") || errorMsg.includes("sería negativo") || errorMsg.includes("insuficiente en lotes")) {
       return NextResponse.json({ error: errorMsg }, { status: 400 })
     }
     
@@ -454,6 +536,6 @@ export async function POST(request: NextRequest) {
       }, { status: 409 })
     }
 
-    return NextResponse.json({ error: "Ocurrió un error inesperado al procesar la venta." }, { status: 500 })
+    return NextResponse.json({ error: errorMsg || "Ocurrió un error inesperado al procesar la venta." }, { status: 500 })
   }
 }

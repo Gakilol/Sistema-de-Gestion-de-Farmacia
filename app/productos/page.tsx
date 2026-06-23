@@ -100,6 +100,8 @@ export default function ProductosPage() {
   const [stockInicial, setStockInicial] = useState("")
   const [loteInicial, setLoteInicial] = useState("")
   const [fechaVencimientoInicial, setFechaVencimientoInicial] = useState("")
+  const [esServicio, setEsServicio] = useState(false)
+  const [esDatoPrueba, setEsDatoPrueba] = useState(false)
   const [formLoading, setFormLoading] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [precioVentaError, setPrecioVentaError] = useState<string | null>(null)
@@ -312,6 +314,8 @@ export default function ProductosPage() {
     setStockInicial("")
     setLoteInicial("")
     setFechaVencimientoInicial("")
+    setEsServicio(false)
+    setEsDatoPrueba(false)
     setFormError(null)
     setPrecioVentaError(null)
   }
@@ -341,6 +345,8 @@ export default function ProductosPage() {
       setUnidadesPorBlister(p.unidadesPorBlister != null ? String(p.unidadesPorBlister) : "")
       setUnidadesPorCaja(p.unidadesPorCaja != null ? String(p.unidadesPorCaja) : "")
       setStockMinimo(p.stockMinimo != null ? String(p.stockMinimo) : "")
+      setEsServicio(p.esServicio || false)
+      setEsDatoPrueba(p.esDatoPrueba || false)
 
       setShowForm(true)
       setFormError(null)
@@ -543,9 +549,11 @@ export default function ProductosPage() {
         precioCaja: precioCaja || null,
         unidadesPorBlister: unidadesPorBlister || null,
         unidadesPorCaja: unidadesPorCaja || null,
+        esServicio,
+        esDatoPrueba,
       }
 
-      if (!editingId) {
+      if (!editingId && !esServicio) {
         body.stockInicial = stockInicial ? parseInt(stockInicial) : 0
         body.loteInicial = loteInicial || null
         body.fechaVencimientoInicial = fechaVencimientoInicial || null
@@ -760,16 +768,40 @@ export default function ProductosPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-foreground/80 mb-1">
-                        Nombre del producto <span className="text-red-500">*</span>
+                        Tipo de Producto
+                      </label>
+                      <select
+                        className="w-full rounded-md border border-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all bg-background text-foreground"
+                        value={esServicio ? "true" : "false"}
+                        onChange={(e) => {
+                          const isServ = e.target.value === "true"
+                          setEsServicio(isServ)
+                          if (isServ) {
+                            setStockInicial("0")
+                            setLoteInicial("")
+                            setFechaVencimientoInicial("")
+                            setPrecioCompra("0")
+                            setStockMinimo("0")
+                          }
+                        }}
+                        disabled={!!editingId}
+                      >
+                        <option value="false">Medicamento / Producto Físico</option>
+                        <option value="true">Servicio Clínico de Podología</option>
+                      </select>
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-foreground/80 mb-1">
+                        Nombre del producto / servicio <span className="text-red-500">*</span>
                       </label>
                       <Input
                         value={nombre}
                         onChange={(e) => setNombre(e.target.value)}
-                        placeholder="Ej: Paracetamol 500mg"
+                        placeholder={esServicio ? "Ej: Consulta Podológica General" : "Ej: Paracetamol 500mg"}
                         required
                         className="bg-background border-border text-foreground"
                       />
-                      <p className="text-xs text-muted-foreground mt-1">Nombre comercial o genérico del medicamento.</p>
+                      <p className="text-xs text-muted-foreground mt-1">Nombre comercial o genérico del medicamento o del servicio podológico.</p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-foreground/80 mb-1">Laboratorio</label>
@@ -1012,7 +1044,7 @@ export default function ProductosPage() {
                       />
                       <p className="text-xs text-muted-foreground mt-1">Si el stock baja de este número, recibirás una alerta para reabastecer.</p>
                     </div>
-                    {!editingId && (
+                    {!editingId && !esServicio && (
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:col-span-2 border-t border-border/30 pt-4 mt-2">
                         <div>
                           <label className="block text-sm font-medium text-foreground/80 mb-1">
@@ -1179,12 +1211,18 @@ export default function ProductosPage() {
                           {producto.categoria?.nombre || "Sin Categoría"}
                         </td>
                         <td className="px-6 py-4 text-sm text-foreground">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/20">
-                            {producto.cantidadLotes || 0} lotes
-                          </span>
+                          {producto.esServicio ? (
+                            <span className="text-xs text-muted-foreground italic">Servicio (N/A)</span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/20">
+                              {producto.cantidadLotes || 0} lotes
+                            </span>
+                          )}
                         </td>
                         <td className="px-6 py-4 text-sm whitespace-nowrap">
-                          {producto.proximoVencimiento ? (
+                          {producto.esServicio ? (
+                            <span className="text-xs text-muted-foreground italic">No aplica</span>
+                          ) : producto.proximoVencimiento ? (
                             <span className={`inline-flex items-center gap-1 font-semibold text-xs ${
                               producto.estadoProducto === "vencido" ? "text-red-500" :
                               producto.estadoProducto === "proximo_a_vencer" ? "text-amber-500" : "text-foreground"
@@ -1219,33 +1257,37 @@ export default function ProductosPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4 text-sm text-foreground">
-                          {(() => {
-                            const s = formatStock(producto)
-                            return (
-                              <div className="flex flex-col gap-1">
-                                <span className="font-semibold text-foreground text-sm">
-                                  {s.total} <span className="text-xs text-muted-foreground font-normal">uds totales</span>
-                                </span>
-                                {(s.cajas !== null || s.blisters !== null) && (
-                                  <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                                    {s.cajas !== null && (
-                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/20 shadow-sm">
-                                        {s.cajas} Caj
+                          {producto.esServicio ? (
+                            <span className="text-xs text-muted-foreground italic">Virtual (Ilimitado)</span>
+                          ) : (
+                            (() => {
+                              const s = formatStock(producto)
+                              return (
+                                <div className="flex flex-col gap-1">
+                                  <span className="font-semibold text-foreground text-sm">
+                                    {s.total} <span className="text-xs text-muted-foreground font-normal">uds totales</span>
+                                  </span>
+                                  {(s.cajas !== null || s.blisters !== null) && (
+                                    <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                                      {s.cajas !== null && (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/20 shadow-sm">
+                                          {s.cajas} Caj
+                                        </span>
+                                      )}
+                                      {s.blisters !== null && (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-sm">
+                                          {s.blisters} Blis
+                                        </span>
+                                      )}
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200/30 dark:border-blue-500/20 shadow-sm">
+                                        {s.sueltas} Uds
                                       </span>
-                                    )}
-                                    {s.blisters !== null && (
-                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-sm">
-                                        {s.blisters} Blis
-                                      </span>
-                                    )}
-                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200/30 dark:border-blue-500/20 shadow-sm">
-                                      {s.sueltas} Uds
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            )
-                          })()}
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })()
+                          )}
                         </td>
                         <td className="px-6 py-4 text-sm">
                           <div className="flex flex-col gap-1 items-start">
@@ -1668,48 +1710,78 @@ export default function ProductosPage() {
                               <tr className="border-b border-indigo-500/20 text-xs text-indigo-800 dark:text-indigo-300 font-semibold">
                                 <th className="text-left py-2 font-semibold">Código de Lote</th>
                                 <th className="text-left py-2 font-semibold">Stock Actual</th>
+                                {isAdmin && <th className="text-left py-2 font-semibold">Costo Compra</th>}
                                 <th className="text-left py-2 font-semibold">Fecha Vencimiento</th>
                                 {isAdmin && <th className="text-right py-2 font-semibold">Acciones</th>}
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-indigo-500/10">
-                              {selectedProduct.lotes.map((lote: any) => {
-                                const isExpired = lote.estadoLote === "vencido";
-                                const isExpiring = lote.estadoLote === "proximo_a_vencer";
-                                return (
-                                  <tr key={lote.id} className="hover:bg-indigo-500/5">
-                                    <td className="py-2.5 font-medium text-foreground">{lote.codigoLote}</td>
-                                    <td className="py-2.5 text-foreground">{lote.stockActual} uds</td>
-                                    <td className="py-2.5">
-                                      {lote.fechaVencimiento ? (
-                                        <span className={`inline-flex items-center gap-1 font-semibold ${
-                                          isExpired ? "text-red-500 dark:text-red-400" :
-                                          isExpiring ? "text-amber-500 animate-pulse" : "text-emerald-600 dark:text-emerald-400"
-                                        }`}>
-                                          {new Date(lote.fechaVencimiento).toLocaleDateString('es-NI', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC' })}
-                                          {isExpired && " (Vencido)"}
-                                          {isExpiring && ` (Vence en ${lote.diasRestantes}d)`}
-                                        </span>
-                                      ) : (
-                                        <span className="text-muted-foreground">—</span>
-                                      )}
-                                    </td>
-                                    {isAdmin && (
-                                      <td className="py-2.5 text-right">
-                                        <Button
-                                          size="sm"
-                                          variant="ghost"
-                                          onClick={() => handleOpenEditLote(lote)}
-                                          className="text-primary hover:text-primary-foreground hover:bg-primary/20 h-8 px-2"
-                                        >
-                                          <Edit2 className="w-3.5 h-3.5 mr-1" />
-                                          Editar
-                                        </Button>
+                              {(() => {
+                                // Encontrar el lote vigente más próximo a vencer (para marcar FEFO)
+                                const activeNonExpiredLotes = selectedProduct.lotes
+                                  .filter((l: any) => l.stockActual > 0 && l.estadoLote !== "vencido")
+                                  .sort((a: any, b: any) => {
+                                    if (a.fechaVencimiento && b.fechaVencimiento) {
+                                      return new Date(a.fechaVencimiento).getTime() - new Date(b.fechaVencimiento).getTime()
+                                    } else if (a.fechaVencimiento) {
+                                      return -1
+                                    } else if (b.fechaVencimiento) {
+                                      return 1
+                                    }
+                                    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+                                  });
+
+                                const nextLoteToUseId = activeNonExpiredLotes.length > 0 ? activeNonExpiredLotes[0].id : null;
+
+                                return selectedProduct.lotes.map((lote: any) => {
+                                  const isExpired = lote.estadoLote === "vencido";
+                                  const isExpiring = lote.estadoLote === "proximo_a_vencer";
+                                  const isNextFEFO = lote.id === nextLoteToUseId;
+                                  return (
+                                    <tr key={lote.id} className="hover:bg-indigo-500/5">
+                                      <td className="py-2.5 font-medium text-foreground">
+                                        {lote.codigoLote}
+                                        {isNextFEFO && (
+                                          <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/30">★ FEFO (Siguiente)</span>
+                                        )}
                                       </td>
-                                    )}
-                                  </tr>
-                                );
-                              })}
+                                      <td className="py-2.5 text-foreground">{lote.stockActual} uds</td>
+                                      {isAdmin && (
+                                        <td className="py-2.5 text-foreground">
+                                          C${Number(lote.costoCompra || 0).toFixed(2)}
+                                        </td>
+                                      )}
+                                      <td className="py-2.5">
+                                        {lote.fechaVencimiento ? (
+                                          <span className={`inline-flex items-center gap-1 font-semibold ${
+                                            isExpired ? "text-red-500 dark:text-red-400" :
+                                            isExpiring ? "text-amber-500 animate-pulse" : "text-emerald-600 dark:text-emerald-400"
+                                          }`}>
+                                            {new Date(lote.fechaVencimiento).toLocaleDateString('es-NI', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC' })}
+                                            {isExpired && " (Vencido)"}
+                                            {isExpiring && ` (Vence en ${lote.diasRestantes}d)`}
+                                          </span>
+                                        ) : (
+                                          <span className="text-muted-foreground">—</span>
+                                        )}
+                                      </td>
+                                      {isAdmin && (
+                                        <td className="py-2.5 text-right">
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => handleOpenEditLote(lote)}
+                                            className="text-primary hover:text-primary-foreground hover:bg-primary/20 h-8 px-2"
+                                          >
+                                            <Edit2 className="w-3.5 h-3.5 mr-1" />
+                                            Editar
+                                          </Button>
+                                        </td>
+                                      )}
+                                    </tr>
+                                  );
+                                });
+                              })()}
                             </tbody>
                           </table>
                         </div>

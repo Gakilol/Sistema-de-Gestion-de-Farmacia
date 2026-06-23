@@ -112,15 +112,15 @@ async function runSqlFile(filePath) {
 
 async function main() {
   const rootDir = path.join(__dirname, '..');
-  const scriptCompletoPath = path.join(rootDir, 'script_completo_farmacia.sql');
+  const triggersFarmaciaPath = path.join(rootDir, 'prisma', 'triggers_farmacia.sql');
   const auditCompletePath = path.join(rootDir, 'prisma', 'audit_complete.sql');
 
   console.log('--- STARTING DATABASE SCHEMA RESTORATION ---');
   
-  if (fs.existsSync(scriptCompletoPath)) {
-    await runSqlFile(scriptCompletoPath);
+  if (fs.existsSync(triggersFarmaciaPath)) {
+    await runSqlFile(triggersFarmaciaPath);
   } else {
-    console.error(`File not found: ${scriptCompletoPath}`);
+    console.error(`File not found: ${triggersFarmaciaPath}`);
   }
 
   if (fs.existsSync(auditCompletePath)) {
