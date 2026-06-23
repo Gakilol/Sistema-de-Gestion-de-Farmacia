@@ -18,7 +18,8 @@
     "db:cleanup:test": "ts-node --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/cleanup-test-data.ts",
     "db:verify:test": "ts-node --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/verify-test-data.ts",
     "test:audit": "ts-node --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/run-complete-audit-tests.ts",
-    "test:concurrency": "ts-node --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/test-concurrency.ts"
+    "test:concurrency": "ts-node --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/test-concurrency.ts",
+    "test": "ts-node --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/test-ia.ts"
   },
   "dependencies": {
     "@prisma/client": "6.2.1",
