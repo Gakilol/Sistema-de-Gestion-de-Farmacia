@@ -180,165 +180,225 @@ export async function POST(request: NextRequest) {
       total += detalle.precioUnitario * Number.parseInt(detalle.cantidad)
     }
 
+    // ── Idempotencia: Evitar ventas duplicadas por doble click en menos de 15 segundos ──
+    const quinceSegundosAtras = new Date(Date.now() - 15 * 1000)
+    const posibleDuplicado = await prisma.venta.findFirst({
+      where: {
+        idUsuario: user.id,
+        idCliente: idCliente ? Number(idCliente) : null,
+        total: total,
+        metodoPago,
+        fecha: { gte: quinceSegundosAtras }
+      },
+      include: { detalles: true }
+    })
+
+    if (posibleDuplicado) {
+      const detallesIdenticos = posibleDuplicado.detalles.length === detalles.length &&
+        posibleDuplicado.detalles.every(d1 => 
+          detalles.some((d2: any) => 
+            d2.idProducto === d1.idProducto && 
+            d2.cantidad === d1.cantidad && 
+            (d2.tipoUnidad || "UNIDAD") === d1.tipoUnidad
+          )
+        )
+      
+      if (detallesIdenticos) {
+        console.warn(`[Idempotencia] Venta duplicada interceptada. ID existente: ${posibleDuplicado.id}`)
+        return NextResponse.json(posibleDuplicado, { status: 200 })
+      }
+    }
+
     // Array para guardar los lotes deducidos para auditoría
     const lotesDeducidosAudit: any[] = []
+    let venta: any = null
+    let attempts = 0
+    const maxAttempts = 3
+    let delayMs = 300
 
-    // ── Transacción atómica: venta + detalles + FIFO batch deduction + movimientos ──
-    const venta = await prisma.$transaction(async (tx: any) => {
-      // 1. Bloqueo pesimista de productos y lotes en orden determinista para evitar Deadlocks
-      const sortedProductIds = [...productIds].sort((a, b) => a - b)
-      
-      // SELECT ... FOR UPDATE en Postgres
-      await tx.$executeRawUnsafe(
-        `SELECT id FROM "Producto" WHERE id IN (${sortedProductIds.join(",")}) FOR UPDATE`
-      )
-      
-      // Locking the corresponding lotes
-      await tx.$executeRawUnsafe(
-        `SELECT id FROM "Lote" WHERE "idProducto" IN (${sortedProductIds.join(",")}) FOR UPDATE`
-      )
-
-      // 2. Re-verificación de stock tras adquirir el bloqueo
-      for (const [idProducto, cantidadTotal] of cantidadTotalPorProducto) {
-        const prod = await tx.producto.findUnique({
-          where: { id: idProducto },
-          select: { nombre: true, stockActual: true, activo: true }
-        })
-        if (!prod || !prod.activo) {
-          throw new Error(`Producto #${idProducto} no disponible o inactivo`)
-        }
-        if (prod.stockActual < cantidadTotal) {
-          throw new Error(`Stock insuficiente para ${prod.nombre} (actualizado: ${prod.stockActual})`)
-        }
-      }
-
-      // 3. Crear cabecera y detalles de la venta
-      const nuevaVenta = await tx.venta.create({
-        data: {
-          fecha: new Date(),
-          idCliente: idCliente ? Number(idCliente) : null,
-          idUsuario: user.id,
-          total,
-          metodoPago,
-          nombrePodologo: nombrePodologo || null,
-          numeroReceta: numeroReceta || null,
-          tipoComprobante: tipoComprobante || "RECIBO",
-          estado: estado || "COMPLETADA",
-          montoRecibido: montoRecibido !== undefined && montoRecibido !== null ? Number(montoRecibido) : null,
-          cambio: cambio !== undefined && cambio !== null ? Number(cambio) : null,
-          rucCliente: rucCliente || null,
-          detalles: {
-            create: detalles.map((d: any) => ({
-              idProducto: d.idProducto,
-              cantidad: Number.parseInt(d.cantidad),
-              precioUnitario: d.precioUnitario,
-              subtotal: d.precioUnitario * Number.parseInt(d.cantidad),
-              tipoUnidad: d.tipoUnidad || "UNIDAD",
-            })),
-          },
-        },
-        include: {
-          detalles: { include: { producto: true } },
-          cliente: true,
-          usuario: { include: { rol: true } },
-        },
-      })
-
-      // 4. Deducción por lote siguiendo FEFO (Vencimiento asc, luego creado asc)
-      for (const detalle of detalles) {
-        let pendiente = detalle.cantidadDeducir
-        const producto = productoMap.get(detalle.idProducto)!
-        
-        // Obtener stock del producto en base de datos bajo lock
-        const dbProduct = await tx.producto.findUnique({
-          where: { id: detalle.idProducto },
-          select: { stockActual: true }
-        })
-        
-        const stockInicialProducto = dbProduct ? dbProduct.stockActual : producto.stockActual
-        const nuevoStockProducto = stockInicialProducto - detalle.cantidadDeducir
-
-        if (nuevoStockProducto < 0) {
-          throw new Error(`El stock resultante para ${producto.nombre} sería negativo (${nuevoStockProducto})`)
-        }
-
-        const lotes = await tx.lote.findMany({
-          where: { idProducto: detalle.idProducto, activo: true, stockActual: { gt: 0 } },
-          orderBy: [
-            { fechaVencimiento: "asc" },
-            { createdAt: "asc" },
-          ],
-        })
-
-        for (const lote of lotes) {
-          if (pendiente <= 0) break
-
-          const deducir = Math.min(pendiente, lote.stockActual)
-          const nuevoStockLote = lote.stockActual - deducir
-
-          // Actualizar stock del lote
-          await tx.lote.update({
-            where: { id: lote.id },
-            data: {
-              stockActual: nuevoStockLote,
-              activo: nuevoStockLote > 0,
-            },
-          })
-
-          // Registrar movimiento en KARDEX
-          await tx.movimientoInventario.create({
-            data: {
-              idProducto: detalle.idProducto,
-              idLote: lote.id,
-              tipo: "SALIDA_VENTA",
-              cantidad: deducir,
-              stockResultante: stockInicialProducto - (detalle.cantidadDeducir - pendiente + deducir),
-              costoUnitario: lote.costoCompra,
-              referencia: `Venta #${nuevaVenta.id}`,
-              idUsuario: user.id,
-              observacion: `Salida de lote: ${lote.codigoLote} (${deducir} unds)`
-            },
-          })
-
-          lotesDeducidosAudit.push({
-            idProducto: detalle.idProducto,
-            lote: lote.codigoLote,
-            cantidad: deducir
-          })
-
-          pendiente -= deducir
-        }
-
-        // Si por alguna inconsistencia queda stock pendiente de deducir sin lote
-        if (pendiente > 0) {
-          await tx.movimientoInventario.create({
-            data: {
-              idProducto: detalle.idProducto,
-              tipo: "SALIDA_VENTA",
-              cantidad: pendiente,
-              stockResultante: nuevoStockProducto,
-              referencia: `Venta #${nuevaVenta.id} (sin lote)`,
-              idUsuario: user.id,
-              observacion: `Salida de stock legado sin lote (${pendiente} unds)`
-            },
-          })
+    // ── Reintentos controlados para errores transitorios de concurrencia ──
+    while (attempts < maxAttempts) {
+      try {
+        // ── Transacción atómica: venta + detalles + FIFO batch deduction + movimientos ──
+        venta = await prisma.$transaction(async (tx: any) => {
+          // 1. Bloqueo pesimista de productos y lotes en orden determinista para evitar Deadlocks
+          const sortedProductIds = [...productIds].sort((a, b) => a - b)
           
-          lotesDeducidosAudit.push({
-            idProducto: detalle.idProducto,
-            lote: "SIN_LOTE",
-            cantidad: pendiente
+          // SELECT ... FOR UPDATE en Postgres
+          await tx.$executeRawUnsafe(
+            `SELECT id FROM "Producto" WHERE id IN (${sortedProductIds.join(",")}) FOR UPDATE`
+          )
+          
+          // Locking the corresponding lotes
+          await tx.$executeRawUnsafe(
+            `SELECT id FROM "Lote" WHERE "idProducto" IN (${sortedProductIds.join(",")}) FOR UPDATE`
+          )
+
+          // 2. Re-verificación de stock tras adquirir el bloqueo
+          for (const [idProducto, cantidadTotal] of cantidadTotalPorProducto) {
+            const prod = await tx.producto.findUnique({
+              where: { id: idProducto },
+              select: { nombre: true, stockActual: true, activo: true }
+            })
+            if (!prod || !prod.activo) {
+              throw new Error(`Producto #${idProducto} no disponible o inactivo`)
+            }
+            if (prod.stockActual < cantidadTotal) {
+              throw new Error(`Stock insuficiente para ${prod.nombre} (actualizado: ${prod.stockActual})`)
+            }
+          }
+
+          // 3. Crear cabecera y detalles de la venta
+          const nuevaVenta = await tx.venta.create({
+            data: {
+              fecha: new Date(),
+              idCliente: idCliente ? Number(idCliente) : null,
+              idUsuario: user.id,
+              total,
+              metodoPago,
+              nombrePodologo: nombrePodologo || null,
+              numeroReceta: numeroReceta || null,
+              tipoComprobante: tipoComprobante || "RECIBO",
+              estado: estado || "COMPLETADA",
+              montoRecibido: montoRecibido !== undefined && montoRecibido !== null ? Number(montoRecibido) : null,
+              cambio: cambio !== undefined && cambio !== null ? Number(cambio) : null,
+              rucCliente: rucCliente || null,
+              detalles: {
+                create: detalles.map((d: any) => ({
+                  idProducto: d.idProducto,
+                  cantidad: Number.parseInt(d.cantidad),
+                  precioUnitario: d.precioUnitario,
+                  subtotal: d.precioUnitario * Number.parseInt(d.cantidad),
+                  tipoUnidad: d.tipoUnidad || "UNIDAD",
+                })),
+              },
+            },
+            include: {
+              detalles: { include: { producto: true } },
+              cliente: true,
+              usuario: { include: { rol: true } },
+            },
           })
-        }
 
-        // Decrementar el stock general del producto
-        await tx.producto.update({
-          where: { id: detalle.idProducto },
-          data: { stockActual: { decrement: detalle.cantidadDeducir } },
+          // 4. Deducción por lote siguiendo FEFO (Vencimiento asc, luego creado asc)
+          for (const detalle of detalles) {
+            let pendiente = detalle.cantidadDeducir
+            const producto = productoMap.get(detalle.idProducto)!
+            
+            // Obtener stock del producto en base de datos bajo lock
+            const dbProduct = await tx.producto.findUnique({
+              where: { id: detalle.idProducto },
+              select: { stockActual: true }
+            })
+            
+            const stockInicialProducto = dbProduct ? dbProduct.stockActual : producto.stockActual
+            const nuevoStockProducto = stockInicialProducto - detalle.cantidadDeducir
+
+            if (nuevoStockProducto < 0) {
+              throw new Error(`El stock resultante para ${producto.nombre} sería negativo (${nuevoStockProducto})`)
+            }
+
+            const lotes = await tx.lote.findMany({
+              where: { idProducto: detalle.idProducto, activo: true, stockActual: { gt: 0 } },
+              orderBy: [
+                { fechaVencimiento: "asc" },
+                { createdAt: "asc" },
+              ],
+            })
+
+            for (const lote of lotes) {
+              if (pendiente <= 0) break
+
+              const deducir = Math.min(pendiente, lote.stockActual)
+              const nuevoStockLote = lote.stockActual - deducir
+
+              // Actualizar stock del lote
+              await tx.lote.update({
+                where: { id: lote.id },
+                data: {
+                  stockActual: nuevoStockLote,
+                  activo: nuevoStockLote > 0,
+                },
+              })
+
+              // Registrar movimiento en KARDEX
+              await tx.movimientoInventario.create({
+                data: {
+                  idProducto: detalle.idProducto,
+                  idLote: lote.id,
+                  tipo: "SALIDA_VENTA",
+                  cantidad: deducir,
+                  stockResultante: stockInicialProducto - (detalle.cantidadDeducir - pendiente + deducir),
+                  costoUnitario: lote.costoCompra,
+                  referencia: `Venta #${nuevaVenta.id}`,
+                  idUsuario: user.id,
+                  observacion: `Salida de lote: ${lote.codigoLote} (${deducir} unds)`
+                },
+              })
+
+              lotesDeducidosAudit.push({
+                idProducto: detalle.idProducto,
+                lote: lote.codigoLote,
+                cantidad: deducir
+              })
+
+              pendiente -= deducir
+            }
+
+            // Si por alguna inconsistencia queda stock pendiente de deducir sin lote
+            if (pendiente > 0) {
+              await tx.movimientoInventario.create({
+                data: {
+                  idProducto: detalle.idProducto,
+                  tipo: "SALIDA_VENTA",
+                  cantidad: pendiente,
+                  stockResultante: nuevoStockProducto,
+                  referencia: `Venta #${nuevaVenta.id} (sin lote)`,
+                  idUsuario: user.id,
+                  observacion: `Salida de stock legado sin lote (${pendiente} unds)`
+                },
+              })
+              
+              lotesDeducidosAudit.push({
+                idProducto: detalle.idProducto,
+                lote: "SIN_LOTE",
+                cantidad: pendiente
+              })
+            }
+
+            // Decrementar el stock general del producto
+            await tx.producto.update({
+              where: { id: detalle.idProducto },
+              data: { stockActual: { decrement: detalle.cantidadDeducir } },
+            })
+          }
+
+          return nuevaVenta
+        }, {
+          maxWait: 10000,
+          timeout: 20000,
         })
+        
+        break // Si la transacción fue exitosa, salimos del ciclo de reintentos
+      } catch (error: any) {
+        attempts++
+        const isTransient = 
+          error.code === "P2034" || 
+          error.code === "P2028" ||
+          error.message?.includes("Transaction not found") ||
+          error.message?.includes("deadlock") ||
+          error.message?.includes("lock timeout") ||
+          error.message?.includes("serialization")
+        
+        if (isTransient && attempts < maxAttempts) {
+          console.warn(`[Venta] Conflicto transitorio de concurrencia. Reintentando intento ${attempts}/${maxAttempts} en ${delayMs}ms. Error: ${error.message}`)
+          await new Promise(resolve => setTimeout(resolve, delayMs))
+          delayMs *= 2 // Backoff exponencial
+        } else {
+          throw error
+        }
       }
-
-      return nuevaVenta
-    })
+    }
 
     // Registrar en auditoría general de la aplicación
     registrarLog({
@@ -368,6 +428,32 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(venta, { status: 201 })
   } catch (error: any) {
     console.error("Error creating venta:", error)
-    return NextResponse.json({ error: error.message || "Error creating venta" }, { status: 500 })
+    const errorMsg = error.message || ""
+    
+    if (errorMsg.includes("no disponible o inactivo") || errorMsg.includes("no encontrado")) {
+      return NextResponse.json({ error: errorMsg }, { status: 404 })
+    }
+    
+    if (errorMsg.includes("Stock insuficiente") || errorMsg.includes("sería negativo")) {
+      return NextResponse.json({ error: errorMsg }, { status: 400 })
+    }
+    
+    if (errorMsg.includes("LOTE_VENCIDO")) {
+      return NextResponse.json({ error: errorMsg }, { status: 422 })
+    }
+
+    if (error.code === "P2028" || errorMsg.includes("Transaction not found") || errorMsg.includes("timeout")) {
+      return NextResponse.json({
+        error: "La transacción de venta expiró por sobrecarga. Por favor, reintente en unos momentos."
+      }, { status: 503 })
+    }
+    
+    if (error.code === "P2034" || errorMsg.includes("deadlock") || errorMsg.includes("serialization") || errorMsg.includes("conflict")) {
+      return NextResponse.json({
+        error: "Conflicto de concurrencia detectado (el inventario cambió simultáneamente). Por favor, reintente."
+      }, { status: 409 })
+    }
+
+    return NextResponse.json({ error: "Ocurrió un error inesperado al procesar la venta." }, { status: 500 })
   }
 }

@@ -130,6 +130,9 @@ async function main() {
           })
 
           return { success: true, error: null }
+        }, {
+          maxWait: 10000,
+          timeout: 20000,
         })
       } catch (e: any) {
         return { success: false, error: e.message }

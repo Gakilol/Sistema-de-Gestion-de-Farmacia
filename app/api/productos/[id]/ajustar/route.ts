@@ -138,6 +138,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       })
 
       return { stockAnterior, nuevoStock, diferencia, producto: productoActualizado }
+    }, {
+      maxWait: 10000,
+      timeout: 20000,
     })
 
     // Registrar auditoría

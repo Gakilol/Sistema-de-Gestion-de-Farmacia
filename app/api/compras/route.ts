@@ -222,6 +222,9 @@ export async function POST(request: NextRequest) {
       }
 
       return nuevaCompra
+    }, {
+      maxWait: 10000,
+      timeout: 20000,
     })
 
     // Registrar en auditoría general de la aplicación
