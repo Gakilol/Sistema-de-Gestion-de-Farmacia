@@ -103,15 +103,18 @@ export async function GET(request: NextRequest) {
     })
 
     // 5. Productos con stock bajo (>0 pero <= mínimo)
-    const stockBajo = await prisma.producto.findMany({
+    const activeProductsWithStock = await prisma.producto.findMany({
       where: {
         activo: true,
+        stockActual: { gt: 0 },
         stockMinimo: { not: null },
-        stockActual: { gt: 0, lte: prisma.producto.fields.stockMinimo },
       },
       select: { nombre: true, stockActual: true, stockMinimo: true },
-      take: 10,
     })
+
+    const stockBajo = activeProductsWithStock
+      .filter((p) => p.stockActual <= (p.stockMinimo ?? 0))
+      .slice(0, 10)
 
     stockBajo.forEach((p) => {
       recomendaciones.push({

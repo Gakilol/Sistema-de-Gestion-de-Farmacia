@@ -191,7 +191,7 @@ Responde ÚNICAMENTE con el JSON estructurado, sin texto adicional.`
 
     const validation = InvoiceOcrSchema.safeParse(parsedData)
     if (!validation.success) {
-      const errores = validation.error.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join("; ")
+      const errores = validation.error.issues.map((e) => `${e.path.join(".")}: ${e.message}`).join("; ")
       return NextResponse.json(
         {
           error: "Los datos extraídos contienen campos inválidos. Revisa la imagen.",

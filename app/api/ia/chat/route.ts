@@ -383,7 +383,7 @@ export async function POST(request: NextRequest) {
       while (toolCallsCount < MAX_TOOL_CALLS) {
         let geminiResponse: Response
         try {
-          geminiResponse = await callGemini(apiKey = geminiApiKey, contents, true)
+          geminiResponse = await callGemini(geminiApiKey, contents, true)
         } catch (err: any) {
           registrarLog({ accion: "IA_GEMINI_ERROR", entidad: "AsistenteIA", idUsuario: user.id, detalles: { error: err.message } })
           if (err.message === "GEMINI_TIMEOUT") {

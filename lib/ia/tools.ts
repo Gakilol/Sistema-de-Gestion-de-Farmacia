@@ -126,19 +126,18 @@ export async function getDashboardSummary(
     const hoy = new Date(ahora); hoy.setHours(0, 0, 0, 0)
     const tresMeses = new Date(ahora); tresMeses.setMonth(ahora.getMonth() + 3)
 
-    const [resumen, stockBajoCount, lotesVencidos, lotesPorVencer] = await Promise.all([
-      prisma.producto.aggregate({
-        where: { activo: true },
-        _count: { id: true },
-        _sum: { stockActual: true },
-      }),
-      prisma.producto.count({
-        where: {
-          activo: true,
-          stockMinimo: { not: null },
-          stockActual: { lte: prisma.producto.fields.stockMinimo },
-        },
-      }),
+    const activeProducts = await prisma.producto.findMany({
+      where: { activo: true },
+      select: { stockActual: true, stockMinimo: true },
+    })
+
+    const totalProductos = activeProducts.length
+    const totalStockUnidades = activeProducts.reduce((sum, p) => sum + p.stockActual, 0)
+    const stockBajoCount = activeProducts.filter(
+      (p) => p.stockMinimo !== null && p.stockActual <= p.stockMinimo
+    ).length
+
+    const [lotesVencidos, lotesPorVencer] = await Promise.all([
       prisma.lote.count({
         where: { activo: true, stockActual: { gt: 0 }, fechaVencimiento: { lt: ahora } },
       }),
@@ -148,8 +147,8 @@ export async function getDashboardSummary(
     ])
 
     const result: DashboardSummaryResult = {
-      totalProductos: resumen._count.id,
-      totalStockUnidades: resumen._sum.stockActual ?? 0,
+      totalProductos,
+      totalStockUnidades,
       productosStockBajo: stockBajoCount,
       lotesPorVencer,
       lotesVencidos,
@@ -192,11 +191,18 @@ export async function getLowStockProducts(
 
   try {
     const mostrarCosto = canViewFinancialData(rol)
+
+    const activeProducts = await prisma.producto.findMany({
+      where: { activo: true, stockMinimo: { not: null } },
+      select: { id: true, stockActual: true, stockMinimo: true },
+    })
+    const lowStockIds = activeProducts
+      .filter((p) => p.stockActual <= (p.stockMinimo ?? 0))
+      .map((p) => p.id)
+
     const productos = await prisma.producto.findMany({
       where: {
-        activo: true,
-        stockMinimo: { not: null },
-        stockActual: { lte: prisma.producto.fields.stockMinimo },
+        id: { in: lowStockIds },
       },
       select: {
         id: true, nombre: true, stockActual: true, stockMinimo: true,
@@ -208,9 +214,7 @@ export async function getLowStockProducts(
       skip: offset,
     })
 
-    const total = await prisma.producto.count({
-      where: { activo: true, stockMinimo: { not: null }, stockActual: { lte: prisma.producto.fields.stockMinimo } },
-    })
+    const total = lowStockIds.length
 
     return {
       ok: true,
@@ -734,8 +738,16 @@ export async function getSuggestedPurchaseOrder(
     const desde = new Date(); desde.setDate(desde.getDate() - diasAnalisis)
 
     // Productos con stock bajo
+    const activeProducts = await prisma.producto.findMany({
+      where: { activo: true, stockMinimo: { not: null } },
+      select: { id: true, stockActual: true, stockMinimo: true },
+    })
+    const lowStockIds = activeProducts
+      .filter((p) => p.stockActual <= (p.stockMinimo ?? 0))
+      .map((p) => p.id)
+
     const productosStockBajo = await prisma.producto.findMany({
-      where: { activo: true, stockMinimo: { not: null }, stockActual: { lte: prisma.producto.fields.stockMinimo } },
+      where: { id: { in: lowStockIds } },
       select: {
         id: true, nombre: true, stockActual: true, stockMinimo: true, precioCompra: true,
         proveedores: { select: { proveedor: { select: { nombre: true } } }, take: 1 },
