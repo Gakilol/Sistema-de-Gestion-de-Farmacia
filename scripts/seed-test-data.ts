@@ -161,15 +161,41 @@ async function main() {
   console.log('👥 Creando clientes...');
   const clientsList: any[] = []
 
+  const REAL_NAMES = [
+    'Juan Carlos Pérez Ortiz', 'María Alejandra Gómez Brenes', 'Carlos Eduardo Mendoza Chaves', 'Diana Patricia Castillo Solano',
+    'Eduardo José Vargas Vargas', 'Gabriela Sofía Flores Rojas', 'Hugo Alberto Ortiz Delgado', 'Isabel Cristina Ramírez Segura',
+    'Jorge Luis Castro Salazar', 'Karla Valeria Méndez Romero', 'Luis Fernando Fuentes Vega', 'Mónica Beatriz Salazar Romero',
+    'Néstor Raúl Delgado Alvarez', 'Olga Marina Romero Silva', 'Pedro Alfonso Álvarez Benítez', 'Patricia Elena Guzmán Peña',
+    'Ricardo Augusto Silva Duarte', 'Silvia Carolina Duarte Cárdenas', 'Tomás Ignacio Benítez Reyes', 'Valeria Nicole Peña Miranda',
+    'Walter Antonio Cárdenas Soto', 'Yolanda Margarita Reyes Villalobos', 'Adrián Francisco Soto Guerrero', 'Camila Valentina Miranda Vega',
+    'Esteban Leonel Rojas Rivas', 'Fernanda Victoria Villalobos Marin', 'Gonzalo Mauricio Vega Aguilar', 'Irene Natalia Guerrero Quesada',
+    'Mauricio Andrés Soto Cascante', 'Natalia Carolina Rivas Bolaños', 'Oscar Daniel Marín Brenes', 'Paola Andreína Barquero Solano',
+    'Roberto Carlos Aguilar Zamora', 'Sofía Elena Quesada Araya', 'Víctor Manuel Cascante Campos', 'Andrés Felipe Chaves Brenes',
+    'Elena Beatriz Bolaños Esquivel', 'Felipe Leonel Calderón Solano', 'Gloria Patricia Esquivel Brenes', 'Héctor Manuel Brenes Solano',
+    'Julia Carolina Solano Brenes', 'Lorena María Segura Segura', 'Manuel Eduardo Zamora Zamora', 'Olga Patricia Araya Araya',
+    'Pablo Alberto Campos Campos', 'Gabriela María Ortiz Rojas', 'Hugo Francisco Ramírez Castro', 'Isabel Elena Delgado Silva',
+    'Jorge Alberto Silva Ortiz', 'Karla Beatriz Romero Silva'
+  ]
+
+  function getEmailFromName(name: string) {
+    const clean = name.toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9\s]/g, "")
+      .trim()
+      .replace(/\s+/g, '.');
+    return `${clean}@example.test`;
+  }
+
   // 30 clientes activos
   for (let i = 1; i <= 30; i++) {
+    const realName = REAL_NAMES[i - 1]
     const c = await prisma.cliente.create({
       data: {
-        nombreCompleto: `${PREFIX}Cliente_Activo_${i}`,
-        correo: `qa_test_client_act_${i}@example.test`,
+        nombreCompleto: `${PREFIX}${realName}`,
+        correo: getEmailFromName(realName),
         telefono: `8888-9${i.toString().padStart(3, '0')}`,
         cedula: `001-QA-ACT-${i.toString().padStart(3, '0')}-0001A`,
-        direccion: `Dirección ficticia activa ${i}`,
+        direccion: `Dirección ficticia activa de ${realName}`,
         activo: true
       }
     })
@@ -178,9 +204,10 @@ async function main() {
 
   // 5 clientes con datos mínimos
   for (let i = 1; i <= 5; i++) {
+    const realName = REAL_NAMES[30 + i - 1]
     const c = await prisma.cliente.create({
       data: {
-        nombreCompleto: `${PREFIX}Cliente_Min_${i}`,
+        nombreCompleto: `${PREFIX}${realName}`,
         cedula: `001-QA-MIN-${i.toString().padStart(3, '0')}-0001A`,
         activo: true
       }
@@ -190,9 +217,9 @@ async function main() {
 
   // 5 clientes con nombres similares para pruebas de búsqueda
   const similares = [
-    { nombre: `${PREFIX}Juan Perez`, email: 'juan_perez@example.test', cedula: '001-QA-SIM-001-0001A', phone: '8888-7001' },
-    { nombre: `${PREFIX}Juan Perez Gomez`, email: 'juan_gomez@example.test', cedula: '001-QA-SIM-002-0001A', phone: '8888-7002' },
-    { nombre: `${PREFIX}Juan Carlos Perez`, email: 'juan_carlos@example.test', cedula: '001-QA-SIM-003-0001A', phone: '8888-7003' },
+    { nombre: `${PREFIX}Juan Perez`, email: 'juan.perez@example.test', cedula: '001-QA-SIM-001-0001A', phone: '8888-7001' },
+    { nombre: `${PREFIX}Juan Perez Gomez`, email: 'juan.gomez@example.test', cedula: '001-QA-SIM-002-0001A', phone: '8888-7002' },
+    { nombre: `${PREFIX}Juan Carlos Perez`, email: 'juan.carlos@example.test', cedula: '001-QA-SIM-003-0001A', phone: '8888-7003' },
     { nombre: `${PREFIX}Juana Perez`, email: 'juana_perez@example.test', cedula: '001-QA-SIM-004-0001A', phone: '8888-7004' },
     { nombre: `${PREFIX}Juan Perez Ortiz`, email: 'juan_ortiz@example.test', cedula: '001-QA-SIM-005-0001A', phone: '8888-7005' },
   ]
@@ -211,13 +238,14 @@ async function main() {
 
   // 3 clientes inactivos
   for (let i = 1; i <= 3; i++) {
+    const realName = REAL_NAMES[35 + i - 1]
     const c = await prisma.cliente.create({
       data: {
-        nombreCompleto: `${PREFIX}Cliente_Inact_${i}`,
-        correo: `qa_test_client_ina_${i}@example.test`,
+        nombreCompleto: `${PREFIX}${realName}`,
+        correo: getEmailFromName(realName),
         telefono: `8888-8${i.toString().padStart(3, '0')}`,
         cedula: `001-QA-INA-${i.toString().padStart(3, '0')}-0001A`,
-        direccion: `Dirección ficticia inactiva ${i}`,
+        direccion: `Dirección ficticia inactiva de ${realName}`,
         activo: false
       }
     })
@@ -231,24 +259,24 @@ async function main() {
   console.log('🏢 Creando proveedores...');
   const providersList: any[] = []
   const provNames = [
-    'Distribuidora Farmacéutica A',
-    'Distribuidora Médica B',
-    'Laboratorios Internacionales C',
-    'Cuidado y Salud D',
-    'Farmaservicios E',
-    'Dermosalud F',
-    'Ortopedia Central G',
-    'Insumos Quirúrgicos H',
-    'Nutrición y Deporte I',
-    'Logística Farmacéutica J'
+    'Distribuidora Farmacéutica del Norte',
+    'FarmaServicios Integrales de Staging',
+    'Laboratorios Medigen QA',
+    'Corporación Medisalud Staging',
+    'Insumos Quirúrgicos Nacionales',
+    'Dermacare Latinoamericana',
+    'NutriVital Distribuidora',
+    'Logística Sanitaria Express',
+    'Procesos Médicos Alfa',
+    'Alianza Farmacéutica'
   ]
   for (let i = 0; i < provNames.length; i++) {
     const prov = await prisma.proveedor.create({
       data: {
         nombre: `${PREFIX}${provNames[i]}`,
         telefono: `2222-90${i.toString().padStart(2, '0')}`,
-        correo: `prov_${i}@example.test`,
-        direccion: `Complejo Industrial Bodega ${i + 1}`
+        correo: `contacto@${provNames[i].toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "")}.example.test`,
+        direccion: `Complejo Industrial Bodega #${i + 1}`
       }
     })
     providersList.push(prov)
@@ -290,8 +318,49 @@ async function main() {
   // - 10 múltiples lotes
   // - 5 de alta rotación (concurrencia)
 
-  const normalProds = Array.from({ length: 40 }).map((_, i) => ({
-    nombre: `${PREFIX}Paracetamol_${i + 1}`,
+  const normalProds = [
+    'Acetaminofén 500mg Calox (Paracetamol_1)',
+    'Panadol Ultra 500mg/65mg (Paracetamol_2)',
+    'Novalcina 500mg Sanofi (Paracetamol_3)',
+    'Aspirina 500mg Bayer (Paracetamol_4)',
+    'Ibuprofeno 400mg MK (Paracetamol_5)',
+    'Naproxeno 250mg Genfar (Paracetamol_6)',
+    'Diclofenaco Sódico 50mg (Paracetamol_7)',
+    'Meloxicam 15mg Calox (Paracetamol_8)',
+    'Celebrex 200mg Pfizer (Paracetamol_9)',
+    'Voltaren Emulgel 50g (Paracetamol_10)',
+    'Buscapina Compositum (Paracetamol_11)',
+    'Dolo-Neurobion Inyectable (Paracetamol_12)',
+    'Dorival 200mg Liqui-Gels (Paracetamol_13)',
+    'Flanax 275mg Bayer (Paracetamol_14)',
+    'Winadeine F Tabletas (Paracetamol_15)',
+    'Tramadol 50mg Caps MK (Paracetamol_16)',
+    'Dolgex 500mg Gelcaps (Paracetamol_17)',
+    'Piroxicam 20mg Genfar (Paracetamol_18)',
+    'Ketoprofeno 100mg Calox (Paracetamol_19)',
+    'Ketorolaco 10mg MK (Paracetamol_20)',
+    'Ponstan 500mg Pfizer (Paracetamol_21)',
+    'Dual Acetaminofén Cafeína (Paracetamol_22)',
+    'Panadol Bebé Gotas (Paracetamol_23)',
+    'Tempra Jarabe Infantil (Paracetamol_24)',
+    'Tafirol 1g Tabletas (Paracetamol_25)',
+    'Acetaminofén 120mg/5ml (Paracetamol_26)',
+    'Acetaminofén MK 500mg (Paracetamol_27)',
+    'Panadol Niños Jarabe (Paracetamol_28)',
+    'Advil Max 400mg Liqui-Gels (Paracetamol_29)',
+    'Advil Niños Suspensión (Paracetamol_30)',
+    'Naproxeno Sódico 550mg (Paracetamol_31)',
+    'Diclofenaco Potásico 50mg (Paracetamol_32)',
+    'Voltaren 75mg Ampollas (Paracetamol_33)',
+    'Enantyum 25mg Tabletas (Paracetamol_34)',
+    'Dexketoprofeno 25mg Genfar (Paracetamol_35)',
+    'Aspirina Masticable 100mg (Paracetamol_36)',
+    'Alka-Seltzer Efervescente (Paracetamol_37)',
+    'Sal de Andrews Polvo (Paracetamol_38)',
+    'Dolofin 500mg Tabletas (Paracetamol_39)',
+    'Dolex Forte Tabletas (Paracetamol_40)'
+  ].map((fullName, i) => ({
+    nombre: `${PREFIX}${fullName}`,
     bar: `${PREFIX}BAR_NORM_${i + 1}`,
     min: 10,
     precioV: 15.00,
@@ -299,8 +368,19 @@ async function main() {
     catIndex: 0 // Analgésicos
   }))
 
-  const lowStockProds = Array.from({ length: 10 }).map((_, i) => ({
-    nombre: `${PREFIX}Amoxicilina_${i + 1}`,
+  const lowStockProds = [
+    'Amoxicilina 500mg Genfar (Amoxicilina_1)',
+    'Amoxil Suspensión 250mg (Amoxicilina_2)',
+    'Trifamox IBL 750mg (Amoxicilina_3)',
+    'Clamicil Amoxicilina Clavulánico (Amoxicilina_4)',
+    'Augmentin 875mg/125mg (Amoxicilina_5)',
+    'Cefalexina 500mg MK (Amoxicilina_6)',
+    'Ciprofloxacina 500mg Calox (Amoxicilina_7)',
+    'Azitromicina 500mg Genfar (Amoxicilina_8)',
+    'Klaricid Claritromicina 500mg (Amoxicilina_9)',
+    'Eritromicina 500mg MK (Amoxicilina_10)'
+  ].map((fullName, i) => ({
+    nombre: `${PREFIX}${fullName}`,
     bar: `${PREFIX}BAR_LOW_${i + 1}`,
     min: 20,
     precioV: 35.00,
@@ -308,8 +388,14 @@ async function main() {
     catIndex: 1 // Antibióticos
   }))
 
-  const zeroStockProds = Array.from({ length: 5 }).map((_, i) => ({
-    nombre: `${PREFIX}Vitamina_C_${i + 1}`,
+  const zeroStockProds = [
+    'Redoxon Vitamina C Efervescente (Vitamina_C_1)',
+    'Cebión Gotas Infantiles (Vitamina_C_2)',
+    'Cebión Tabletas Masticables (Vitamina_C_3)',
+    'Vitamina C Genfar 500mg (Vitamina_C_4)',
+    'Cevión Solución Oral (Vitamina_C_5)'
+  ].map((fullName, i) => ({
+    nombre: `${PREFIX}${fullName}`,
     bar: `${PREFIX}BAR_ZERO_${i + 1}`,
     min: 5,
     precioV: 8.00,
@@ -317,8 +403,14 @@ async function main() {
     catIndex: 2 // Vitaminas
   }))
 
-  const expiringProds = Array.from({ length: 5 }).map((_, i) => ({
-    nombre: `${PREFIX}Jarabe_Tos_${i + 1}`,
+  const expiringProds = [
+    'Jarabe para la Tos Histiacil (Jarabe_Tos_1)',
+    'Tukol Jarabe Expectorante (Jarabe_Tos_2)',
+    'Abrilar Jarabe Natural (Jarabe_Tos_3)',
+    'Mucosolvan Jarabe Adulto (Jarabe_Tos_4)',
+    'Broxol Jarabe Pediátrico (Jarabe_Tos_5)'
+  ].map((fullName, i) => ({
+    nombre: `${PREFIX}${fullName}`,
     bar: `${PREFIX}BAR_EXP_${i + 1}`,
     min: 8,
     precioV: 24.00,
@@ -326,8 +418,14 @@ async function main() {
     catIndex: 0 // Analgésicos
   }))
 
-  const expiredProds = Array.from({ length: 5 }).map((_, i) => ({
-    nombre: `${PREFIX}Crema_Tópica_${i + 1}`,
+  const expiredProds = [
+    'Clotrimazol Crema Tópica 1% (Crema_Tópica_1)',
+    'Hidrocortisona Crema MK 1% (Crema_Tópica_2)',
+    'Quadriderm Crema Dérmica (Crema_Tópica_3)',
+    'Barmicil Crema Tópica (Crema_Tópica_4)',
+    'Baycuten Crema Dérmica (Crema_Tópica_5)'
+  ].map((fullName, i) => ({
+    nombre: `${PREFIX}${fullName}`,
     bar: `${PREFIX}BAR_EXPD_${i + 1}`,
     min: 5,
     precioV: 40.00,
@@ -335,8 +433,19 @@ async function main() {
     catIndex: 7 // Dermocosmética
   }))
 
-  const multiBatchProds = Array.from({ length: 10 }).map((_, i) => ({
-    nombre: `${PREFIX}Gasas_Estériles_${i + 1}`,
+  const multiBatchProds = [
+    'Gasas Estériles Curativas 3x3 (Gasas_Estériles_1)',
+    'Gasas Quirúrgicas Estériles 4x4 (Gasas_Estériles_2)',
+    'Compresas de Gasa Estéril (Gasas_Estériles_3)',
+    'Vendas Elásticas 3 Pulgadas (Gasas_Estériles_4)',
+    'Esparadrapo Micropore 1 Pulgada (Gasas_Estériles_5)',
+    'Curitas Adhesivas Band-Aid (Gasas_Estériles_6)',
+    'Algodón Planchado 100g (Gasas_Estériles_7)',
+    'Guantes de Látex Estériles (Gasas_Estériles_8)',
+    'Mascarillas Quirúrgicas 3 Capas (Gasas_Estériles_9)',
+    'Jeringas Descartables 5ml (Gasas_Estériles_10)'
+  ].map((fullName, i) => ({
+    nombre: `${PREFIX}${fullName}`,
     bar: `${PREFIX}BAR_MULT_${i + 1}`,
     min: 15,
     precioV: 12.00,
@@ -344,8 +453,14 @@ async function main() {
     catIndex: 5 // Material Médico
   }))
 
-  const concurrencyProds = Array.from({ length: 5 }).map((_, i) => ({
-    nombre: `${PREFIX}Alcohol_Glicerinado_${i + 1}`,
+  const concurrencyProds = [
+    'Alcohol Glicerinado 70% (Alcohol_Glicerinado_1)',
+    'Gel Antiséptico Glicerinado (Alcohol_Glicerinado_2)',
+    'Jabón Líquido Antibacterial (Alcohol_Glicerinado_3)',
+    'Toallitas Húmedas Desinfectantes (Alcohol_Glicerinado_4)',
+    'Sanitizante de Manos Spray (Alcohol_Glicerinado_5)'
+  ].map((fullName, i) => ({
+    nombre: `${PREFIX}${fullName}`,
     bar: `${PREFIX}BAR_CONC_${i + 1}`,
     min: 10,
     precioV: 18.00,

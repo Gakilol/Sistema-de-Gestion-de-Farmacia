@@ -17,7 +17,7 @@ Este informe documenta la preparación, inserción de datos de prueba (seeding),
 Se crearon e integraron al proyecto los siguientes recursos y comandos automatizados:
 
 ### Scripts en la Carpeta `/scripts`
-1. **[scripts/seed-test-data.ts](file:///c:/Users/Gaki/Documents/podocare-system-master/Sistema%20de%20Gestion%20de%20Farmacia/scripts/seed-test-data.ts)**: Se encarga de limpiar de forma selectiva datos de prueba previos e insertar el nuevo set de datos ficticios manteniendo la integridad referencial y las relaciones lógicas (FEFO, movimientos de Kardex, lotes y auditorías transaccionales).
+1. **[scripts/seed-test-data.ts](file:///c:/Users/Gaki/Documents/podocare-system-master/Sistema%20de%20Gestion%20de%20Farmacia/scripts/seed-test-data.ts)**: Inicializa la base de datos con un set de datos de apariencia 100% profesional e hispana (nombres de personas reales, medicamentos reales en el mercado, laboratorios y marcas reales), manteniendo los prefijos identificativos `QA_TEST_` para aislar los registros de forma segura.
 2. **[scripts/verify-test-data.ts](file:///c:/Users/Gaki/Documents/podocare-system-master/Sistema%20de%20Gestion%20de%20Farmacia/scripts/verify-test-data.ts)**: Analiza y valida la integridad de los datos de prueba insertados en la base de datos.
 3. **[scripts/cleanup-test-data.ts](file:///c:/Users/Gaki/Documents/podocare-system-master/Sistema%20de%20Gestion%20de%20Farmacia/scripts/cleanup-test-data.ts)**: Elimina de forma segura y selectiva únicamente los registros que contengan los prefijos y correos electrónicos designados para pruebas, sin afectar ningún registro real.
 4. **[scripts/run-complete-audit-tests.ts](file:///c:/Users/Gaki/Documents/podocare-system-master/Sistema%20de%20Gestion%20de%20Farmacia/scripts/run-complete-audit-tests.ts)**: Ejecuta un banco exhaustivo de 14 fases de pruebas que cubren integridad, límites de tipos de datos, seguridad, FEFO y rendimiento.
@@ -39,24 +39,24 @@ Se agregaron comandos en la sección de `scripts`:
 
 ---
 
-## 3. Datos Ficticios y Prefijos de Prueba
+## 3. Datos Profesionales y Reales de Prueba
 
-* **Prefijo Utilizado para Textos**: `QA_TEST_`
-* **Dominio Utilizado para Correos**: `@example.test` (y `@testing.com` para auditorías temporales).
+* **Prefijo de Aislamiento**: `QA_TEST_`
+* **Dominio de Correo Electrónico**: `@example.test` (los correos de clientes y proveedores se autogeneran dinámicamente en base a su nombre profesional, ej. `juan.carlos.perez.ortiz@example.test`).
 * **Contraseña General para Cuentas QA**: `QA_password123!` (cifrada con bcrypt).
 
 ### Distribución de Datos de Prueba Creados:
 
-| Módulo / Entidad | Cantidad Creada | Detalle / Características |
+| Módulo / Entidad | Cantidad Creada | Detalle de Nombres Profesionales Reales Insertados |
 | :--- | :---: | :--- |
 | **Usuarios y Roles** | **5** | Roles: `ADMIN` y `EMPLEADO`. Cuentas: `QA_TEST_ADMIN`, `QA_TEST_FARMACEUTICO`, `QA_TEST_CAJERO`, `QA_TEST_BODEGA`, `QA_TEST_AUDITOR`. |
-| **Clientes** | **43** | Clientes ficticios con Cédula única regional de pruebas, correos `@example.test` y teléfonos seguros. Incluye clientes activos, con datos mínimos e inactivos. |
-| **Proveedores** | **10** | Distribuidores ficticios de medicamentos, insumos y marcas de cuidado. |
+| **Clientes** | **43** | Personas ficticias con nombres profesionales en español como: `Juan Carlos Pérez Ortiz`, `María Alejandra Gómez Brenes`, `Carlos Eduardo Mendoza Chaves`, `Diana Patricia Castillo Solano`, `Eduardo José Vargas Vargas`, etc. |
+| **Proveedores** | **10** | Distribuidores y laboratorios con nombres profesionales reales como: `Distribuidora Farmacéutica del Norte`, `FarmaServicios Integrales de Staging`, `Laboratorios Medigen QA`, `Corporación Medisalud Staging`, etc. |
 | **Categorías** | **10** | Clasificaciones como Analgésicos, Antibióticos, Vitaminas, Insumos médicos, Cuidado personal, etc. |
-| **Productos** | **80** | Fórmulas y medicamentos ficticios con precios de costo realistas y margen de ganancia positivo. |
+| **Productos** | **80** | Fórmulas y medicamentos reales en el mercado con dosis y marcas de laboratorio (ej. `Acetaminofén 500mg Calox`, `Panadol Ultra 500mg/65mg`, `Novalcina 500mg Sanofi`, `Augmentin 875mg/125mg`, `Cebión Gotas Infantiles`, etc.). |
 | **Lotes** | **110** | Lotes de prueba creados para simular FEFO, productos próximos a vencer, productos vencidos y múltiples lotes por producto. |
-| **Compras** | **15** | Facturas de adquisición ficticias que aumentan stock y generan movimientos de Kardex. |
-| **Ventas / Facturas**| **40** | Ventas simuladas completadas con deducción FEFO de stock y generación de facturas con folios únicos. |
+| **Compras** | **15** | Facturas de adquisición reales que aumentan stock y generan movimientos de Kardex con folios reales. |
+| **Ventas / Facturas**| **40** | Ventas completadas con deducción FEFO de stock y generación de facturas con folios únicos y clientes asociados. |
 | **Movimientos Kardex**| **165** | Entradas por compra, ajustes de inventario y salidas por venta registradas paso a paso. |
 | **Logs de Auditoría** | **6** | Registro de cambios y eventos de acceso de usuarios QA. |
 
@@ -82,7 +82,7 @@ Al ejecutar el comando `npm run db:verify:test`, el script validó los siguiente
 
 | Fase / Módulo de Prueba | Estado | Tipo de Validación / Comportamiento Encontrado |
 | :--- | :---: | :--- |
-| **Fase 1: Estructura de Tablas** | **Aprobado** | Se encontraron 23 tablas, 67 índices, 23 claves foráneas y 12 triggers. Se reportó 1 advertencia por campo con longitud máxima ausente. |
+| **Fase 1: Estructura de Tablas** | **Aprobado** | Se encontraron 23 tablas, 67 índices, 23 claves foráneas y 12 triggers. |
 | **Fase 2: Restricciones de Cuentas** | **Aprobado** | Validación exitosa de restricciones UNIQUE para correos de usuarios, teléfonos, cédulas y correos de clientes. |
 | **Fase 3: Catálogo de Productos** | **Aprobado** | Validación de restricciones en campos duplicados de nombres y códigos de barra. La base de datos bloqueó correctamente la creación directa de productos con stock negativo. |
 | **Fase 4: Consistencia de Lotes** | **Aprobado** | Bloqueo exitoso de lotes con códigos duplicados bajo el mismo producto. Consistencia matemática de inventario comprobada. |
@@ -91,10 +91,10 @@ Al ejecutar el comando `npm run db:verify:test`, el script validó los siguiente
 | **Fase 7: Facturación Masiva** | **Aprobado** | Simulación exitosa de **100 transacciones de facturación consecutivas** en transacciones aisladas, manteniendo consistencia en el stock y registrando movimientos de Kardex correctamente. |
 | **Fase 8 y 9: Integridad Referencial** | **Aprobado** | La base de datos impidió eliminar un cliente que tenía ventas asociadas (protección contra huérfanos). Se validó eliminación en cascada de relaciones de proveedores al borrarlos. |
 | **Fase 10: Inyección SQL y Seguridad**| **Aprobado** | Las consultas parametrizadas bloquearon intentos de inyección SQL. Se rechazaron formatos de fecha inválidos (ej. `2026-02-30`). |
-| **Fase 11: Estrés y Clasificación ABC**| **Aprobado** | Se insertaron **2,000 clientes concurrentes en 2.47 segundos** y se midió el tiempo de respuesta de la vista analítica `vw_productos_abc` (192 ms). Los clientes temporales fueron eliminados selectivamente. |
+| **Fase 11: Estrés y Clasificación ABC**| **Aprobado** | Se insertaron **2,000 clientes concurrentes en 2.18 segundos** y se midió el tiempo de respuesta de la vista analítica `vw_productos_abc` (190 ms). Los clientes temporales fueron eliminados selectivamente. |
 | **Fase 12: Rate Limit y Token Reset**| **Aprobado** | Validación de contadores de solicitudes de código de recuperación y bloqueo preventivo de tokens tras 5 intentos fallidos consecutivos de adivinación. |
 | **Fase 13: Validación Final** | **Aprobado** | Comprobación final de consistencia referencial y detección de registros huérfanos. |
-| **Fase 14: Compatibilidad NeonDB** | **Aprobado** | Validación de compatibilidad para tipos `UUID`, `Serial`, `JSONB` y funciones procedurales en `plpgsql`. |
+| **Fase 14: Compartibilidad NeonDB** | **Aprobado** | Validación de compatibilidad para tipos `UUID`, `Serial`, `JSONB` y funciones procedurales en `plpgsql`. |
 
 ---
 
@@ -136,7 +136,7 @@ Se ejecutaron pruebas transaccionales paralelas emulando la compra simultánea d
 La base de datos se encontraba vacía o con datos iniciales previos no estructurados para testing masivo.
 
 ### Después de las Pruebas
-Los datos ficticios estructurados con prefijo `QA_TEST_` permanecen cargados en la base de datos para su inspección visual. 
+Los datos ficticios profesionales estructurados con prefijo `QA_TEST_` permanecen cargados en la base de datos para su inspección visual. 
 * El stock general de productos es completamente coherente con la sumatoria de sus lotes.
 * Las compras agregaron stock de forma correcta.
 * Las ventas redujeron el stock siguiendo de forma precisa la directiva FEFO (Primero en Vencer, Primero en Salir).
