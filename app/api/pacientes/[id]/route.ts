@@ -3,12 +3,27 @@ import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
 import { clienteSchema, emptyToNull } from "@/lib/validations"
 import { registrarLog } from "@/lib/audit"
+import { tienePermiso } from "@/lib/permissions"
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const usuarioDb = await prisma.usuario.findUnique({
+      where: { id: user.id },
+      include: { rol: true },
+    })
+
+    if (!usuarioDb || !usuarioDb.activo) {
+      return NextResponse.json({ error: "Usuario inactivo o no encontrado" }, { status: 403 })
+    }
+
+    const rol = usuarioDb.rol.nombre
+    if (!tienePermiso(rol, "CLINICA", "VER")) {
+      return NextResponse.json({ error: "Acceso denegado" }, { status: 403 })
     }
 
     const { id } = await params
@@ -49,6 +64,18 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
         },
         ventas: {
           orderBy: { fecha: "desc" }
+        },
+        examenes: {
+          where: { activo: true },
+          include: {
+            registrador: {
+              select: {
+                id: true,
+                nombreCompleto: true
+              }
+            }
+          },
+          orderBy: { fechaExamen: "desc" }
         }
       }
     })
@@ -69,6 +96,20 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const usuarioDb = await prisma.usuario.findUnique({
+      where: { id: user.id },
+      include: { rol: true },
+    })
+
+    if (!usuarioDb || !usuarioDb.activo) {
+      return NextResponse.json({ error: "Usuario inactivo o no encontrado" }, { status: 403 })
+    }
+
+    const rol = usuarioDb.rol.nombre
+    if (!tienePermiso(rol, "CLINICA", "EDITAR")) {
+      return NextResponse.json({ error: "Acceso denegado" }, { status: 403 })
     }
 
     const { id } = await params
@@ -214,6 +255,20 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const usuarioDb = await prisma.usuario.findUnique({
+      where: { id: user.id },
+      include: { rol: true },
+    })
+
+    if (!usuarioDb || !usuarioDb.activo) {
+      return NextResponse.json({ error: "Usuario inactivo o no encontrado" }, { status: 403 })
+    }
+
+    const rol = usuarioDb.rol.nombre
+    if (!tienePermiso(rol, "CLINICA", "EDITAR")) {
+      return NextResponse.json({ error: "Acceso denegado" }, { status: 403 })
+    }
+
     const { id } = await params
     const idCliente = Number.parseInt(id)
     const { activo } = await request.json()
@@ -244,6 +299,20 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
     const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const usuarioDb = await prisma.usuario.findUnique({
+      where: { id: user.id },
+      include: { rol: true },
+    })
+
+    if (!usuarioDb || !usuarioDb.activo) {
+      return NextResponse.json({ error: "Usuario inactivo o no encontrado" }, { status: 403 })
+    }
+
+    const rol = usuarioDb.rol.nombre
+    if (!tienePermiso(rol, "CLINICA", "ELIMINAR")) {
+      return NextResponse.json({ error: "Acceso denegado" }, { status: 403 })
     }
 
     const { id } = await params

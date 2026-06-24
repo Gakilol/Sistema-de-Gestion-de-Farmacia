@@ -6,7 +6,7 @@ interface User {
   id: number
   nombreCompleto: string
   correo: string
-  rolNombre: "ADMIN" | "EMPLEADO"
+  rolNombre: "ADMIN" | "EMPLEADO" | "DOCTOR"
 }
 
 export function useCurrentUser() {

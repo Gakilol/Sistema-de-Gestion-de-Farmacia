@@ -34,6 +34,7 @@ model Usuario {
   atenciones      AtencionPodologica[]
   recetas         Receta[]
   descuentos      Descuento[]
+  examenes        ExamenPaciente[]
 }
 
 model Cliente {
@@ -57,6 +58,7 @@ model Cliente {
   atenciones      AtencionPodologica[]
   recetas         Receta[]
   datosClinicos   DatosClinicosPaciente?
+  examenes        ExamenPaciente[]
 }
 
 
@@ -498,5 +500,32 @@ model Descuento {
   updatedAt    DateTime   @updatedAt
 
   ventas       Venta[]
+}
+
+// ===== EXÁMENES DE PACIENTES =====
+model ExamenPaciente {
+  id              Int       @id @default(autoincrement())
+  idPaciente      Int
+  paciente        Cliente   @relation(fields: [idPaciente], references: [id], onDelete: Cascade)
+  nombre          String
+  tipo            String    // LABORATORIO, IMAGEN, FUNCIONAL, BIOPSIA, OTRO
+  fechaExamen     DateTime
+  resultado       String?   @db.Text
+  interpretacion  String?   @db.Text
+  observaciones   String?   @db.Text
+  archivoUrl      String?
+  archivoNombre   String?
+  archivoTipo     String?   // MIME type
+  registradoPor   Int
+  registrador     Usuario   @relation(fields: [registradoPor], references: [id])
+  activo          Boolean   @default(true)
+  esDatoPrueba    Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  @@index([idPaciente])
+  @@index([fechaExamen])
+  @@index([tipo])
 }
 

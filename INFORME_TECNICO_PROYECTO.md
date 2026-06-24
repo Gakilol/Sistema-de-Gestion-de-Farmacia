@@ -99,6 +99,7 @@ Muestra el mapeo objeto-relacional (ORM) implementado en la capa de persistencia
 * **AlertaStockBajo** (<u>id</u> [PK], idProducto [FK $\rightarrow$ Producto(id) ON DELETE CASCADE], nombreProducto, stockActual, stockMinimo, fechaAlerta, resuelta)
 * **HistorialPrecios** (<u>id</u> [PK], idProducto [FK $\rightarrow$ Producto(id) ON DELETE CASCADE], nombreProducto, precioVentaAnterior, precioVentaNuevo, precioCompraAnterior, precioCompraNuevo, fechaCambio)
 * **PasswordResetToken** (<u>id</u> [PK], correo, tokenHash [UQ], expiracion, usado, createdAt, *Index(correo)*, *Index(tokenHash)*)
+* **ExamenPaciente** (<u>id</u> [PK], idPaciente [FK $\rightarrow$ Cliente(id) ON DELETE CASCADE], nombre, tipo, fechaExamen, resultado, interpretacion, observaciones, archivoUrl, archivoNombre, archivoTipo, registradoPor [FK $\rightarrow$ Usuario(id)], activo, createdAt, updatedAt, deletedAt)
 
 ---
 
@@ -233,6 +234,28 @@ Muestra el mapeo objeto-relacional (ORM) implementado en la capa de persistencia
 | `subtotal` | `NUMERIC(10,2)` | NO | - | = precio * cantidad | Subtotal monetario de línea. |
 | `tipoUnidad` | `VARCHAR(50)` | NO | - | UNIDAD, BLISTER, CAJA | Nivel de fraccionamiento vendido. |
 
+### 4.4 Tablas Clínicas (Historial y Exámenes)
+
+#### TABLA: ExamenPaciente
+| Nombre de Columna | Tipo de Datos PostgreSQL | Nulo | Llave | Valores / Restricciones | Descripción |
+| :--- | :--- | :---: | :---: | :---: | :--- |
+| `id` | `INTEGER` (SERIAL) | NO | PK | Auto-increment | Identificador único del examen. |
+| `idPaciente` | `INTEGER` | NO | FK | REFERENCES `Cliente`(id) | Paciente al que pertenece el examen. |
+| `nombre` | `VARCHAR(255)` | NO | - | - | Nombre descriptivo del examen realizado. |
+| `tipo` | `VARCHAR(50)` | NO | - | LABORATORIO, IMAGEN, etc. | Categoría o tipo de examen clínico. |
+| `fechaExamen` | `TIMESTAMP(3)` | NO | - | - | Fecha en que se realizó el examen. |
+| `resultado` | `TEXT` | SÍ | - | - | Resultados cuantitativos o cualitativos. |
+| `interpretacion` | `TEXT` | SÍ | - | - | Diagnóstico o interpretación del médico. |
+| `observaciones` | `TEXT` | SÍ | - | - | Observaciones o notas adicionales. |
+| `archivoUrl` | `VARCHAR(500)` | SÍ | - | - | Ruta en el servidor al archivo adjunto. |
+| `archivoNombre` | `VARCHAR(255)` | SÍ | - | - | Nombre original del archivo subido. |
+| `archivoTipo` | `VARCHAR(100)` | SÍ | - | - | Tipo MIME del archivo (PDF, JPEG, etc.). |
+| `registradoPor` | `INTEGER` | NO | FK | REFERENCES `Usuario`(id) | Usuario/Doctor que registró la ficha. |
+| `activo` | `BOOLEAN` | NO | - | Default: TRUE | Estado para eliminación lógica. |
+| `createdAt` | `TIMESTAMP(3)` | NO | - | Default: NOW() | Fecha de registro en el sistema. |
+| `updatedAt` | `TIMESTAMP(3)` | NO | - | - | Fecha de última modificación. |
+| `deletedAt` | `TIMESTAMP(3)` | SÍ | - | - | Fecha de eliminación si aplica. |
+
 ---
 
 ## 5. CAPA SERVIDOR: TABLESPACES, PGAGENT Y TRIGGERS
@@ -275,6 +298,12 @@ La Normativa 004 exige un registro ordenado y estructurado de la evolución clí
 * **O (Objetivo):** Exploración física clínica podológica realizada por el especialista (hiperqueratosis, pie diabético, onicocriptosis, etc.).
 * **A (Análisis/Diagnóstico):** Juicio clínico codificado (CIE-10 de patologías podológicas).
 * **P (Plan/Receta):** Tratamiento indicado. La base de datos conecta la prescripción médica directamente a la facturación de farmacia. El podólogo genera la receta médica con un folio único; cuando el paciente acude a ventanilla, el cajero digita la clave asociando la venta en la tabla `Venta` bajo las llaves `numeroReceta` y `nombrePodologo`, logrando una trazabilidad integral desde la clínica al inventario de farmacia.
+
+### 6.4 Exámenes Clínicos y Archivos Adjuntos
+La Normativa 004 establece directrices estrictas sobre el almacenamiento de exámenes complementarios (laboratorio, gabinete, etc.) y la preservación de documentos externos adjuntos. El sistema resuelve esto mediante:
+* **Asociación Directa al Expediente**: Cada examen se almacena vinculándose al identificador único del paciente y al médico registrador, preservando autoría y fecha del diagnóstico.
+* **Seguridad de Archivos Adjuntos**: Los archivos clínicos digitalizados se guardan localmente en el servidor (`uploads/examenes/{idPaciente}/`) fuera de los directorios públicos de la aplicación web, de tal forma que no puedan ser accedidos mediante una URL directa.
+* **Acceso Controlado por API Stream**: La visualización o descarga de un archivo de examen requiere autenticación en el endpoint API `GET /api/clinica/examenes/[id]/archivo`, el cual verifica que la cookie de sesión sea válida y que el rol del usuario corresponda a `ADMIN` o `DOCTOR`, registrando de forma inmediata un log de auditoría (`VER_ARCHIVO_CLINICO`) con la identidad del operador y la fecha de consulta.
 
 ---
 

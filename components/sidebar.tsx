@@ -94,7 +94,6 @@ export function Sidebar() {
     { href: "/proveedores", label: "Proveedores", icon: Truck },
     { href: "/compras", label: "Compras", icon: ShoppingCart },
     { href: "/inventario", label: "Inventario", icon: ClipboardList },
-    { href: "/admin/servicios-podologia", label: "Servicios Podología", icon: Activity },
     { href: "/usuarios", label: "Usuarios", icon: Settings },
     { href: "/reportes", label: "Reportes", icon: TrendingUp },
     { href: "/auditoria", label: "Auditoría", icon: ClipboardList },
@@ -171,9 +170,17 @@ export function Sidebar() {
         <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-1">
           {/* Sección general (todos los roles) */}
           <div className="space-y-0.5">
-            {commonLinks.map((item) => (
-              <NavLink key={item.href} item={item} />
-            ))}
+            {commonLinks
+              .filter((item) => {
+                if (role === "DOCTOR") {
+                  return item.href === "/" || item.href === "/ia"
+                }
+                return true
+              })
+              .map((item) => (
+                <NavLink key={item.href} item={item} />
+              ))
+            }
           </div>
 
           {/* Sección clínica (ADMIN o DOCTOR) */}
@@ -185,6 +192,7 @@ export function Sidebar() {
               <div className="space-y-0.5">
                 <NavLink item={{ href: "/clinica", label: "Clínica", icon: ClipboardList }} />
                 <NavLink item={{ href: "/pacientes", label: "Pacientes", icon: Users }} />
+                <NavLink item={{ href: "/clinica/servicios", label: "Servicios", icon: Activity }} />
               </div>
             </div>
           )}

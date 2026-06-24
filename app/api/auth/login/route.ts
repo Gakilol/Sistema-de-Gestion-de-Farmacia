@@ -68,6 +68,7 @@ export async function POST(request: NextRequest) {
       correo: usuario.correo,
       idRol: usuario.idRol,
       nombreCompleto: usuario.nombreCompleto,
+      rolNombre: usuario.rol.nombre,
     })
 
     // Respuesta JSON para el front

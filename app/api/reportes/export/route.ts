@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
       dateWhereMovimiento = { createdAt: { gte: range.startDate, lte: range.endDate } }
     }
 
-    let pdfElement: React.ReactElement
+    let pdfElement: React.ReactElement<any>
 
     if (type === "kpis") {
       const ventas = await prisma.venta.aggregate({
@@ -266,7 +266,7 @@ export async function GET(request: NextRequest) {
 
     const buffer = await renderToBuffer(pdfElement)
 
-    return new Response(buffer, {
+    return new Response(new Uint8Array(buffer), {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",

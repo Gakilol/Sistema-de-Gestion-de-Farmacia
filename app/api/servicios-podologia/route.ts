@@ -3,12 +3,27 @@ import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
 import { servicioSchema, emptyToNull } from "@/lib/validations"
 import { registrarLog } from "@/lib/audit"
+import { tienePermiso } from "@/lib/permissions"
 
 export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const usuarioDb = await prisma.usuario.findUnique({
+      where: { id: user.id },
+      include: { rol: true },
+    })
+
+    if (!usuarioDb || !usuarioDb.activo) {
+      return NextResponse.json({ error: "Usuario inactivo o no encontrado" }, { status: 403 })
+    }
+
+    const rol = usuarioDb.rol.nombre
+    if (!tienePermiso(rol, "SERVICIOS_PODOLOGIA", "VER")) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
     const searchParams = request.nextUrl.searchParams
@@ -52,7 +67,12 @@ export async function POST(request: NextRequest) {
       include: { rol: true },
     })
 
-    if (usuarioDb?.rol.nombre !== "ADMIN") {
+    if (!usuarioDb || !usuarioDb.activo) {
+      return NextResponse.json({ error: "Usuario inactivo o no encontrado" }, { status: 403 })
+    }
+
+    const rol = usuarioDb.rol.nombre
+    if (!tienePermiso(rol, "SERVICIOS_PODOLOGIA", "CREAR")) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
@@ -82,6 +102,7 @@ export async function POST(request: NextRequest) {
         precio,
         duracion,
         activo: activo ?? true,
+        esDatoPrueba: usuarioDb.esDatoPrueba
       },
     })
 

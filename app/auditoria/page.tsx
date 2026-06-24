@@ -1,12 +1,13 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Sidebar } from "@/components/sidebar"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import useSWR from "swr"
+import { useCurrentUser } from "@/app/hooks/useCurrentUser"
 import {
   ClipboardList,
   ChevronDown,
@@ -144,6 +145,9 @@ type FiltroAccion = "TODOS" | "INICIO_SESION" | "CREAR_VENTA" | "CREAR_COMPRA" |
 
 export default function AuditoriaPage() {
   const router = useRouter()
+  const { user, loading: authLoading } = useCurrentUser()
+  const role = user?.rolNombre || ""
+  const isDoctor = role === "DOCTOR"
 
   // Filtros
   const [startDate, setStartDate] = useState("")
@@ -152,6 +156,13 @@ export default function AuditoriaPage() {
   const [buscarUsuario, setBuscarUsuario] = useState("")
   const [moduloFiltro, setModuloFiltro] = useState<"TODOS" | "FARMACIA" | "CLINICA">("TODOS")
   const [page, setPage] = useState(1)
+
+  // Forzar filtro de módulo clínico si es DOCTOR
+  useEffect(() => {
+    if (isDoctor) {
+      setModuloFiltro("CLINICA")
+    }
+  }, [isDoctor])
 
   // Construir URL de la API con los filtros activos
   const buildUrl = useCallback(() => {
@@ -298,31 +309,33 @@ export default function AuditoriaPage() {
           </div>
 
           {/* ── Módulo Tab Bar ── */}
-          <div className="flex border-b border-border mb-6 overflow-x-auto gap-2">
-            {[
-              { id: "TODOS", label: "Todos los Registros" },
-              { id: "FARMACIA", label: "Farmacia" },
-              { id: "CLINICA", label: "Clínica & Podología" }
-            ].map((tab) => {
-              const active = moduloFiltro === tab.id
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => {
-                    setModuloFiltro(tab.id as any)
-                    setPage(1)
-                  }}
-                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-all whitespace-nowrap ${
-                    active 
-                      ? "border-primary text-primary" 
-                      : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              )
-            })}
-          </div>
+          {!isDoctor && (
+            <div className="flex border-b border-border mb-6 overflow-x-auto gap-2">
+              {[
+                { id: "TODOS", label: "Todos los Registros" },
+                { id: "FARMACIA", label: "Farmacia" },
+                { id: "CLINICA", label: "Clínica & Podología" }
+              ].map((tab) => {
+                const active = moduloFiltro === tab.id
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      setModuloFiltro(tab.id as any)
+                      setPage(1)
+                    }}
+                    className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-all whitespace-nowrap ${
+                      active 
+                        ? "border-primary text-primary" 
+                        : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                )
+              })}
+            </div>
+          )}
 
           {/* ── Filtros ── */}
           <Card className="glass-card p-5 mb-6">
@@ -369,18 +382,20 @@ export default function AuditoriaPage() {
                 </select>
               </div>
               {/* Buscar usuario */}
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Search className="w-3 h-3" /> Buscar usuario
-                </label>
-                <input
-                  type="text"
-                  placeholder="Nombre del usuario..."
-                  value={buscarUsuario}
-                  onChange={e => setBuscarUsuario(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-input border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                />
-              </div>
+              {!isDoctor && (
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Search className="w-3 h-3" /> Buscar usuario
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Nombre del usuario..."
+                    value={buscarUsuario}
+                    onChange={e => setBuscarUsuario(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-input border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  />
+                </div>
+              )}
             </div>
             <div className="flex gap-2 mt-4">
               <Button onClick={handleFiltrar} size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2">

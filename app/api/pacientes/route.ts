@@ -3,12 +3,27 @@ import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
 import { clienteSchema, emptyToNull } from "@/lib/validations"
 import { registrarLog } from "@/lib/audit"
+import { tienePermiso } from "@/lib/permissions"
 
 export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const usuarioDb = await prisma.usuario.findUnique({
+      where: { id: user.id },
+      include: { rol: true },
+    })
+
+    if (!usuarioDb || !usuarioDb.activo) {
+      return NextResponse.json({ error: "Usuario inactivo o no encontrado" }, { status: 403 })
+    }
+
+    const rol = usuarioDb.rol.nombre
+    if (!tienePermiso(rol, "CLINICA", "VER")) {
+      return NextResponse.json({ error: "Acceso denegado" }, { status: 403 })
     }
 
     const searchParams = request.nextUrl.searchParams
@@ -33,6 +48,10 @@ export async function GET(request: NextRequest) {
       where,
       include: {
         datosClinicos: true,
+        examenes: {
+          where: { activo: true },
+          select: { id: true },
+        },
       },
       orderBy: { nombreCompleto: "asc" },
     })
@@ -51,8 +70,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const usuarioDb = await prisma.usuario.findUnique({
+      where: { id: user.id },
+      include: { rol: true },
+    })
+
+    if (!usuarioDb || !usuarioDb.activo) {
+      return NextResponse.json({ error: "Usuario inactivo o no encontrado" }, { status: 403 })
+    }
+
+    const rol = usuarioDb.rol.nombre
+    if (!tienePermiso(rol, "CLINICA", "CREAR")) {
+      return NextResponse.json({ error: "Acceso denegado" }, { status: 403 })
+    }
+
     const body = await request.json()
-    const { datosClinicos, ...clientData } = body
+    const { datosClinicos, examenes, ...clientData } = body
 
     const validation = clienteSchema.safeParse({
       ...clientData,
@@ -120,7 +153,7 @@ export async function POST(request: NextRequest) {
     }
 
     const paciente = await prisma.$transaction(async (tx) => {
-      return tx.cliente.create({
+      const cli = await tx.cliente.create({
         data: {
           nombreCompleto: data.nombreCompleto,
           telefono: emptyToNull(data.telefono),
@@ -143,6 +176,28 @@ export async function POST(request: NextRequest) {
         },
         include: { datosClinicos: true },
       })
+
+      // Registrar exámenes iniciales opcionales
+      if (Array.isArray(examenes) && examenes.length > 0) {
+        for (const ex of examenes) {
+          if (!ex.nombre || !ex.tipo || !ex.fechaExamen) continue
+          await tx.examenPaciente.create({
+            data: {
+              idPaciente: cli.id,
+              nombre: ex.nombre,
+              tipo: ex.tipo,
+              fechaExamen: new Date(ex.fechaExamen),
+              resultado: emptyToNull(ex.resultado),
+              interpretacion: emptyToNull(ex.interpretacion),
+              observaciones: emptyToNull(ex.observaciones),
+              registradoPor: user.id,
+              esDatoPrueba: cli.esDatoPrueba || false,
+            },
+          })
+        }
+      }
+
+      return cli
     })
 
     registrarLog({

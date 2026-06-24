@@ -6,6 +6,7 @@ export interface TokenPayload {
   correo: string
   idRol: number
   nombreCompleto: string
+  rolNombre: string
 }
 
 const secretKey = process.env.JWT_SECRET || "build_time_fallback_key_dont_use_in_production";

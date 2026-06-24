@@ -28,6 +28,23 @@ Un sistema de gestión de farmacia empresarial diseñado a medida para clínicas
 * **Seguridad de Grado Bancario**: Enlaces seguros temporales (15 min) cifrados en base de datos mediante hashing **SHA-256**.
 * **Protección contra Fuerza Bruta**: Límite de tasa de solicitudes (Rate Limiting) por IP y correo.
 
+### 🔬 6. Módulo de Exámenes Clínicos (Historial Clínico)
+* **Gestión Integral de Exámenes**: Registro estructurado de exámenes clínicos al momento de registrar un nuevo paciente (exámenes iniciales opcionales) o retrospectivamente desde su historial clínico.
+* **Trazabilidad y Campos**: Permite almacenar nombre del examen, tipo (Laboratorio, Imagen, Funcional, Biopsia, Otro), fecha del examen, resultado, interpretación clínica, observaciones y adjuntar archivos opcionales.
+* **Archivos Adjuntos Protegidos**: Los archivos (PDF, imágenes) se suben y almacenan en un directorio local seguro en el servidor (`uploads/examenes/{idPaciente}/`) fuera del acceso público. La descarga y visualización se realiza a través de un endpoint API protegido que valida cookies de sesión y roles, asegurando la confidencialidad médica.
+* **Auditoría Forense y Eliminación Lógica**: Cada acción sobre los exámenes (crear, editar, subir/descargar archivo, eliminar) se audita bajo el módulo `CLINICA`. Las eliminaciones de registros son estrictamente lógicas (`activo: false`, `deletedAt`).
+
+### 🛡️ 7. Control de Acceso por Roles (RBAC) - Doctor
+* **Rol Doctor**: Incorporación del perfil `DOCTOR` con permisos exclusivos para el ámbito clínico.
+* **Seguridad Dual (Frontend & Backend)**:
+  * **Frontend**: Hiding dinámico en la barra lateral de los módulos de farmacia (Ventas, Compras, Inventario, Proveedores, Reportes, Usuarios) y redirección automática a la página `/acceso-denegado` si se intenta ingresar por URL.
+  * **Backend**: Validación centralizada en `middleware.ts` a nivel de peticiones API y páginas utilizando tokens JWT cifrados, garantizando que el rol `DOCTOR` no pueda interactuar con endpoints de farmacia, y el rol `EMPLEADO` (cajero) no pueda acceder a endpoints clínicos.
+* **Auditoría Personalizada**: El Doctor solo puede visualizar la bitácora de auditoría del módulo `CLINICA` y únicamente para los registros generados por su propio usuario.
+
+### 👟 8. Servicios de Podología Reubicados
+* **Reubicación de Módulo**: Los servicios podológicos fueron trasladados del panel de Administración general a `Clínica Podológica > Servicios` para mejorar la coherencia de la interfaz de usuario para el personal clínico.
+* **Permisos de Gestión**: El rol `DOCTOR` tiene plenos permisos para **crear** y **editar** tratamientos y servicios clínicos en la base de datos (compartiendo esta potestad con el rol `ADMIN`). Sin embargo, el permiso para **eliminar** servicios (física o lógicamente) queda estrictamente restringido al rol `ADMINISTRADOR`.
+
 ---
 
 ## 🛠️ Stack Tecnológico
@@ -86,6 +103,7 @@ Clases de persistencia mapeadas en el backend con sus respectivos atributos de t
 15. **ProductoVentaStats** (<u>id</u> [PK], idProducto [FK $\rightarrow$ Producto(id) ON DELETE CASCADE], totalUnidadesVendidas, totalVecesVendido, ingresoTotal, ultimaVenta, *Unique(idProducto)*)
 16. **AlertaStockBajo** (<u>id</u> [PK], idProducto [FK $\rightarrow$ Producto(id) ON DELETE CASCADE], nombreProducto, stockActual, stockMinimo, fechaAlerta, resuelta)
 17. **HistorialPrecios** (<u>id</u> [PK], idProducto [FK $\rightarrow$ Producto(id) ON DELETE CASCADE], nombreProducto, precioVentaAnterior, precioVentaNuevo, precioCompraAnterior, precioCompraNuevo, fechaCambio)
+18. **ExamenPaciente** (<u>id</u> [PK], idPaciente [FK $\rightarrow$ Cliente(id) ON DELETE CASCADE], nombre, tipo, fechaExamen, resultado, interpretacion, observaciones, archivoUrl, archivoNombre, archivoTipo, registradoPor [FK $\rightarrow$ Usuario(id)], activo, createdAt, updatedAt, deletedAt)
 
 ---
 

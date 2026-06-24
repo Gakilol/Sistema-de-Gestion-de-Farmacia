@@ -3,12 +3,27 @@ import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
 import { servicioSchema, emptyToNull } from "@/lib/validations"
 import { registrarLog } from "@/lib/audit"
+import { tienePermiso } from "@/lib/permissions"
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const usuarioDb = await prisma.usuario.findUnique({
+      where: { id: user.id },
+      include: { rol: true },
+    })
+
+    if (!usuarioDb || !usuarioDb.activo) {
+      return NextResponse.json({ error: "Usuario inactivo o no encontrado" }, { status: 403 })
+    }
+
+    const rol = usuarioDb.rol.nombre
+    if (!tienePermiso(rol, "SERVICIOS_PODOLOGIA", "VER")) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
     const { id } = await params
@@ -39,7 +54,12 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       include: { rol: true },
     })
 
-    if (usuarioDb?.rol.nombre !== "ADMIN") {
+    if (!usuarioDb || !usuarioDb.activo) {
+      return NextResponse.json({ error: "Usuario inactivo o no encontrado" }, { status: 403 })
+    }
+
+    const rol = usuarioDb.rol.nombre
+    if (!tienePermiso(rol, "SERVICIOS_PODOLOGIA", "EDITAR")) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
@@ -106,7 +126,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       include: { rol: true },
     })
 
-    if (usuarioDb?.rol.nombre !== "ADMIN") {
+    if (!usuarioDb || !usuarioDb.activo) {
+      return NextResponse.json({ error: "Usuario inactivo o no encontrado" }, { status: 403 })
+    }
+
+    const rol = usuarioDb.rol.nombre
+    if (!tienePermiso(rol, "SERVICIOS_PODOLOGIA", "EDITAR")) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
@@ -147,7 +172,12 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       include: { rol: true },
     })
 
-    if (usuarioDb?.rol.nombre !== "ADMIN") {
+    if (!usuarioDb || !usuarioDb.activo) {
+      return NextResponse.json({ error: "Usuario inactivo o no encontrado" }, { status: 403 })
+    }
+
+    const rol = usuarioDb.rol.nombre
+    if (!tienePermiso(rol, "SERVICIOS_PODOLOGIA", "ELIMINAR")) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 

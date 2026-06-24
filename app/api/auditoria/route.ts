@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
-import { toManaguaStartOfDay, toManaguaEndOfDay, getManaguaDateRange, toManaguaEndOfDay as getTodayEnd } from "@/lib/timezone"
+import { toManaguaStartOfDay, toManaguaEndOfDay, getManaguaDateRange } from "@/lib/timezone"
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,7 +14,15 @@ export async function GET(request: NextRequest) {
       where: { id: user.id },
       include: { rol: true },
     })
-    if (usuarioDb?.rol.nombre !== "ADMIN") {
+
+    if (!usuarioDb || !usuarioDb.activo) {
+      return NextResponse.json({ error: "Usuario inactivo o no encontrado" }, { status: 403 })
+    }
+
+    const rol = usuarioDb.rol.nombre
+    const isDoctor = rol === "DOCTOR"
+
+    if (rol !== "ADMIN" && rol !== "DOCTOR") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
@@ -57,13 +65,17 @@ export async function GET(request: NextRequest) {
       where.entidad = entidad
     }
 
-    if (buscarUsuario) {
+    if (buscarUsuario && !isDoctor) {
       where.usuario = {
         nombreCompleto: { contains: buscarUsuario, mode: "insensitive" },
       }
     }
 
-    if (modulo && modulo !== "TODOS") {
+    if (isDoctor) {
+      // Forzar filtros clínicos y de usuario propio para DOCTOR
+      where.modulo = "CLINICA"
+      where.idUsuario = user.id
+    } else if (modulo && modulo !== "TODOS") {
       where.modulo = modulo
     }
 
@@ -84,15 +96,20 @@ export async function GET(request: NextRequest) {
 
     // Estadísticas rápidas para el período filtrado en Managua TZ
     const rangeToday = getManaguaDateRange('hoy')
+    const queryHoy: any = {
+      createdAt: {
+        gte: rangeToday.startDate,
+        lte: rangeToday.endDate
+      }
+    }
+
+    if (isDoctor) {
+      queryHoy.modulo = "CLINICA"
+      queryHoy.idUsuario = user.id
+    }
+
     const [accionesHoy, totalPeriodo] = await Promise.all([
-      prisma.auditoriaLog.count({ 
-        where: { 
-          createdAt: { 
-            gte: rangeToday.startDate, 
-            lte: rangeToday.endDate 
-          } 
-        } 
-      }),
+      prisma.auditoriaLog.count({ where: queryHoy }),
       prisma.auditoriaLog.count({ where }),
     ])
 

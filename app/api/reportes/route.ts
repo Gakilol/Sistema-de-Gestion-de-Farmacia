@@ -372,7 +372,7 @@ export async function GET(request: NextRequest) {
         }
         const netTotal = Number(s.total)
         const grossProfit = netTotal - saleCogs
-        const marginPct = netTotal > 0 ? (grossProfit / netTotal) * 100 : 0
+        const margenPct = netTotal > 0 ? (grossProfit / netTotal) * 100 : 0
         return {
           id: s.id,
           fecha: s.fecha,

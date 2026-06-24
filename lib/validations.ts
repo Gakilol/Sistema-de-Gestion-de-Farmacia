@@ -462,3 +462,12 @@ export const recetaSchema = z.object({
 
 // Legacy backward-compatibility export
 export const productoSchema = productoCreateSchema;
+
+export const examenPacienteSchema = z.object({
+  nombre: z.string().trim().min(2, "El nombre del examen es obligatorio"),
+  tipo: z.enum(["LABORATORIO", "IMAGEN", "FUNCIONAL", "BIOPSIA", "OTRO"]),
+  fechaExamen: z.string().trim().min(1, "La fecha del examen es obligatoria"),
+  resultado: z.string().trim().optional().nullable().or(z.literal("")),
+  interpretacion: z.string().trim().optional().nullable().or(z.literal("")),
+  observaciones: z.string().trim().optional().nullable().or(z.literal("")),
+});

@@ -6,10 +6,11 @@ import { Sidebar } from "@/components/sidebar"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Plus, Edit2, Trash2, Search, Heart, Clock } from "lucide-react"
+import { Plus, Edit2, Trash2, Search, Heart, Clock, AlertTriangle } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
 import { servicioSchema } from "@/lib/validations"
+import { useCurrentUser } from "@/app/hooks/useCurrentUser"
 
 interface ServicioPodologia {
   id: number
@@ -20,7 +21,8 @@ interface ServicioPodologia {
   activo: boolean
 }
 
-export default function ServiciosPodologiaPage() {
+export default function ServiciosPodologiaClinicaPage() {
+  const { user, loading: authLoading } = useCurrentUser()
   const [servicios, setServicios] = useState<ServicioPodologia[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
@@ -35,9 +37,14 @@ export default function ServiciosPodologiaPage() {
     activo: true
   })
 
+  const isUserAdmin = user?.rolNombre === "ADMIN"
+  const canUserManage = user?.rolNombre === "ADMIN" || user?.rolNombre === "DOCTOR"
+
   useEffect(() => {
-    fetchServicios()
-  }, [])
+    if (user && canUserManage) {
+      fetchServicios()
+    }
+  }, [user])
 
   const fetchServicios = async () => {
     try {
@@ -156,6 +163,36 @@ export default function ServiciosPodologiaPage() {
 
   const filteredServicios = servicios.filter((s) => s.nombre.toLowerCase().includes(search.toLowerCase()))
 
+  if (authLoading) {
+    return (
+      <div className="flex h-screen bg-background">
+        <Sidebar />
+        <main className="flex-1 overflow-auto p-8">
+          <Skeleton className="h-12 w-full max-w-md mb-8" />
+          <Skeleton className="h-40 w-full" />
+        </main>
+      </div>
+    )
+  }
+
+  // Verificar rol
+  if (!canUserManage) {
+    return (
+      <div className="flex h-screen bg-background">
+        <Sidebar />
+        <main className="flex-1 flex items-center justify-center p-6">
+          <Card className="glass-card max-w-md p-8 text-center border-red-500/20">
+            <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4 animate-bounce" />
+            <h1 className="text-xl font-bold text-foreground">Acceso Denegado</h1>
+            <p className="text-muted-foreground mt-2 text-sm">
+              Solo los usuarios con rol de <strong>ADMINISTRADOR</strong> o <strong>DOCTOR/PODÓLOGO</strong> tienen autorización para acceder a la gestión de servicios de podología.
+            </p>
+          </Card>
+        </main>
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-screen bg-background">
       <Sidebar />
@@ -164,7 +201,7 @@ export default function ServiciosPodologiaPage() {
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
             <div>
               <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
-                <Heart className="w-8 h-8 text-primary" />
+                <Heart className="w-8 h-8 text-primary animate-pulse" />
                 Servicios de Podología
               </h1>
               <p className="text-muted-foreground mt-1">Gestiona los tratamientos clínicos y servicios podológicos disponibles</p>
@@ -261,7 +298,9 @@ export default function ServiciosPodologiaPage() {
                             <Button size="sm" variant="ghost" onClick={() => handleToggleActivo(s)} className="text-amber-500 hover:text-amber-400 hover:bg-amber-500/10" title={s.activo ? "Desactivar" : "Reactivar"}>
                               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
                             </Button>
-                            <Button size="sm" variant="ghost" onClick={() => handleDelete(s)} className="text-red-500 hover:text-red-400 hover:bg-red-500/10" title="Eliminar"><Trash2 className="w-4 h-4" /></Button>
+                            {isUserAdmin && (
+                              <Button size="sm" variant="ghost" onClick={() => handleDelete(s)} className="text-red-500 hover:text-red-400 hover:bg-red-500/10" title="Eliminar"><Trash2 className="w-4 h-4" /></Button>
+                            )}
                           </div>
                         </td>
                       </tr>

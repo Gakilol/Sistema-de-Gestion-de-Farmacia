@@ -57,6 +57,7 @@ interface Producto {
   cantidadLotes?: number
   proximoVencimiento?: string | null
   estadoProducto?: string
+  esServicio?: boolean
 }
 
 export default function ProductosPage() {
