@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
 import { execSync } from "child_process"
 import { registrarLog } from "@/lib/audit"
+import fs from "fs"
+import path from "path"
 
 // Listas de clasificación de tablas para auditoría
 const TABLAS_CLINICAS = [
@@ -129,12 +131,46 @@ export async function POST(request: NextRequest) {
     // 1. Ejecutar respaldo automático de base de datos
     console.log("[Secuencias] Iniciando respaldo automático de base de datos...")
     try {
-      execSync("npm run db:backup", { stdio: "pipe" })
-      console.log("[Secuencias] Respaldo automático completado con éxito.")
-    } catch (backupError) {
-      console.error("[Secuencias] Error crítico: El respaldo falló. Abortando reinicio de secuencias.", backupError)
+      const dbUrl = process.env.DATABASE_URL
+      if (!dbUrl) {
+        throw new Error("DATABASE_URL no está definida en las variables de entorno.")
+      }
+
+      const backupsDir = path.join(process.cwd(), "backups")
+      if (!fs.existsSync(backupsDir)) {
+        fs.mkdirSync(backupsDir, { recursive: true })
+      }
+
+      const now = new Date()
+      const pad = (n: number) => n.toString().padStart(2, '0')
+      const fileName = `backup_${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${now.getHours()}-${pad(now.getMinutes())}.sql`
+      const outputPath = path.join(backupsDir, fileName)
+
+      let pgDumpPath = "pg_dump"
+      if (process.platform === "win32") {
+        const pgCommonDir = "C:\\Program Files\\PostgreSQL"
+        if (fs.existsSync(pgCommonDir)) {
+          const versions = fs.readdirSync(pgCommonDir)
+          versions.sort((a, b) => parseFloat(b) - parseFloat(a))
+          for (const version of versions) {
+            const candidatePath = path.join(pgCommonDir, version, "bin", "pg_dump.exe")
+            if (fs.existsSync(candidatePath)) {
+              pgDumpPath = `"${candidatePath}"`
+              break
+            }
+          }
+        }
+      }
+
+      const command = `${pgDumpPath} --dbname="${dbUrl}" --clean --no-owner --no-privileges --file="${outputPath}"`
+      execSync(command, { stdio: "pipe" })
+      console.log(`[Secuencias] Respaldo automático completado con éxito: ${fileName}`)
+    } catch (backupError: any) {
+      console.error("[Secuencias] Error crítico: El respaldo falló.", backupError)
+      
+      const errorMsg = backupError.message || String(backupError)
       return NextResponse.json({ 
-        error: "No se pudo realizar la copia de seguridad previa de la base de datos. Operación cancelada por seguridad." 
+        error: `No se pudo realizar la copia de seguridad previa de la base de datos. Detalles: ${errorMsg}` 
       }, { status: 500 })
     }
 

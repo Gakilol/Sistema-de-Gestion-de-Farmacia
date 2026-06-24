@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
 import { execSync } from "child_process"
 import { registrarLog } from "@/lib/audit"
+import fs from "fs"
+import path from "path"
 
 export async function GET(request: NextRequest) {
   try {
@@ -58,12 +60,46 @@ export async function POST(request: NextRequest) {
     // 1. Ejecutar respaldo automático
     console.log("[Limpieza] Iniciando respaldo automático antes de la limpieza...")
     try {
-      execSync("npm run db:backup", { stdio: "pipe" })
-      console.log("[Limpieza] Respaldo automático completado con éxito.")
-    } catch (backupError) {
+      const dbUrl = process.env.DATABASE_URL
+      if (!dbUrl) {
+        throw new Error("DATABASE_URL no está definida en las variables de entorno.")
+      }
+
+      const backupsDir = path.join(process.cwd(), "backups")
+      if (!fs.existsSync(backupsDir)) {
+        fs.mkdirSync(backupsDir, { recursive: true })
+      }
+
+      const now = new Date()
+      const pad = (n: number) => n.toString().padStart(2, '0')
+      const fileName = `backup_${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${now.getHours()}-${pad(now.getMinutes())}.sql`
+      const outputPath = path.join(backupsDir, fileName)
+
+      let pgDumpPath = "pg_dump"
+      if (process.platform === "win32") {
+        const pgCommonDir = "C:\\Program Files\\PostgreSQL"
+        if (fs.existsSync(pgCommonDir)) {
+          const versions = fs.readdirSync(pgCommonDir)
+          versions.sort((a, b) => parseFloat(b) - parseFloat(a))
+          for (const version of versions) {
+            const candidatePath = path.join(pgCommonDir, version, "bin", "pg_dump.exe")
+            if (fs.existsSync(candidatePath)) {
+              pgDumpPath = `"${candidatePath}"`
+              break
+            }
+          }
+        }
+      }
+
+      const command = `${pgDumpPath} --dbname="${dbUrl}" --clean --no-owner --no-privileges --file="${outputPath}"`
+      execSync(command, { stdio: "pipe" })
+      console.log(`[Limpieza] Respaldo automático completado con éxito: ${fileName}`)
+    } catch (backupError: any) {
       console.error("[Limpieza] Error crítico: El respaldo de base de datos falló. Abortando limpieza.", backupError)
+      
+      const errorMsg = backupError.message || String(backupError)
       return NextResponse.json({ 
-        error: "No se pudo realizar la copia de seguridad previa. La limpieza ha sido cancelada por seguridad." 
+        error: `No se pudo realizar la copia de seguridad previa. La limpieza ha sido cancelada por seguridad. Detalles: ${errorMsg}` 
       }, { status: 500 })
     }
 
