@@ -24,6 +24,7 @@ import {
   Layers,
   Activity,
   Trash2,
+  RefreshCw,
 } from "lucide-react"
 
 import { useCurrentUser } from "../app/hooks/useCurrentUser"
@@ -98,6 +99,7 @@ export function Sidebar() {
     { href: "/reportes", label: "Reportes", icon: TrendingUp },
     { href: "/auditoria", label: "Auditoría", icon: ClipboardList },
     { href: "/admin/limpieza-datos", label: "Limpieza de Datos", icon: Trash2 },
+    { href: "/admin/mantenimiento/reiniciar-secuencias", label: "Reiniciar Secuencias", icon: RefreshCw },
   ]
 
   const NavLink = ({ item }: { item: { href: string; label: string; icon: any } }) => {

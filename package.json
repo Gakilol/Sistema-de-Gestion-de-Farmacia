@@ -15,6 +15,7 @@
     "postinstall": "prisma generate",
     "migrate:deploy": "prisma migrate deploy",
     "db:backup": "ts-node --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/backup-db.ts",
+    "db:reset-sequences": "ts-node --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/reset-sequences.ts",
     "db:seed:test": "ts-node --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/seed-test-data.ts",
     "db:cleanup:test": "ts-node --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/cleanup-test-data.ts",
     "db:verify:test": "ts-node --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/verify-test-data.ts",

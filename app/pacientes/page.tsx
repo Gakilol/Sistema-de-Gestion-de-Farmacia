@@ -1062,13 +1062,13 @@ export default function PacientesPage() {
             </button>
 
             {/* Header Expediente */}
-            <div className="border-b border-border pb-4 mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="border-b border-border pb-4 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
                   <Activity className="w-5 h-5 text-primary" />
                   Expediente Clínico del Paciente
                 </h2>
-                <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                   <span className="font-bold text-foreground">{selectedPaciente.nombreCompleto}</span>
                   {selectedPaciente.cedula && <span>Cédula: <strong>{selectedPaciente.cedula}</strong></span>}
                   {selectedPaciente.telefono && <span>Teléfono: <strong>{selectedPaciente.telefono}</strong></span>}
@@ -1128,14 +1128,14 @@ export default function PacientesPage() {
                 {/* Central: Historial Clínico Dinámico */}
                 <div className="flex-1 flex flex-col min-h-0">
                   {/* Tabs del Detalle */}
-                  <div className="flex border-b border-border pb-px mb-4">
+                  <div className="flex border-b border-border pb-px mb-6">
                     <button
                       onClick={() => setDetailTab("examenes")}
                       className={`px-4 py-2 border-b-2 font-semibold text-xs transition-all ${
                         detailTab === "examenes" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
                       }`}
                     >
-                      Exámenes del Paciente (${(selectedPaciente.examenes || []).length})
+                      Exámenes del Paciente ({(selectedPaciente.examenes || []).length})
                     </button>
                     <button
                       onClick={() => setDetailTab(" soap" as any)}
@@ -1143,7 +1143,7 @@ export default function PacientesPage() {
                         detailTab === (" soap" as any) ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
                       }`}
                     >
-                      Consultas SOAP (${(selectedPaciente.atenciones || []).length})
+                      Consultas SOAP ({(selectedPaciente.atenciones || []).length})
                     </button>
                     <button
                       onClick={() => setDetailTab("recetas")}
@@ -1151,7 +1151,7 @@ export default function PacientesPage() {
                         detailTab === "recetas" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
                       }`}
                     >
-                      Recetas (${(selectedPaciente.recetas || []).length})
+                      Recetas ({(selectedPaciente.recetas || []).length})
                     </button>
                   </div>
 
@@ -1160,10 +1160,10 @@ export default function PacientesPage() {
                     
                     {/* TABS 1: EXÁMENES (NUEVO MÓDULO) */}
                     {detailTab === "examenes" && (
-                      <div className="space-y-4">
+                      <div className="space-y-5">
                         {/* Buscador y Controles */}
-                        <div className="flex flex-wrap gap-2 items-center justify-between">
-                          <div className="flex flex-wrap gap-2 items-center">
+                        <div className="flex flex-wrap gap-3 items-center justify-between mb-4">
+                          <div className="flex flex-wrap gap-3 items-center">
                             <Input
                               type="text"
                               size={15}
@@ -1175,7 +1175,7 @@ export default function PacientesPage() {
                             <select
                               value={examTypeFilter}
                               onChange={e => setExamTypeFilter(e.target.value)}
-                              className="h-8 rounded border border-border px-2 text-xs bg-background text-foreground"
+                              className="h-8 rounded border border-border px-2 text-xs bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
                             >
                               <option value="">Todos los tipos</option>
                               <option value="LABORATORIO">Laboratorio</option>
@@ -1184,7 +1184,7 @@ export default function PacientesPage() {
                               <option value="BIOPSIA">Biopsia</option>
                               <option value="OTRO">Otro</option>
                             </select>
-                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground ml-2">
                               <span>Desde:</span>
                               <input type="date" value={examDateDesde} onChange={e => setExamDateDesde(e.target.value)} className="bg-background border border-border rounded p-1 text-xs h-8 text-foreground" />
                               <span>Hasta:</span>
