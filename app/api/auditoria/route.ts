@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
+import { toManaguaStartOfDay, toManaguaEndOfDay, getManaguaDateRange, toManaguaEndOfDay as getTodayEnd } from "@/lib/timezone"
 
 export async function GET(request: NextRequest) {
   try {
@@ -23,6 +24,7 @@ export async function GET(request: NextRequest) {
     const accion = searchParams.get("accion")
     const entidad = searchParams.get("entidad")
     const buscarUsuario = searchParams.get("usuario")
+    const modulo = searchParams.get("modulo") // FARMACIA, CLINICA, or TODOS
     const page = Math.max(1, parseInt(searchParams.get("page") || "1"))
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "50")))
     const skip = (page - 1) * limit
@@ -33,21 +35,18 @@ export async function GET(request: NextRequest) {
     if (startDate || endDate) {
       where.createdAt = {}
       if (startDate) {
-        const start = new Date(startDate)
-        start.setUTCHours(0, 0, 0, 0)
-        where.createdAt.gte = start
+        where.createdAt.gte = toManaguaStartOfDay(startDate)
       }
       if (endDate) {
-        const end = new Date(endDate)
-        end.setUTCHours(23, 59, 59, 999)
-        where.createdAt.lte = end
+        where.createdAt.lte = toManaguaEndOfDay(endDate)
       }
     } else {
       // Por defecto: última semana
-      const hace7Dias = new Date()
-      hace7Dias.setDate(hace7Dias.getDate() - 7)
-      hace7Dias.setUTCHours(0, 0, 0, 0)
-      where.createdAt = { gte: hace7Dias }
+      const range = getManaguaDateRange('semana')
+      where.createdAt = {
+        gte: range.startDate,
+        lte: range.endDate
+      }
     }
 
     if (accion && accion !== "TODOS") {
@@ -62,6 +61,10 @@ export async function GET(request: NextRequest) {
       where.usuario = {
         nombreCompleto: { contains: buscarUsuario, mode: "insensitive" },
       }
+    }
+
+    if (modulo && modulo !== "TODOS") {
+      where.modulo = modulo
     }
 
     const [logs, total] = await Promise.all([
@@ -79,11 +82,17 @@ export async function GET(request: NextRequest) {
       prisma.auditoriaLog.count({ where }),
     ])
 
-    // Estadísticas rápidas para el período filtrado (siempre última semana si no hay filtro)
-    const hoy = new Date()
-    hoy.setUTCHours(0, 0, 0, 0)
+    // Estadísticas rápidas para el período filtrado en Managua TZ
+    const rangeToday = getManaguaDateRange('hoy')
     const [accionesHoy, totalPeriodo] = await Promise.all([
-      prisma.auditoriaLog.count({ where: { createdAt: { gte: hoy } } }),
+      prisma.auditoriaLog.count({ 
+        where: { 
+          createdAt: { 
+            gte: rangeToday.startDate, 
+            lte: rangeToday.endDate 
+          } 
+        } 
+      }),
       prisma.auditoriaLog.count({ where }),
     ])
 

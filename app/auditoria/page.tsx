@@ -21,6 +21,8 @@ import {
   Search,
   CalendarDays,
   Layers,
+  Heart,
+  Trash2
 } from "lucide-react"
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json())
@@ -35,6 +37,17 @@ const ACCION_CONFIG: Record<string, { color: string; bg: string; icon: React.Ele
   ACTIVAR_PRODUCTO:    { color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20", icon: Package,  label: "Producto Activado" },
   DESACTIVAR_PRODUCTO: { color: "text-red-400",     bg: "bg-red-500/10 border-red-500/20",       icon: Package,    label: "Producto Desactivado" },
   AJUSTE_STOCK:        { color: "text-orange-400",  bg: "bg-orange-500/10 border-orange-500/20", icon: Layers,     label: "Ajuste de Stock" },
+  
+  // Clínica
+  CREAR_PACIENTE:      { color: "text-teal-400",    bg: "bg-teal-500/10 border-teal-500/20",     icon: Users,      label: "Paciente Creado" },
+  ACTUALIZAR_PACIENTE: { color: "text-blue-400",    bg: "bg-blue-500/10 border-blue-500/20",     icon: Users,      label: "Paciente Modificado" },
+  CREAR_CITA:          { color: "text-indigo-400",  bg: "bg-indigo-500/10 border-indigo-500/20", icon: CalendarDays,   label: "Cita Registrada" },
+  ACTUALIZAR_CITA:     { color: "text-purple-400",  bg: "bg-purple-500/10 border-purple-500/20", icon: CalendarDays,   label: "Cita Actualizada" },
+  CREAR_ATENCION:      { color: "text-pink-400",    bg: "bg-pink-500/10 border-pink-500/20",     icon: Heart,      label: "Consulta SOAP" },
+  CREAR_RECETA:        { color: "text-cyan-400",    bg: "bg-cyan-500/10 border-cyan-500/20",     icon: ClipboardList,  label: "Receta Emitida" },
+  
+  // Sistema
+  LIMPIEZA_DATOS_PRUEBA: { color: "text-red-400",   bg: "bg-red-500/10 border-red-500/20",       icon: Trash2,     label: "Limpieza de Datos" }
 }
 
 const ACCION_DEFAULT = { color: "text-muted-foreground", bg: "bg-muted/50 border-border", icon: ClipboardList, label: "Acción del Sistema" }
@@ -83,6 +96,14 @@ function LogRow({ log }: { log: any }) {
             </span>
             <span className="text-xs text-muted-foreground">·</span>
             <span className="text-xs text-muted-foreground">{log.entidad} #{log.entidadId ?? "—"}</span>
+            <span className="text-xs text-muted-foreground">·</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold border ${
+              log.modulo === "CLINICA" 
+                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
+                : "bg-blue-500/10 text-blue-400 border-blue-500/20"
+            }`}>
+              {log.modulo === "CLINICA" ? "CLÍNICA" : "FARMACIA"}
+            </span>
           </div>
           <p className="text-sm text-foreground mt-0.5 truncate">
             {log.usuario?.nombreCompleto ?? "Sistema"}
@@ -119,7 +140,7 @@ function LogRow({ log }: { log: any }) {
 }
 
 // ── Página Principal ──────────────────────────────────────────────────────────
-type FiltroAccion = "TODOS" | "INICIO_SESION" | "CREAR_VENTA" | "CREAR_COMPRA" | "CREAR_PRODUCTO" | "ACTUALIZAR_PRODUCTO" | "AJUSTE_STOCK" | "ACTIVAR_PRODUCTO" | "DESACTIVAR_PRODUCTO"
+type FiltroAccion = "TODOS" | "INICIO_SESION" | "CREAR_VENTA" | "CREAR_COMPRA" | "CREAR_PRODUCTO" | "ACTUALIZAR_PRODUCTO" | "AJUSTE_STOCK" | "ACTIVAR_PRODUCTO" | "DESACTIVAR_PRODUCTO" | "CREAR_ATENCION" | "CREAR_CITA" | "CREAR_RECETA"
 
 export default function AuditoriaPage() {
   const router = useRouter()
@@ -129,6 +150,7 @@ export default function AuditoriaPage() {
   const [endDate, setEndDate] = useState("")
   const [accionFiltro, setAccionFiltro] = useState<FiltroAccion>("TODOS")
   const [buscarUsuario, setBuscarUsuario] = useState("")
+  const [moduloFiltro, setModuloFiltro] = useState<"TODOS" | "FARMACIA" | "CLINICA">("TODOS")
   const [page, setPage] = useState(1)
 
   // Construir URL de la API con los filtros activos
@@ -138,10 +160,11 @@ export default function AuditoriaPage() {
     if (endDate) params.set("endDate", endDate)
     if (accionFiltro !== "TODOS") params.set("accion", accionFiltro)
     if (buscarUsuario.trim()) params.set("usuario", buscarUsuario.trim())
+    if (moduloFiltro !== "TODOS") params.set("modulo", moduloFiltro)
     params.set("page", String(page))
     params.set("limit", "30")
     return `/api/auditoria?${params.toString()}`
-  }, [startDate, endDate, accionFiltro, buscarUsuario, page])
+  }, [startDate, endDate, accionFiltro, buscarUsuario, moduloFiltro, page])
 
   const { data, isLoading, mutate } = useSWR(buildUrl, fetcher, {
     onError: (err) => {
@@ -163,6 +186,9 @@ export default function AuditoriaPage() {
     { value: "AJUSTE_STOCK", label: "Ajustes de Stock" },
     { value: "ACTIVAR_PRODUCTO", label: "Activar Producto" },
     { value: "DESACTIVAR_PRODUCTO", label: "Desactivar Producto" },
+    { value: "CREAR_CITA", label: "Citas Programadas" },
+    { value: "CREAR_ATENCION", label: "Consultas SOAP" },
+    { value: "CREAR_RECETA", label: "Recetas Emitidas" },
   ]
 
   function handleFiltrar() {
@@ -175,6 +201,7 @@ export default function AuditoriaPage() {
     setEndDate("")
     setAccionFiltro("TODOS")
     setBuscarUsuario("")
+    setModuloFiltro("TODOS")
     setPage(1)
   }
 
@@ -213,7 +240,7 @@ export default function AuditoriaPage() {
                 Auditoría del Sistema
               </h1>
               <p className="text-muted-foreground mt-1">
-                Historial completo de acciones realizadas por los usuarios
+                Historial completo de acciones realizadas por los usuarios en zona horaria de Nicaragua
               </p>
             </div>
             <Button
@@ -270,11 +297,38 @@ export default function AuditoriaPage() {
             </Card>
           </div>
 
+          {/* ── Módulo Tab Bar ── */}
+          <div className="flex border-b border-border mb-6 overflow-x-auto gap-2">
+            {[
+              { id: "TODOS", label: "Todos los Registros" },
+              { id: "FARMACIA", label: "Farmacia" },
+              { id: "CLINICA", label: "Clínica & Podología" }
+            ].map((tab) => {
+              const active = moduloFiltro === tab.id
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    setModuloFiltro(tab.id as any)
+                    setPage(1)
+                  }}
+                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-all whitespace-nowrap ${
+                    active 
+                      ? "border-primary text-primary" 
+                      : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              )
+            })}
+          </div>
+
           {/* ── Filtros ── */}
           <Card className="glass-card p-5 mb-6">
             <div className="flex items-center gap-2 mb-4">
               <Filter className="w-4 h-4 text-primary" />
-              <h2 className="text-sm font-semibold text-foreground">Filtros</h2>
+              <h2 className="text-sm font-semibold text-foreground">Filtros Avanzados</h2>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {/* Fecha inicio */}
@@ -344,7 +398,7 @@ export default function AuditoriaPage() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
                 <ClipboardList className="w-4 h-4 text-primary" />
-                Registros de Actividad
+                Registros de Actividad ({moduloFiltro === "TODOS" ? "Todos" : moduloFiltro === "FARMACIA" ? "Farmacia" : "Clínica"})
                 {pagination && (
                   <span className="text-xs text-muted-foreground font-normal ml-1">
                     ({pagination.total} total)

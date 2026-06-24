@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Plus, Edit2, Trash2, Truck, Search, Tag, X, Info, Layers, Loader2 } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
+import { proveedorSchema } from "@/lib/validations"
 
 interface Proveedor {
   id: number
@@ -16,6 +17,9 @@ interface Proveedor {
   telefono: string | null
   correo: string | null
   direccion: string | null
+  ruc: string | null
+  contacto: string | null
+  activo: boolean
 }
 
 interface CatalogoProducto {
@@ -43,7 +47,15 @@ export default function ProveedoresPage() {
   
   // Edición de proveedor
   const [editingId, setEditingId] = useState<number | null>(null)
-  const [formData, setFormData] = useState({ nombre: "", telefono: "", correo: "", direccion: "" })
+  const [formData, setFormData] = useState({
+    nombre: "",
+    telefono: "",
+    correo: "",
+    direccion: "",
+    ruc: "",
+    contacto: "",
+    activo: true
+  })
 
   // Catálogo Proveedor-Producto
   const [showCatalogModal, setShowCatalogModal] = useState(false)
@@ -65,7 +77,7 @@ export default function ProveedoresPage() {
 
   const fetchProveedores = async () => {
     try {
-      const res = await fetch("/api/proveedores")
+      const res = await fetch("/api/proveedores?estado=todos")
       if (res.ok) {
         setProveedores(await res.json())
       }
@@ -177,6 +189,16 @@ export default function ProveedoresPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // Validate using Zod schema
+    const validation = proveedorSchema.safeParse(formData)
+    if (!validation.success) {
+      validation.error.issues.forEach((err) => {
+        toast.error(err.message)
+      })
+      return
+    }
+
     try {
       const url = editingId ? `/api/proveedores/${editingId}` : "/api/proveedores"
       const method = editingId ? "PUT" : "POST"
@@ -187,14 +209,13 @@ export default function ProveedoresPage() {
         body: JSON.stringify(formData)
       })
 
+      const data = await res.json()
+
       if (res.ok) {
         toast.success(editingId ? "Proveedor actualizado" : "Proveedor creado con éxito")
-        setFormData({ nombre: "", telefono: "", correo: "", direccion: "" })
-        setEditingId(null)
-        setShowForm(false)
+        handleCancelForm()
         fetchProveedores()
       } else {
-        const data = await res.json()
         toast.error(data.error || "Error al guardar el proveedor")
       }
     } catch (e) {
@@ -209,27 +230,53 @@ export default function ProveedoresPage() {
       nombre: p.nombre,
       telefono: p.telefono || "",
       correo: p.correo || "",
-      direccion: p.direccion || ""
+      direccion: p.direccion || "",
+      ruc: p.ruc || "",
+      contacto: p.contacto || "",
+      activo: p.activo
     })
     setShowForm(true)
   }
 
   const handleCancelForm = () => {
-    setFormData({ nombre: "", telefono: "", correo: "", direccion: "" })
+    setFormData({ nombre: "", telefono: "", correo: "", direccion: "", ruc: "", contacto: "", activo: true })
     setEditingId(null)
     setShowForm(false)
   }
 
+  const handleToggleActivo = async (p: Proveedor) => {
+    const accion = p.activo ? "desactivar" : "reactivar"
+    const ok = window.confirm(`¿Seguro que deseas ${accion} al proveedor "${p.nombre}"?`)
+    if (!ok) return
+    try {
+      const res = await fetch(`/api/proveedores/${p.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activo: !p.activo })
+      })
+      if (res.ok) {
+        toast.success(`Proveedor ${p.activo ? "desactivado" : "reactivado"}`)
+        fetchProveedores()
+      } else {
+        const data = await res.json()
+        toast.error(data.error || "No se pudo cambiar el estado")
+      }
+    } catch (e) {
+      console.error(e)
+      toast.error("Error de conexión")
+    }
+  }
+
   const handleDelete = async (id: number) => {
-    if (window.confirm("¿Eliminar este proveedor?\nSe perderán todas las asociaciones en el catálogo.")) {
+    if (window.confirm("¿Desactivar lógicamente este proveedor?\nSe mantendrán los datos históricos pero no estará activo para nuevas compras.")) {
       try {
         const res = await fetch(`/api/proveedores/${id}`, { method: "DELETE" })
         if (res.ok) {
-          toast.success("Proveedor eliminado")
+          toast.success("Proveedor desactivado lógicamente")
           fetchProveedores()
         } else {
           const data = await res.json()
-          toast.error(data.error || "No se pudo eliminar el proveedor")
+          toast.error(data.error || "No se pudo desactivar el proveedor")
         }
       } catch (e) {
         console.error(e)
@@ -277,19 +324,27 @@ export default function ProveedoresPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-foreground mb-1">Nombre <span className="text-red-500">*</span></label>
-                    <Input required value={formData.nombre} onChange={(e) => setFormData({ ...formData, nombre: e.target.value })} className="bg-muted/30 border-border" />
+                    <Input required value={formData.nombre} onChange={(e) => setFormData({ ...formData, nombre: e.target.value })} className="bg-muted/30 border-border" placeholder="Ej: Distribuidora Cruz Azul" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-foreground mb-1">Teléfono</label>
-                    <Input value={formData.telefono} onChange={(e) => setFormData({ ...formData, telefono: e.target.value })} className="bg-muted/30 border-border" />
+                    <label className="block text-sm font-medium text-foreground mb-1">Teléfono <span className="text-red-500">*</span></label>
+                    <Input required value={formData.telefono} onChange={(e) => setFormData({ ...formData, telefono: e.target.value })} className="bg-muted/30 border-border" placeholder="Ej: 88887777" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-foreground mb-1">Correo</label>
-                    <Input type="email" value={formData.correo} onChange={(e) => setFormData({ ...formData, correo: e.target.value })} className="bg-muted/30 border-border" />
+                    <label className="block text-sm font-medium text-foreground mb-1">Cédula RUC <span className="text-muted-foreground text-xs font-normal">(Opcional)</span></label>
+                    <Input value={formData.ruc} onChange={(e) => setFormData({ ...formData, ruc: e.target.value })} className="bg-muted/30 border-border" placeholder="Ej: J0310000012345" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-foreground mb-1">Dirección</label>
-                    <Input value={formData.direccion} onChange={(e) => setFormData({ ...formData, direccion: e.target.value })} className="bg-muted/30 border-border" />
+                    <label className="block text-sm font-medium text-foreground mb-1">Persona de Contacto <span className="text-muted-foreground text-xs font-normal">(Opcional)</span></label>
+                    <Input value={formData.contacto} onChange={(e) => setFormData({ ...formData, contacto: e.target.value })} className="bg-muted/30 border-border" placeholder="Ej: Lic. Marvin Espinoza" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1">Correo <span className="text-muted-foreground text-xs font-normal">(Opcional)</span></label>
+                    <Input type="email" value={formData.correo} onChange={(e) => setFormData({ ...formData, correo: e.target.value })} className="bg-muted/30 border-border" placeholder="Ej: ventas@distribuidora.com" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1">Dirección <span className="text-muted-foreground text-xs font-normal">(Opcional)</span></label>
+                    <Input value={formData.direccion} onChange={(e) => setFormData({ ...formData, direccion: e.target.value })} className="bg-muted/30 border-border" placeholder="Ej: Km 5 Carretera Norte, 3c al lago" />
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -310,7 +365,7 @@ export default function ProveedoresPage() {
                 <table className="w-full">
                   <thead className="bg-muted/30 border-b border-border">
                     <tr>
-                      {["Nombre", "Teléfono", "Correo", "Dirección", "Catálogo", ...(isAdmin ? ["Acciones"] : [])].map((h) => (
+                      {["Nombre / RUC", "Contacto", "Teléfono", "Correo", "Estado", "Catálogo", ...(isAdmin ? ["Acciones"] : [])].map((h) => (
                         <th key={h} className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">{h}</th>
                       ))}
                     </tr>
@@ -318,15 +373,23 @@ export default function ProveedoresPage() {
                   <tbody className="divide-y divide-border">
                     {filteredProveedores.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="px-6 py-8 text-center text-muted-foreground text-sm">No se encontraron proveedores</td>
+                        <td colSpan={7} className="px-6 py-8 text-center text-muted-foreground text-sm">No se encontraron proveedores</td>
                       </tr>
                     )}
                     {filteredProveedores.map((p) => (
                       <tr key={p.id} className="hover:bg-muted/20 transition-colors">
-                        <td className="px-6 py-4 text-sm font-medium text-foreground">{p.nombre}</td>
+                        <td className="px-6 py-4 text-sm font-medium text-foreground">
+                          <div>{p.nombre}</div>
+                          {p.ruc && <div className="text-xs text-muted-foreground mt-0.5">RUC: {p.ruc}</div>}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-muted-foreground">{p.contacto || "—"}</td>
                         <td className="px-6 py-4 text-sm text-muted-foreground">{p.telefono || "—"}</td>
                         <td className="px-6 py-4 text-sm text-muted-foreground">{p.correo || "—"}</td>
-                        <td className="px-6 py-4 text-sm text-muted-foreground">{p.direccion || "—"}</td>
+                        <td className="px-6 py-4 text-sm">
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${p.activo ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20" : "bg-muted text-muted-foreground border border-border"}`}>
+                            {p.activo ? "Activo" : "Inactivo"}
+                          </span>
+                        </td>
                         <td className="px-6 py-4 text-sm">
                           <Button 
                             onClick={() => handleOpenCatalog(p)} 
@@ -341,8 +404,11 @@ export default function ProveedoresPage() {
                         {isAdmin && (
                           <td className="px-6 py-4 text-sm">
                             <div className="flex gap-1">
-                              <Button size="sm" variant="ghost" onClick={() => handleEditClick(p)} className="text-muted-foreground hover:text-foreground"><Edit2 className="w-4 h-4" /></Button>
-                              <Button size="sm" variant="ghost" onClick={() => handleDelete(p.id)} className="text-red-400 hover:text-red-300 hover:bg-red-500/10"><Trash2 className="w-4 h-4" /></Button>
+                              <Button size="sm" variant="ghost" onClick={() => handleEditClick(p)} className="text-muted-foreground hover:text-foreground" title="Editar"><Edit2 className="w-4 h-4" /></Button>
+                              <Button size="sm" variant="ghost" onClick={() => handleToggleActivo(p)} className="text-amber-500 hover:text-amber-400 hover:bg-amber-500/10" title={p.activo ? "Desactivar" : "Reactivar"}>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => handleDelete(p.id)} className="text-red-500 hover:text-red-400 hover:bg-red-500/10" title="Desactivar permanentemente"><Trash2 className="w-4 h-4" /></Button>
                             </div>
                           </td>
                         )}

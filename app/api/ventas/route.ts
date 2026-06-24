@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
 import { registrarLog } from "@/lib/audit"
 import { ventaSchema } from "@/lib/validations"
+import { toManaguaStartOfDay, toManaguaEndOfDay } from "@/lib/timezone"
 
 export async function GET(request: NextRequest) {
   try {
@@ -21,10 +22,10 @@ export async function GET(request: NextRequest) {
     if (startDate || endDate) {
       whereClause.fecha = {}
       if (startDate) {
-        whereClause.fecha.gte = new Date(startDate)
+        whereClause.fecha.gte = toManaguaStartOfDay(startDate)
       }
       if (endDate) {
-        whereClause.fecha.lte = new Date(endDate)
+        whereClause.fecha.lte = toManaguaEndOfDay(endDate)
       }
     }
 
@@ -37,6 +38,7 @@ export async function GET(request: NextRequest) {
       include: {
         cliente: true,
         usuario: { include: { rol: true } },
+        descuento: true,
         detalles: {
           include: {
             producto: true,
@@ -85,9 +87,28 @@ export async function POST(request: NextRequest) {
       estado,
       montoRecibido,
       cambio,
-      rucCliente
+      rucCliente,
+      idDescuento,
+      descuentoTotal
     } = validation.data
     const detalles = validationDetalles as any[]
+
+    // ── Validar descuento general si se proporciona ──
+    if (idDescuento) {
+      const desc = await prisma.descuento.findUnique({
+        where: { id: idDescuento }
+      })
+      if (!desc || desc.estado !== "ACTIVO") {
+        return NextResponse.json({ error: "El descuento seleccionado no está activo" }, { status: 400 })
+      }
+      const nowDb = new Date()
+      if (desc.fechaInicio && desc.fechaInicio > nowDb) {
+        return NextResponse.json({ error: "El descuento aún no inicia su vigencia" }, { status: 400 })
+      }
+      if (desc.fechaFin && desc.fechaFin < nowDb) {
+        return NextResponse.json({ error: "El descuento ha expirado" }, { status: 400 })
+      }
+    }
 
     // ── Pre-validación: cargar todos los productos de una sola consulta ──
     const productIds = detalles.map((d: any) => d.idProducto)
@@ -185,11 +206,16 @@ export async function POST(request: NextRequest) {
       detalle.precioUnitario = expectedPrice
     }
 
-    // Calcular total de forma segura
+    // Calcular total de forma segura con descuentos
     let total = 0
     for (const detalle of detalles) {
-      total += detalle.precioUnitario * Number.parseInt(detalle.cantidad)
+      const lineSubtotal = detalle.precioUnitario * Number.parseInt(detalle.cantidad)
+      const lineDiscount = Number(detalle.descuentoLinea || 0)
+      const lineTotal = lineSubtotal - lineDiscount
+      total += lineTotal
     }
+    const saleDiscount = Number(descuentoTotal || 0)
+    total = Math.max(0, total - saleDiscount)
 
     // ── Idempotencia: Evitar ventas duplicadas por doble click en menos de 15 segundos ──
     const quinceSegundosAtras = new Date(Date.now() - 15 * 1000)
@@ -328,12 +354,15 @@ export async function POST(request: NextRequest) {
               montoRecibido: montoRecibido !== undefined && montoRecibido !== null ? Number(montoRecibido) : null,
               cambio: cambio !== undefined && cambio !== null ? Number(cambio) : null,
               rucCliente: rucCliente || null,
+              idDescuento: idDescuento || null,
+              descuentoTotal: descuentoTotal ? Number(descuentoTotal) : 0,
               detalles: {
                 create: detalles.map((d: any) => ({
                   idProducto: d.idProducto,
                   cantidad: Number.parseInt(d.cantidad),
                   precioUnitario: d.precioUnitario,
-                  subtotal: d.precioUnitario * Number.parseInt(d.cantidad),
+                  subtotal: (d.precioUnitario * Number.parseInt(d.cantidad)) - Number(d.descuentoLinea || 0),
+                  descuentoLinea: d.descuentoLinea ? Number(d.descuentoLinea) : 0,
                   tipoUnidad: d.tipoUnidad || "UNIDAD",
                 })),
               },

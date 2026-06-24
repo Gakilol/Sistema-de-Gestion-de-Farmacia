@@ -33,6 +33,7 @@ model Usuario {
   devoluciones    DevolucionProveedor[]
   atenciones      AtencionPodologica[]
   recetas         Receta[]
+  descuentos      Descuento[]
 }
 
 model Cliente {
@@ -45,6 +46,9 @@ model Cliente {
   direccion       String?
   activo          Boolean  @default(true)
   esDatoPrueba    Boolean  @default(false)
+  fechaNacimiento DateTime?
+  sexo            String?
+  tipoPerfil      String   @default("FARMACIA")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -52,6 +56,7 @@ model Cliente {
   citas           Cita[]
   atenciones      AtencionPodologica[]
   recetas         Receta[]
+  datosClinicos   DatosClinicosPaciente?
 }
 
 
@@ -60,6 +65,8 @@ model CategoriaProducto {
   id              Int     @id @default(autoincrement())
   nombre          String  @unique
   descripcion     String?
+  activo          Boolean @default(true)
+  createdBy       Int?
   esDatoPrueba    Boolean @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -76,8 +83,11 @@ model Producto {
   fechaVencimiento DateTime?  // Legacy field — now tracked per batch (Lote)
   idCategoria     Int
   categoria       CategoriaProducto @relation(fields: [idCategoria], references: [id])
-  laboratorio     String?
+  idLaboratorio   Int?
+  laboratorioRef  Laboratorio? @relation(fields: [idLaboratorio], references: [id])
+  laboratorio     String?     // Keep for legacy compatibility
   concentracion   String?
+  formaPresentacion String?
   unidadMedida    String?  // "mg", "ml", "g", "unidad"
   precioCompra    Decimal @db.Decimal(10, 2)  // Average cost — auto-calculated from purchases
   precioVenta     Decimal @db.Decimal(10, 2)
@@ -85,6 +95,9 @@ model Producto {
   precioCaja      Decimal? @db.Decimal(10, 2)
   unidadesPorBlister Int?
   unidadesPorCaja Int?
+  blísteresPorCaja Int?
+  margenUtilidad  Decimal? @db.Decimal(10, 2)
+  precioSugerido  Decimal? @db.Decimal(10, 2)
   stockActual     Int     @default(0)  // Computed from Lote totals — read-only in UI
   stockMinimo     Int?
   activo          Boolean @default(true)
@@ -109,6 +122,9 @@ model Proveedor {
   telefono        String?
   correo          String?
   direccion       String?
+  ruc             String? @unique
+  contacto        String?
+  activo          Boolean @default(true)
   esDatoPrueba    Boolean @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -230,6 +246,9 @@ model Venta {
   montoRecibido   Decimal? @db.Decimal(10, 2)
   cambio          Decimal? @db.Decimal(10, 2)
   rucCliente      String?
+  idDescuento     Int?
+  descuento       Descuento? @relation(fields: [idDescuento], references: [id])
+  descuentoTotal  Decimal? @db.Decimal(10, 2) @default(0)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -245,6 +264,7 @@ model DetalleVenta {
   cantidad        Int
   precioUnitario  Decimal @db.Decimal(10, 2)
   subtotal        Decimal @db.Decimal(10, 2)
+  descuentoLinea  Decimal? @db.Decimal(10, 2) @default(0)
   tipoUnidad      String  @default("UNIDAD")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -259,6 +279,7 @@ model AuditoriaLog {
   entidad     String   // ej. "Producto", "Venta"
   entidadId   Int?     // ID del registro modificado
   detalles    String?  // JSON con detalles
+  modulo      String   @default("FARMACIA")
   idUsuario   Int?
   usuario     Usuario? @relation(fields: [idUsuario], references: [id])
   createdAt   DateTime @default(now())
@@ -362,21 +383,23 @@ model Cita {
 
 // ===== ATENCIÓN PODOLÓGICA (SOAP) =====
 model AtencionPodologica {
-  id            Int       @id @default(autoincrement())
-  idCita        Int?      @unique
-  cita          Cita?     @relation(fields: [idCita], references: [id], onDelete: SetNull)
+  id            Int                @id @default(autoincrement())
+  idCita        Int?               @unique
+  cita          Cita?              @relation(fields: [idCita], references: [id], onDelete: SetNull)
   idCliente     Int
-  cliente       Cliente   @relation(fields: [idCliente], references: [id], onDelete: Cascade)
+  cliente       Cliente            @relation(fields: [idCliente], references: [id], onDelete: Cascade)
   idUsuario     Int
-  usuario       Usuario   @relation(fields: [idUsuario], references: [id])
-  fecha         DateTime  @default(now())
-  subjetivo     String    @db.Text
-  objetivo      String    @db.Text
-  analisis      String    @db.Text
-  plan          String    @db.Text
-  esDatoPrueba  Boolean   @default(false)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  usuario       Usuario            @relation(fields: [idUsuario], references: [id])
+  idServicio    Int?
+  servicio      ServicioPodologia? @relation(fields: [idServicio], references: [id], onDelete: SetNull)
+  fecha         DateTime           @default(now())
+  subjetivo     String             @db.Text
+  objetivo      String             @db.Text
+  analisis      String             @db.Text
+  plan          String             @db.Text
+  esDatoPrueba  Boolean            @default(false)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
   receta        Receta?
 }
 
@@ -411,5 +434,70 @@ model DetalleReceta {
   indicaciones        String?  @db.Text
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
+}
+
+// ===== LABORATORIOS =====
+model Laboratorio {
+  id            Int        @id @default(autoincrement())
+  nombre        String     @unique
+  pais          String?
+  direccion     String?
+  telefono      String?
+  correo        String?
+  contacto      String?
+  activo        Boolean    @default(true)
+  observaciones String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  productos     Producto[]
+}
+
+// ===== DATOS CLÍNICOS DEL PACIENTE =====
+model DatosClinicosPaciente {
+  id                   Int      @id @default(autoincrement())
+  idCliente            Int      @unique
+  cliente              Cliente  @relation(fields: [idCliente], references: [id], onDelete: Cascade)
+  antecedentes         String?  @db.Text
+  alergias             String?  @db.Text
+  observacionesClinicas String? @db.Text
+  diagnosticoGeneral   String?  @db.Text
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+// ===== SERVICIOS DE PODOLOGÍA =====
+model ServicioPodologia {
+  id           Int                  @id @default(autoincrement())
+  nombre       String               @unique
+  descripcion  String?              @db.Text
+  precio       Decimal              @db.Decimal(10, 2)
+  duracion     Int?                 // en minutos
+  activo       Boolean              @default(true)
+  esDatoPrueba Boolean              @default(false)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  atenciones   AtencionPodologica[]
+}
+
+// ===== SISTEMA DE DESCUENTOS =====
+model Descuento {
+  id           Int        @id @default(autoincrement())
+  tipo         String     // "PORCENTAJE", "MONTO"
+  valor        Decimal    @db.Decimal(10, 2)
+  motivo       String
+  fechaInicio  DateTime?
+  fechaFin     DateTime?
+  montoMinimo  Decimal?   @db.Decimal(10, 2)
+  maxDescuento Decimal?   @db.Decimal(10, 2)
+  esAcumulable Boolean    @default(false)
+  estado       String     @default("ACTIVO") // "ACTIVO", "INACTIVO"
+  idUsuario    Int
+  usuario      Usuario    @relation(fields: [idUsuario], references: [id])
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  ventas       Venta[]
 }
 

@@ -55,7 +55,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
 
       if (diferencia > 0) {
-        // INCREASE: Create an adjustment batch and log AJUSTE_POSITIVO
+        // INCREASE: Create an adjustment batch and log AJUSTE_ADMINISTRATIVO
         const loteAjuste = await tx.lote.create({
           data: {
             idProducto,
@@ -71,11 +71,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           data: {
             idProducto,
             idLote: loteAjuste.id,
-            tipo: "AJUSTE_POSITIVO",
+            tipo: "AJUSTE_ADMINISTRATIVO",
             cantidad: diferencia,
             stockResultante: nuevoStock,
             costoUnitario: productoActual.precioCompra,
-            referencia: `Ajuste: ${motivo}`,
+            referencia: `Ajuste (+): ${motivo}`,
             idUsuario: user.id,
           },
         })
@@ -103,11 +103,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             data: {
               idProducto,
               idLote: lote.id,
-              tipo: "AJUSTE_NEGATIVO",
+              tipo: "AJUSTE_ADMINISTRATIVO",
               cantidad: deducir,
               stockResultante: nuevoStock,
               costoUnitario: lote.costoCompra,
-              referencia: `Ajuste: ${motivo}`,
+              referencia: `Ajuste (-): ${motivo}`,
               idUsuario: user.id,
             },
           })
@@ -120,10 +120,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           await tx.movimientoInventario.create({
             data: {
               idProducto,
-              tipo: "AJUSTE_NEGATIVO",
+              tipo: "AJUSTE_ADMINISTRATIVO",
               cantidad: pendiente,
               stockResultante: nuevoStock,
-              referencia: `Ajuste (sin lote): ${motivo}`,
+              referencia: `Ajuste (sin lote -): ${motivo}`,
               idUsuario: user.id,
             },
           })

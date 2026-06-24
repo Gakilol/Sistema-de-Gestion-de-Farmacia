@@ -1,10 +1,31 @@
 import { z } from "zod"
+import { getAllowedPrefixes } from "./phone-config"
 
 export const nicaraguaCedulaRegex = /^\d{3}-\d{6}-\d{4}[A-Za-z]$/;
 export const nicaraguaRucRegex = /^\d{3}-\d{6}-\d{4}[A-Za-z0-9]$/;
 export const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&._\-#])[A-Za-z\d@$!%*?&._\-#]{8,}$/;
 
 export const emptyToNull = (val: string | undefined | null) => val === "" ? null : val;
+
+export function normalizeNicaraguaPhone(val: any): string | null {
+  if (val === null || val === undefined) return null;
+  if (typeof val !== "string") return String(val);
+  let cleaned = val.trim().replace(/[\s\-()]/g, ""); // Remove spaces, dashes, parentheses
+  if (cleaned.startsWith("+505")) {
+    cleaned = cleaned.substring(4);
+  } else if (cleaned.startsWith("505") && cleaned.length > 8) {
+    cleaned = cleaned.substring(3);
+  }
+  return cleaned;
+}
+
+export function validateNicaraguaPhone(val: string | null): boolean {
+  if (!val) return false;
+  if (!/^\d{8}$/.test(val)) return false;
+  const prefixes = getAllowedPrefixes();
+  const firstDigit = val.charAt(0);
+  return prefixes.includes(firstDigit);
+}
 
 export const clienteSchema = z.object({
   nombreCompleto: z.string().trim()
@@ -22,7 +43,23 @@ export const clienteSchema = z.object({
       }
       return trimmed;
     },
-    z.string().trim().regex(nicaraguaCedulaRegex, "Formato de cédula de Nicaragua inválido (ej: 001-130605-1005A)").nullable().optional()
+    z.string().trim().regex(nicaraguaCedulaRegex, "Formato de cédula de Nicaragua inválido (ej: 001-130605-1005A)")
+  ),
+  telefono: z.preprocess(
+    normalizeNicaraguaPhone,
+    z.string().trim().refine(validateNicaraguaPhone, {
+      message: "Ingrese un número celular válido de Nicaragua de 8 dígitos con prefijo aceptado"
+    })
+  ),
+  correo: z.preprocess(
+    (val) => {
+      if (val === null || val === undefined) return null;
+      if (typeof val !== "string") return val;
+      const trimmed = val.trim();
+      if (trimmed === "") return null;
+      return trimmed;
+    },
+    z.string().trim().email("El correo electrónico debe ser válido").nullable().optional()
   ).nullable().optional(),
   ruc: z.preprocess(
     (val) => {
@@ -38,29 +75,6 @@ export const clienteSchema = z.object({
     },
     z.string().trim().regex(nicaraguaRucRegex, "Formato de RUC de Nicaragua inválido (ej: 001-130605-1005A)").nullable().optional()
   ).nullable().optional(),
-  telefono: z.preprocess(
-    (val) => {
-      if (val === null || val === undefined) return null;
-      if (typeof val !== "string") return val;
-      const trimmed = val.trim();
-      if (trimmed === "") return null;
-      // Mantener el signo + al inicio si lo tiene, remover espacios, guiones y paréntesis
-      const prefix = trimmed.startsWith("+") ? "+" : "";
-      const cleanDigits = trimmed.replace(/[^\d]/g, "");
-      return prefix + cleanDigits;
-    },
-    z.string().trim().regex(/^(?:\d{8}|\+\d{8,15}|\d{9,15})$/, "El teléfono debe tener 8 dígitos o formato internacional válido").nullable().optional()
-  ).nullable().optional(),
-  correo: z.preprocess(
-    (val) => {
-      if (val === null || val === undefined) return null;
-      if (typeof val !== "string") return val;
-      const trimmed = val.trim();
-      if (trimmed === "") return null;
-      return trimmed;
-    },
-    z.string().trim().email("El correo electrónico debe ser válido").nullable().optional()
-  ).nullable().optional(),
   direccion: z.preprocess(
     (val) => {
       if (val === null || val === undefined) return null;
@@ -71,6 +85,9 @@ export const clienteSchema = z.object({
     },
     z.string().trim().nullable().optional()
   ).nullable().optional(),
+  tipoPerfil: z.enum(["FARMACIA", "CLINICA", "AMBOS"]).default("FARMACIA"),
+  fechaNacimiento: z.string().optional().nullable(),
+  sexo: z.string().optional().nullable(),
   activo: z.boolean().optional().default(true),
 });
 
@@ -118,13 +135,88 @@ export const usuarioSchema = z.object({
     ),
 });
 
-export const productoSchema = z.object({
+export const proveedorSchema = z.object({
+  nombre: z.string().trim().min(2, "El nombre del proveedor es requerido"),
+  telefono: z.preprocess(
+    normalizeNicaraguaPhone,
+    z.string().trim().refine(validateNicaraguaPhone, {
+      message: "Ingrese un número celular válido de Nicaragua de 8 dígitos con prefijo aceptado"
+    })
+  ),
+  correo: z.preprocess(
+    (val) => val === "" ? null : val,
+    z.string().trim().email("El correo electrónico debe ser válido").nullable().optional()
+  ).nullable().optional(),
+  direccion: z.string().trim().optional().nullable(),
+  ruc: z.preprocess(
+    (val) => {
+      if (!val || typeof val !== "string") return null;
+      const clean = val.trim().replace(/[\s-]/g, "").toUpperCase();
+      if (clean.length === 14 && /^\d{13}[A-Z0-9]$/.test(clean)) {
+        return `${clean.substring(0, 3)}-${clean.substring(3, 9)}-${clean.substring(9, 13)}${clean.charAt(13)}`;
+      }
+      return val.trim();
+    },
+    z.string().trim().regex(nicaraguaRucRegex, "Formato de RUC de Nicaragua inválido").nullable().optional()
+  ).nullable().optional(),
+  contacto: z.string().trim().optional().nullable(),
+  activo: z.boolean().optional().default(true),
+});
+
+export const laboratorioSchema = z.object({
+  nombre: z.string().trim().min(2, "El nombre del laboratorio es requerido"),
+  pais: z.string().trim().optional().nullable(),
+  direccion: z.string().trim().optional().nullable(),
+  telefono: z.preprocess(
+    normalizeNicaraguaPhone,
+    z.string().trim().refine(validateNicaraguaPhone, {
+      message: "Ingrese un número celular válido de Nicaragua de 8 dígitos con prefijo aceptado"
+    }).or(z.literal("")).nullable().optional()
+  ).nullable().optional(),
+  correo: z.preprocess(
+    (val) => val === "" ? null : val,
+    z.string().trim().email("El correo electrónico debe ser válido").nullable().optional()
+  ).nullable().optional(),
+  contacto: z.string().trim().optional().nullable(),
+  observaciones: z.string().trim().optional().nullable(),
+  activo: z.boolean().optional().default(true),
+});
+
+export const categoriaSchema = z.object({
+  nombre: z.string().trim().min(2, "El nombre de la categoría es requerido"),
+  descripcion: z.string().trim().optional().nullable(),
+  activo: z.boolean().optional().default(true),
+});
+
+export const servicioSchema = z.object({
+  nombre: z.string().trim().min(2, "El nombre del servicio es requerido"),
+  descripcion: z.string().trim().optional().nullable(),
+  precio: z.preprocess((a) => (a ? parseFloat(String(a)) : 0), z.number().min(0, "El precio no puede ser negativo")),
+  duracion: z.preprocess((a) => (a ? parseInt(String(a), 10) : null), z.number().int().min(1).nullable().optional()),
+  activo: z.boolean().optional().default(true),
+});
+
+export const descuentoSchema = z.object({
+  tipo: z.enum(["PORCENTAJE", "MONTO"]),
+  valor: z.preprocess((a) => (a ? parseFloat(String(a)) : 0), z.number().positive("El valor del descuento debe ser mayor a 0")),
+  motivo: z.string().trim().min(1, "El motivo es requerido"),
+  fechaInicio: z.string().optional().nullable(),
+  fechaFin: z.string().optional().nullable(),
+  montoMinimo: z.preprocess((a) => (a ? parseFloat(String(a)) : null), z.number().min(0).nullable().optional()),
+  maxDescuento: z.preprocess((a) => (a ? parseFloat(String(a)) : null), z.number().min(0).nullable().optional()),
+  esAcumulable: z.boolean().optional().default(false),
+  estado: z.enum(["ACTIVO", "INACTIVO"]).default("ACTIVO"),
+});
+
+export const productoCreateSchema = z.object({
   nombre: z.string().min(2, "El nombre debe tener al menos 2 caracteres"),
   codigoBarras: z.string().optional().nullable(),
   descripcion: z.string().optional().nullable(),
   idCategoria: z.number({ message: "La categoría es obligatoria" }).int().positive("La categoría es obligatoria"),
+  idLaboratorio: z.number().int().positive().optional().nullable(),
   laboratorio: z.string().optional().nullable(),
   concentracion: z.string().optional().nullable(),
+  formaPresentacion: z.string().optional().nullable(),
   unidadMedida: z.string().optional().nullable(),
   precioCompra: z.preprocess((a) => (a ? parseFloat(String(a)) : null), z.number().min(0, "El precio de compra no puede ser negativo").nullable().optional()),
   precioVenta: z.preprocess((a) => (a !== null && a !== undefined && a !== "" ? parseFloat(String(a)) : 0), z.number().min(0, "El precio de venta no puede ser negativo").optional().default(0)),
@@ -132,6 +224,9 @@ export const productoSchema = z.object({
   precioCaja: z.preprocess((a) => (a ? parseFloat(String(a)) : null), z.number().min(0.01, "El precio por caja debe ser mayor a 0").nullable().optional()),
   unidadesPorBlister: z.preprocess((a) => (a ? parseInt(String(a), 10) : null), z.number().int().min(1).nullable().optional()),
   unidadesPorCaja: z.preprocess((a) => (a ? parseInt(String(a), 10) : null), z.number().int().min(1).nullable().optional()),
+  blísteresPorCaja: z.preprocess((a) => (a ? parseInt(String(a), 10) : null), z.number().int().min(1).nullable().optional()),
+  margenUtilidad: z.preprocess((a) => (a ? parseFloat(String(a)) : null), z.number().min(0).nullable().optional()),
+  precioSugerido: z.preprocess((a) => (a ? parseFloat(String(a)) : null), z.number().min(0).nullable().optional()),
   stockMinimo: z.preprocess((a) => (a ? parseInt(String(a), 10) : null), z.number().int().min(0).nullable().optional()),
   stockInicial: z.preprocess((a) => (a !== null && a !== undefined && a !== "" ? parseInt(String(a), 10) : 0), z.number().int().min(0).optional().default(0)),
   loteInicial: z.string().optional().nullable(),
@@ -163,6 +258,22 @@ export const productoSchema = z.object({
 }, {
   message: "Las unidades por caja son obligatorias si defines un precio de caja",
   path: ["unidadesPorCaja"]
+}).refine(data => {
+  if (data.precioBlister && data.precioBlister > 0 && data.precioVenta && data.precioVenta > 0) {
+    return data.precioBlister >= data.precioVenta;
+  }
+  return true;
+}, {
+  message: "El precio por blíster debe ser mayor o igual al precio unitario",
+  path: ["precioBlister"]
+}).refine(data => {
+  if (data.precioCaja && data.precioCaja > 0 && data.precioVenta && data.precioVenta > 0) {
+    return data.precioCaja >= data.precioVenta;
+  }
+  return true;
+}, {
+  message: "El precio por caja debe ser mayor o igual al precio unitario",
+  path: ["precioCaja"]
 }).refine(data => {
   if (data.esServicio) return true;
   if (data.stockInicial && data.stockInicial > 0) {
@@ -199,6 +310,71 @@ export const productoSchema = z.object({
   path: ["fechaVencimientoInicial"]
 });
 
+export const productoUpdateSchema = z.object({
+  nombre: z.string().min(2, "El nombre debe tener al menos 2 caracteres"),
+  codigoBarras: z.string().optional().nullable(),
+  descripcion: z.string().optional().nullable(),
+  idCategoria: z.number({ message: "La categoría es obligatoria" }).int().positive("La categoría es obligatoria"),
+  idLaboratorio: z.number().int().positive().optional().nullable(),
+  laboratorio: z.string().optional().nullable(),
+  concentracion: z.string().optional().nullable(),
+  formaPresentacion: z.string().optional().nullable(),
+  unidadMedida: z.string().optional().nullable(),
+  precioCompra: z.preprocess((a) => (a ? parseFloat(String(a)) : null), z.number().min(0, "El precio de compra no puede ser negativo").nullable().optional()),
+  precioVenta: z.preprocess((a) => (a !== null && a !== undefined && a !== "" ? parseFloat(String(a)) : 0), z.number().min(0, "El precio de venta no puede ser negativo").optional().default(0)),
+  precioBlister: z.preprocess((a) => (a ? parseFloat(String(a)) : null), z.number().min(0.01, "El precio por blíster debe ser mayor a 0").nullable().optional()),
+  precioCaja: z.preprocess((a) => (a ? parseFloat(String(a)) : null), z.number().min(0.01, "El precio por caja debe ser mayor a 0").nullable().optional()),
+  unidadesPorBlister: z.preprocess((a) => (a ? parseInt(String(a), 10) : null), z.number().int().min(1).nullable().optional()),
+  unidadesPorCaja: z.preprocess((a) => (a ? parseInt(String(a), 10) : null), z.number().int().min(1).nullable().optional()),
+  blísteresPorCaja: z.preprocess((a) => (a ? parseInt(String(a), 10) : null), z.number().int().min(1).nullable().optional()),
+  margenUtilidad: z.preprocess((a) => (a ? parseFloat(String(a)) : null), z.number().min(0).nullable().optional()),
+  precioSugerido: z.preprocess((a) => (a ? parseFloat(String(a)) : null), z.number().min(0).nullable().optional()),
+  stockMinimo: z.preprocess((a) => (a ? parseInt(String(a), 10) : null), z.number().int().min(0).nullable().optional()),
+  esServicio: z.boolean().optional().default(false),
+  esDatoPrueba: z.boolean().optional().default(false),
+  activo: z.boolean().default(true),
+}).refine(data => {
+  const pv = data.precioVenta || 0;
+  const pb = data.precioBlister || 0;
+  const pc = data.precioCaja || 0;
+  return pv > 0 || pb > 0 || pc > 0;
+}, {
+  message: "Debes definir al menos un precio de venta (unidad, blíster o caja) mayor a 0",
+  path: ["precioVenta"]
+}).refine(data => {
+  if (data.precioBlister && data.precioBlister > 0 && (!data.unidadesPorBlister || data.unidadesPorBlister <= 0)) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Las unidades por blíster son obligatorias si defines un precio de blíster",
+  path: ["unidadesPorBlister"]
+}).refine(data => {
+  if (data.precioCaja && data.precioCaja > 0 && (!data.unidadesPorCaja || data.unidadesPorCaja <= 0)) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Las unidades por caja son obligatorias si defines un precio de caja",
+  path: ["unidadesPorCaja"]
+}).refine(data => {
+  if (data.precioBlister && data.precioBlister > 0 && data.precioVenta && data.precioVenta > 0) {
+    return data.precioBlister >= data.precioVenta;
+  }
+  return true;
+}, {
+  message: "El precio por blíster debe ser mayor o igual al precio unitario",
+  path: ["precioBlister"]
+}).refine(data => {
+  if (data.precioCaja && data.precioCaja > 0 && data.precioVenta && data.precioVenta > 0) {
+    return data.precioCaja >= data.precioVenta;
+  }
+  return true;
+}, {
+  message: "El precio por caja debe ser mayor o igual al precio unitario",
+  path: ["precioCaja"]
+});
+
 export const ventaSchema = z.object({
   idCliente: z.number().int().positive().optional().nullable(),
   metodoPago: z.enum(["EFECTIVO", "TARJETA", "TRANSFERENCIA"]),
@@ -209,10 +385,13 @@ export const ventaSchema = z.object({
   montoRecibido: z.number().min(0, "El monto recibido no puede ser negativo").optional().nullable(),
   cambio: z.number().min(0, "El cambio no puede ser negativo").optional().nullable(),
   rucCliente: z.string().trim().optional().nullable(),
+  idDescuento: z.number().int().positive().optional().nullable(),
+  descuentoTotal: z.number().min(0).optional().nullable(),
   detalles: z.array(z.object({
     idProducto: z.number().int().positive(),
     cantidad: z.number().int().positive("La cantidad debe ser mayor a 0"),
     precioUnitario: z.number().min(0.01, "El precio no puede ser cero ni negativo"),
+    descuentoLinea: z.number().min(0).optional().nullable(),
     tipoUnidad: z.enum(["UNIDAD", "BLISTER", "CAJA"]).default("UNIDAD")
   }))
     .min(1, "La venta debe tener al menos un producto")
@@ -264,6 +443,7 @@ export const citaSchema = z.object({
 export const atencionSchema = z.object({
   idCita: z.number().int().positive().optional().nullable(),
   idCliente: z.number().int().positive("El cliente es requerido"),
+  idServicio: z.number().int().positive().optional().nullable(),
   subjetivo: z.string().trim().min(1, "El componente subjetivo es requerido"),
   objetivo: z.string().trim().min(1, "El componente objetivo es requerido"),
   analisis: z.string().trim().min(1, "El componente de análisis es requerido"),
@@ -282,3 +462,5 @@ export const recetaSchema = z.object({
   })).min(1, "La receta debe contener al menos un producto/servicio"),
 });
 
+// Legacy backward-compatibility export
+export const productoSchema = productoCreateSchema;

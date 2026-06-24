@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
+import { toManaguaStartOfDay, toManaguaEndOfDay, getManaguaDateRange } from "@/lib/timezone"
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,11 +20,8 @@ export async function GET(request: NextRequest) {
     let dateWhereMovimiento: any = {}
 
     if (startDateParam || endDateParam) {
-      const gte = startDateParam ? new Date(startDateParam) : undefined
-      const lte = endDateParam ? new Date(endDateParam) : undefined
-
-      if (gte) gte.setUTCHours(0, 0, 0, 0)
-      if (lte) lte.setUTCHours(23, 59, 59, 999)
+      const gte = startDateParam ? toManaguaStartOfDay(startDateParam) : undefined
+      const lte = endDateParam ? toManaguaEndOfDay(endDateParam) : undefined
 
       const range: any = {}
       if (gte) range.gte = gte
@@ -33,12 +31,11 @@ export async function GET(request: NextRequest) {
       dateWhereCompra = { fecha: range }
       dateWhereMovimiento = { createdAt: range }
     } else {
-      // Default to current month if no range is specified
-      const ahora = new Date()
-      const primerDiaMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1)
-      dateWhereVenta = { fecha: { gte: primerDiaMes } }
-      dateWhereCompra = { fecha: { gte: primerDiaMes } }
-      dateWhereMovimiento = { createdAt: { gte: primerDiaMes } }
+      // Default to current month in Managua TZ
+      const range = getManaguaDateRange('mes')
+      dateWhereVenta = { fecha: { gte: range.startDate, lte: range.endDate } }
+      dateWhereCompra = { fecha: { gte: range.startDate, lte: range.endDate } }
+      dateWhereMovimiento = { createdAt: { gte: range.startDate, lte: range.endDate } }
     }
 
     // 1. KPIs — Ventas + COGS real (desde MovimientoInventario SALIDA_VENTA)
@@ -46,7 +43,10 @@ export async function GET(request: NextRequest) {
       const ventas = await prisma.venta.aggregate({
         _sum: { total: true },
         _count: true,
-        where: dateWhereVenta
+        where: {
+          estado: "COMPLETADA",
+          ...dateWhereVenta.fecha ? { fecha: dateWhereVenta.fecha } : {}
+        }
       })
       const compras = await prisma.compra.aggregate({
         _sum: { total: true },
@@ -72,27 +72,29 @@ export async function GET(request: NextRequest) {
       const totalCompras = Number(compras._sum.total || 0)
       const margenBruto = totalVentas - cogs  // Ganancia real basada en COGS
 
-      // Ventas del día de hoy
-      const hoy = new Date()
-      hoy.setUTCHours(0, 0, 0, 0)
-      const mañana = new Date(hoy)
-      mañana.setUTCDate(mañana.getUTCDate() + 1)
-
+      // Ventas del día de hoy (Managua TZ)
+      const todayRange = getManaguaDateRange('hoy')
       const ventasHoy = await prisma.venta.aggregate({
         _sum: { total: true },
         _count: true,
-        where: { fecha: { gte: hoy, lt: mañana } }
+        where: { 
+          estado: "COMPLETADA",
+          fecha: { gte: todayRange.startDate, lte: todayRange.endDate } 
+        }
       })
 
-      // Ventas del mes actual
-      const primerDiaMesActual = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
+      // Ventas del mes actual (Managua TZ)
+      const monthRange = getManaguaDateRange('mes')
       const ventasMes = await prisma.venta.aggregate({
         _sum: { total: true },
         _count: true,
-        where: { fecha: { gte: primerDiaMesActual } }
+        where: { 
+          estado: "COMPLETADA",
+          fecha: { gte: monthRange.startDate, lte: monthRange.endDate } 
+        }
       })
 
-      // Count low stock items using in-memory filter
+      // Count low stock items
       const prods = await prisma.producto.findMany({
         where: { activo: true },
         select: { stockActual: true, stockMinimo: true }
@@ -122,19 +124,24 @@ export async function GET(request: NextRequest) {
     if (type === "ventas-grafico") {
       let chartWhere = dateWhereVenta
       if (!startDateParam && !endDateParam) {
-        const treintaDias = new Date()
-        treintaDias.setDate(treintaDias.getDate() - 30)
-        chartWhere = { fecha: { gte: treintaDias } }
+        const range30 = getManaguaDateRange('custom')
+        const ago30 = new Date(range30.endDate.getTime() - 30 * 24 * 60 * 60 * 1000)
+        chartWhere = { fecha: { gte: ago30, lte: range30.endDate } }
       }
 
       const ventas = await prisma.venta.findMany({
-        where: chartWhere,
+        where: {
+          estado: "COMPLETADA",
+          ...chartWhere
+        },
         select: { fecha: true, total: true }
       })
 
       const agrupado: Record<string, number> = {}
       for (const v of ventas) {
-        const fechaStr = v.fecha.toISOString().split("T")[0]
+        // Format to Managua local date string
+        const localDate = new Date(v.fecha.getTime() - 6 * 60 * 60 * 1000)
+        const fechaStr = localDate.toISOString().split("T")[0]
         agrupado[fechaStr] = (agrupado[fechaStr] || 0) + Number(v.total)
       }
 
@@ -150,16 +157,19 @@ export async function GET(request: NextRequest) {
     if (type === "productos-mas-vendidos") {
       const detalles = await prisma.detalleVenta.findMany({
         where: {
-          venta: dateWhereVenta
+          venta: {
+            estado: "COMPLETADA",
+            ...dateWhereVenta.fecha ? { fecha: dateWhereVenta.fecha } : {}
+          }
         },
         include: {
           producto: {
-            include: { categoria: true }
+            include: { categoria: true, laboratorioRef: true }
           }
         }
       })
 
-      const map: Record<number, { id: number, nombre: string, categoria: string, cantidad: number, total: number }> = {}
+      const map: Record<number, { id: number, nombre: string, categoria: string, laboratorio: string, cantidad: number, total: number }> = {}
       for (const d of detalles) {
         if (!d.producto) continue
         const pid = d.idProducto
@@ -168,6 +178,7 @@ export async function GET(request: NextRequest) {
             id: pid,
             nombre: d.producto.nombre,
             categoria: d.producto.categoria?.nombre || "Sin Categoría",
+            laboratorio: d.producto.laboratorioRef?.nombre || d.producto.laboratorio || "Sin Laboratorio",
             cantidad: 0,
             total: 0
           }
@@ -186,7 +197,10 @@ export async function GET(request: NextRequest) {
     // 4. CLIENTES FRECUENTES
     if (type === "clientes-frecuentes") {
       const ventasClientes = await prisma.venta.findMany({
-        where: dateWhereVenta,
+        where: {
+          estado: "COMPLETADA",
+          ...dateWhereVenta.fecha ? { fecha: dateWhereVenta.fecha } : {}
+        },
         include: { cliente: true }
       })
 
@@ -283,7 +297,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(movimientos)
     }
 
-    // 7. LOTES POR VENCER — FIX: ahora consulta Lote.fechaVencimiento, NO Producto.fechaVencimiento
+    // 7. LOTES POR VENCER
     if (type === "por-vencer") {
       const noventaDias = new Date()
       noventaDias.setDate(noventaDias.getDate() + 90)
@@ -325,6 +339,137 @@ export async function GET(request: NextRequest) {
 
       const allLotes = [...lotesVencidos, ...lotesPorVencer].map(formatLote)
       return NextResponse.json(allLotes)
+    }
+
+    // 8. UTILIDAD BRUTA
+    if (type === "utilidad-bruta") {
+      const sales = await prisma.venta.findMany({
+        where: {
+          estado: "COMPLETADA",
+          ...dateWhereVenta.fecha ? { fecha: dateWhereVenta.fecha } : {}
+        },
+        include: {
+          detalles: {
+            include: {
+              lotes: {
+                include: {
+                  lote: true
+                }
+              }
+            }
+          },
+          cliente: true
+        },
+        orderBy: { fecha: "asc" }
+      })
+
+      const reportData = sales.map(s => {
+        let saleCogs = 0
+        for (const det of s.detalles) {
+          for (const detLote of det.lotes) {
+            saleCogs += Number(detLote.lote.costoCompra) * detLote.cantidad
+          }
+        }
+        const netTotal = Number(s.total)
+        const grossProfit = netTotal - saleCogs
+        const marginPct = netTotal > 0 ? (grossProfit / netTotal) * 100 : 0
+        return {
+          id: s.id,
+          fecha: s.fecha,
+          cliente: s.cliente?.nombreCompleto || "Público General",
+          total: netTotal,
+          cogs: saleCogs,
+          utilidad: grossProfit,
+          margenPct
+        }
+      })
+
+      const totalVentas = reportData.reduce((sum, item) => sum + item.total, 0)
+      const totalCogs = reportData.reduce((sum, item) => sum + item.cogs, 0)
+      const totalUtilidad = totalVentas - totalCogs
+      const marginPctGeneral = totalVentas > 0 ? (totalUtilidad / totalVentas) * 100 : 0
+
+      return NextResponse.json({
+        ventas: reportData,
+        resumen: {
+          totalVentas,
+          totalCogs,
+          totalUtilidad,
+          margenPct: marginPctGeneral
+        }
+      })
+    }
+
+    // 9. UTILIDAD POR PRODUCTO
+    if (type === "utilidad-por-producto") {
+      const details = await prisma.detalleVenta.findMany({
+        where: {
+          venta: {
+            estado: "COMPLETADA",
+            ...dateWhereVenta.fecha ? { fecha: dateWhereVenta.fecha } : {}
+          }
+        },
+        include: {
+          producto: {
+            include: { categoria: true, laboratorioRef: true }
+          },
+          lotes: {
+            include: { lote: true }
+          }
+        }
+      })
+
+      const productMap: Record<number, {
+        id: number
+        nombre: string
+        categoria: string
+        laboratorio: string
+        cantidadVendida: number
+        ingresosTotales: number
+        cogs: number
+        utilidad: number
+        margenPct: number
+      }> = {}
+
+      for (const d of details) {
+        if (!d.producto) continue
+        const pid = d.idProducto
+        if (!productMap[pid]) {
+          productMap[pid] = {
+            id: pid,
+            nombre: d.producto.nombre,
+            categoria: d.producto.categoria?.nombre || "Sin Categoría",
+            laboratorio: d.producto.laboratorioRef?.nombre || d.producto.laboratorio || "Sin Laboratorio",
+            cantidadVendida: 0,
+            ingresosTotales: 0,
+            cogs: 0,
+            utilidad: 0,
+            margenPct: 0
+          }
+        }
+
+        const entry = productMap[pid]
+        entry.cantidadVendida += d.cantidad
+        entry.ingresosTotales += Number(d.subtotal)
+
+        let lineCogs = 0
+        for (const detLote of d.lotes) {
+          lineCogs += Number(detLote.lote.costoCompra) * detLote.cantidad
+        }
+        entry.cogs += lineCogs
+      }
+
+      const list = Object.values(productMap).map(item => {
+        const utilidad = item.ingresosTotales - item.cogs
+        const margenPct = item.ingresosTotales > 0 ? (utilidad / item.ingresosTotales) * 100 : 0
+        return {
+          ...item,
+          utilidad,
+          margenPct
+        }
+      }).sort((a, b) => b.utilidad - a.utilidad)
+
+      return NextResponse.json(list)
     }
 
     return NextResponse.json({ error: "Tipo de reporte no válido" }, { status: 400 })

@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
     const estado = searchParams.get("estado") ?? "activos"
 
     const baseWhere = {
+      tipoPerfil: { in: ["FARMACIA", "AMBOS"] },
       OR: [
         { nombreCompleto: { contains: search, mode: "insensitive" } },
         { cedula: { contains: search, mode: "insensitive" } },
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-        const { nombreCompleto, telefono, correo, cedula, ruc, direccion, activo } = validation.data
+    const { nombreCompleto, telefono, correo, cedula, ruc, direccion, activo, tipoPerfil, fechaNacimiento, sexo } = validation.data
 
     // 1. Validar duplicados de Cédula (tanto versión limpia como formateada)
     if (cedula) {
@@ -143,6 +144,9 @@ export async function POST(request: NextRequest) {
         cedula: emptyToNull(cedula),
         ruc: emptyToNull(ruc),
         direccion: emptyToNull(direccion),
+        tipoPerfil: tipoPerfil || "FARMACIA",
+        fechaNacimiento: fechaNacimiento ? new Date(fechaNacimiento) : null,
+        sexo: emptyToNull(sexo),
         activo: activo ?? true,
       },
     })

@@ -31,6 +31,12 @@ interface Categoria {
   nombre: string
 }
 
+interface Laboratorio {
+  id: number
+  nombre: string
+  activo: boolean
+}
+
 interface Producto {
   id: number
   nombre: string
@@ -56,6 +62,7 @@ interface Producto {
 export default function ProductosPage() {
   const { data: productos = [], mutate: mutateProductos, isLoading: loadingProductos } = useSWR<Producto[]>("/api/productos?estado=todos", fetcher)
   const { data: categorias = [], mutate: mutateCategorias } = useSWR<Categoria[]>("/api/categorias", fetcher)
+  const { data: laboratorios = [] } = useSWR<Laboratorio[]>("/api/laboratorios?estado=activos", fetcher)
   
   const { user } = useCurrentUser()
   const isAdmin = user?.rolNombre === "ADMIN"
@@ -88,6 +95,8 @@ export default function ProductosPage() {
   const [codigoBarras, setCodigoBarras] = useState("")
   const [idCategoria, setIdCategoria] = useState<string>("")
   const [laboratorio, setLaboratorio] = useState("")
+  const [idLaboratorio, setIdLaboratorio] = useState<string>("")
+  const [formaPresentacion, setFormPresentacion] = useState("")
   const [concentracion, setConcentracion] = useState("")
   const [unidadMedida, setUnidadMedida] = useState("")
   const [precioCompra, setPrecioCompra] = useState("")
@@ -96,6 +105,10 @@ export default function ProductosPage() {
   const [precioCaja, setPrecioCaja] = useState("")
   const [unidadesPorBlister, setUnidadesPorBlister] = useState("")
   const [unidadesPorCaja, setUnidadesPorCaja] = useState("")
+  const [blisteresPorCaja, setBlisteresPorCaja] = useState("")
+  const [margenUtilidad, setMargenUtilidad] = useState("")
+  const [precioSugerido, setPrecioSugerido] = useState("")
+  const [margenConfig, setMargenConfig] = useState("20")
   const [stockMinimo, setStockMinimo] = useState("")
   const [stockInicial, setStockInicial] = useState("")
   const [loteInicial, setLoteInicial] = useState("")
@@ -105,6 +118,27 @@ export default function ProductosPage() {
   const [formLoading, setFormLoading] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [precioVentaError, setPrecioVentaError] = useState<string | null>(null)
+
+  const recalculateMarginAndSugerido = (pcVal: string, pvVal: string, marginPctConfig: string) => {
+    const pc = parseFloat(pcVal)
+    const pv = parseFloat(pvVal)
+    const mConfig = parseFloat(marginPctConfig)
+
+    if (!isNaN(pc) && pc >= 0) {
+      if (!isNaN(mConfig)) {
+        setPrecioSugerido((pc * (1 + mConfig / 100)).toFixed(2))
+      }
+      if (!isNaN(pv) && pv > 0) {
+        const marginReal = ((pv - pc) / pv) * 100
+        setMargenUtilidad(marginReal.toFixed(1))
+      } else {
+        setMargenUtilidad("")
+      }
+    } else {
+      setMargenUtilidad("")
+      setPrecioSugerido("")
+    }
+  }
 
   // Editar Lote States
   const [showEditLoteModal, setShowEditLoteModal] = useState(false)
@@ -302,6 +336,8 @@ export default function ProductosPage() {
     setCodigoBarras("")
     setIdCategoria("")
     setLaboratorio("")
+    setIdLaboratorio("")
+    setFormPresentacion("")
     setConcentracion("")
     setUnidadMedida("")
     setPrecioCompra("")
@@ -310,6 +346,10 @@ export default function ProductosPage() {
     setPrecioCaja("")
     setUnidadesPorBlister("")
     setUnidadesPorCaja("")
+    setBlisteresPorCaja("")
+    setMargenUtilidad("")
+    setPrecioSugerido("")
+    setMargenConfig("20")
     setStockMinimo("")
     setStockInicial("")
     setLoteInicial("")
@@ -336,6 +376,8 @@ export default function ProductosPage() {
       setCodigoBarras(p.codigoBarras || "")
       setIdCategoria(String(p.idCategoria))
       setLaboratorio(p.laboratorio || "")
+      setIdLaboratorio(p.idLaboratorio ? String(p.idLaboratorio) : "")
+      setFormPresentacion(p.formaPresentacion || "")
       setConcentracion(p.concentracion || "")
       setUnidadMedida(p.unidadMedida || "")
       setPrecioCompra(p.precioCompra ? String(p.precioCompra) : "")
@@ -344,9 +386,19 @@ export default function ProductosPage() {
       setPrecioCaja(p.precioCaja && Number(p.precioCaja) > 0 ? String(p.precioCaja) : "")
       setUnidadesPorBlister(p.unidadesPorBlister != null ? String(p.unidadesPorBlister) : "")
       setUnidadesPorCaja(p.unidadesPorCaja != null ? String(p.unidadesPorCaja) : "")
+      setBlisteresPorCaja(p.blísteresPorCaja != null ? String(p.blísteresPorCaja) : "")
+      setMargenUtilidad(p.margenUtilidad ? String(p.margenUtilidad) : "")
+      setPrecioSugerido(p.precioSugerido ? String(p.precioSugerido) : "")
       setStockMinimo(p.stockMinimo != null ? String(p.stockMinimo) : "")
       setEsServicio(p.esServicio || false)
       setEsDatoPrueba(p.esDatoPrueba || false)
+
+      // Calculate initial margin/sugerido on load
+      recalculateMarginAndSugerido(
+        p.precioCompra ? String(p.precioCompra) : "",
+        p.precioVenta && Number(p.precioVenta) > 0 ? String(p.precioVenta) : "",
+        "20"
+      )
 
       setShowForm(true)
       setFormError(null)
@@ -464,6 +516,7 @@ export default function ProductosPage() {
       const sugerido = calcSugerido(value, unidadesPorCaja)
       if (sugerido) setPrecioCaja(sugerido)
     }
+    recalculateMarginAndSugerido(value, precioVenta, margenConfig)
   }
 
   const handlePrecioVentaChange = (value: string) => {
@@ -479,6 +532,12 @@ export default function ProductosPage() {
     } else {
       setPrecioVentaError(null)
     }
+    recalculateMarginAndSugerido(precioCompra, value, margenConfig)
+  }
+
+  const handleMargenConfigChange = (value: string) => {
+    setMargenConfig(value)
+    recalculateMarginAndSugerido(precioCompra, precioVenta, value)
   }
 
   const handleUnidadesPorBlisterChange = (value: string) => {
@@ -538,8 +597,10 @@ export default function ProductosPage() {
         codigoBarras: codigoBarras || null,
         descripcion: descripcion || null,
         idCategoria: Number(idCategoria),
-        laboratorio: laboratorio || null,
+        idLaboratorio: idLaboratorio ? Number(idLaboratorio) : null,
+        laboratorio: laboratorios.find((l: any) => String(l.id) === idLaboratorio)?.nombre || null,
         concentracion: concentracion || null,
+        formaPresentacion: formaPresentacion || null,
         unidadMedida: unidadMedida || null,
         precioCompra: precioCompra || null,
         stockMinimo: stockMinimo || null,
@@ -549,6 +610,9 @@ export default function ProductosPage() {
         precioCaja: precioCaja || null,
         unidadesPorBlister: unidadesPorBlister || null,
         unidadesPorCaja: unidadesPorCaja || null,
+        blísteresPorCaja: blisteresPorCaja || null,
+        margenUtilidad: margenUtilidad || null,
+        precioSugerido: precioSugerido || null,
         esServicio,
         esDatoPrueba,
       }
@@ -669,13 +733,13 @@ export default function ProductosPage() {
 
     const exportData = productos.map(p => {
       const s = formatStock(p)
-      let stockStr = `${s.total} uds`
+      let stockStr = `${s.total} und`
       if (s.cajas !== null || s.blisters !== null) {
         const parts = []
         if (s.cajas !== null) parts.push(`${s.cajas} Caj`)
         if (s.blisters !== null) parts.push(`${s.blisters} Blis`)
-        parts.push(`${s.total} Uds`)
-        stockStr = `${s.total} uds (${parts.join(" / ")})`
+        parts.push(`${s.total} Und`)
+        stockStr = `${s.total} und (${parts.join(" / ")})`
       }
       const prices = []
       if (Number(p.precioVenta) > 0) prices.push(`C$${Number(p.precioVenta).toFixed(2)}/ud`)
@@ -805,12 +869,40 @@ export default function ProductosPage() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-foreground/80 mb-1">Laboratorio</label>
-                      <Input
-                        value={laboratorio}
-                        onChange={(e) => setLaboratorio(e.target.value)}
-                        placeholder="Ej: MK / Bayer"
-                        className="bg-background border-border text-foreground"
-                      />
+                      <select
+                        className="w-full rounded-md border border-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all bg-background text-foreground"
+                        value={idLaboratorio}
+                        onChange={(e) => setIdLaboratorio(e.target.value)}
+                      >
+                        <option value="">Selecciona un laboratorio</option>
+                        {laboratorios.map((lab: any) => (
+                          <option key={lab.id} value={lab.id}>
+                            {lab.nombre}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground/80 mb-1">Forma de Presentación</label>
+                      <select
+                        className="w-full rounded-md border border-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all bg-background text-foreground"
+                        value={formaPresentacion}
+                        onChange={(e) => setFormPresentacion(e.target.value)}
+                      >
+                        <option value="">Seleccionar presentación...</option>
+                        <option value="Tableta">Tableta</option>
+                        <option value="Cápsula">Cápsula</option>
+                        <option value="Jarabe">Jarabe</option>
+                        <option value="Suspensión">Suspensión</option>
+                        <option value="Crema">Crema</option>
+                        <option value="Ungüento">Ungüento</option>
+                        <option value="Inyectable">Inyectable</option>
+                        <option value="Gotas">Gotas</option>
+                        <option value="Spray">Spray</option>
+                        <option value="Gel">Gel</option>
+                        <option value="Polvo">Polvo</option>
+                        <option value="Otro">Otro</option>
+                      </select>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-foreground/80 mb-1">Concentración</label>
@@ -936,6 +1028,54 @@ export default function ProductosPage() {
                       <p className="text-xs text-muted-foreground mt-1">Precio al público por 1 pastilla o unidad suelta.</p>
                     </div>
                     <div>
+                      <label className="block text-sm font-medium text-foreground/80 mb-1">Margen Objetivo Sugerido (%)</label>
+                      <Input
+                        type="number"
+                        value={margenConfig}
+                        onChange={(e) => handleMargenConfigChange(e.target.value)}
+                        className="bg-background border-border text-foreground"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground/80 mb-1">Precio Unitario Sugerido</label>
+                      <div className="flex gap-2">
+                        <Input
+                          readOnly
+                          value={precioSugerido ? `C$ ${precioSugerido}` : "—"}
+                          className="bg-muted border-border text-foreground font-semibold"
+                        />
+                        {precioSugerido && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handlePrecioVentaChange(precioSugerido)}
+                            className="border-primary text-primary hover:bg-primary/10 shrink-0"
+                          >
+                            Aplicar
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground/80 mb-1">Margen Real Calculado</label>
+                      <div className="flex items-center gap-2 h-10">
+                        <span className={`text-sm font-bold px-3 py-1 rounded-lg ${
+                          parseFloat(margenUtilidad) <= 0 ? "bg-red-500/10 text-red-500 border border-red-500/20" :
+                          parseFloat(margenUtilidad) < 20 ? "bg-amber-500/10 text-amber-500 border border-amber-500/20" :
+                          "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                        }`}>
+                          {margenUtilidad ? `${margenUtilidad}%` : "—"}
+                        </span>
+                        {precioCompra && precioVenta && parseFloat(precioVenta) <= parseFloat(precioCompra) && (
+                          <span className="text-xs text-red-500 font-medium flex items-center gap-1">
+                            <AlertTriangle className="w-3.5 h-3.5" />
+                            ¡Ganancia ≤ 0!
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div>
                       <label className="block text-sm font-medium text-foreground/80 mb-1">
                         Precio por blíster (C$) <span className="text-muted-foreground font-normal text-xs">— opcional</span>
                       </label>
@@ -989,7 +1129,7 @@ export default function ProductosPage() {
                     <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                     <span>Define cuántas unidades tiene cada presentación. Esto permite que al vender por blíster o caja, el sistema descuente automáticamente las unidades correctas del stock.</span>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                     <div>
                       <label className="block text-sm font-medium text-foreground/80 mb-1">Unidades por blíster</label>
                       <Input
@@ -1001,6 +1141,18 @@ export default function ProductosPage() {
                         className="bg-background border-border text-foreground"
                       />
                       <p className="text-xs text-muted-foreground mt-1">¿Cuántas pastillas trae cada blíster?</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground/80 mb-1">Blísteres por caja</label>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={blisteresPorCaja}
+                        onChange={(e) => setBlisteresPorCaja(e.target.value)}
+                        placeholder="Ej: 10"
+                        className="bg-background border-border text-foreground"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">¿Cuántos blísteres trae cada caja?</p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-foreground/80 mb-1">Unidades por caja</label>
@@ -1265,7 +1417,7 @@ export default function ProductosPage() {
                               return (
                                 <div className="flex flex-col gap-1">
                                   <span className="font-semibold text-foreground text-sm">
-                                    {s.total} <span className="text-xs text-muted-foreground font-normal">uds totales</span>
+                                    {s.total} <span className="text-xs text-muted-foreground font-normal">und totales</span>
                                   </span>
                                   {(s.cajas !== null || s.blisters !== null) && (
                                     <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
@@ -1280,7 +1432,7 @@ export default function ProductosPage() {
                                         </span>
                                       )}
                                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200/30 dark:border-blue-500/20 shadow-sm">
-                                        {s.sueltas} Uds
+                                        {s.sueltas} Und
                                       </span>
                                     </div>
                                   )}

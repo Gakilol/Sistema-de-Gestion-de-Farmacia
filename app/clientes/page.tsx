@@ -6,7 +6,7 @@ import { Sidebar } from "@/components/sidebar"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Plus, Edit2, Trash2, Users, Search } from "lucide-react"
+import { Plus, Edit2, Trash2, Users, Search, Heart } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
 import { clienteSchema } from "@/lib/validations"
@@ -19,6 +19,7 @@ interface Cliente {
   correo: string | null
   direccion: string | null
   activo: boolean
+  tipoPerfil: "FARMACIA" | "CLINICA" | "AMBOS"
 }
 
 export default function ClientesPage() {
@@ -34,9 +35,12 @@ export default function ClientesPage() {
     telefono: "",
     correo: "",
     direccion: "",
+    tipoPerfil: "FARMACIA" as "FARMACIA" | "CLINICA" | "AMBOS",
   })
 
-  useEffect(() => { fetchClientes() }, [])
+  useEffect(() => {
+    fetchClientes()
+  }, [])
 
   const fetchClientes = async () => {
     try {
@@ -65,12 +69,16 @@ export default function ClientesPage() {
     try {
       const url = editingId ? `/api/clientes/${editingId}` : "/api/clientes"
       const method = editingId ? "PUT" : "POST"
-      const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(formData) })
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData)
+      })
       
       const data = await res.json()
       if (res.ok) {
         toast.success(editingId ? "Cliente actualizado" : "Cliente creado exitosamente");
-        setFormData({ nombreCompleto: "", cedula: "", telefono: "", correo: "", direccion: "" })
+        setFormData({ nombreCompleto: "", cedula: "", telefono: "", correo: "", direccion: "", tipoPerfil: "FARMACIA" })
         setEditingId(null)
         setShowForm(false)
         fetchClientes()
@@ -85,7 +93,7 @@ export default function ClientesPage() {
 
   const handleOpenCreate = () => {
     setEditingId(null)
-    setFormData({ nombreCompleto: "", cedula: "", telefono: "", correo: "", direccion: "" })
+    setFormData({ nombreCompleto: "", cedula: "", telefono: "", correo: "", direccion: "", tipoPerfil: "FARMACIA" })
     setShowForm(true)
   }
 
@@ -96,7 +104,8 @@ export default function ClientesPage() {
       cedula: cliente.cedula || "", 
       telefono: cliente.telefono || "", 
       correo: cliente.correo || "", 
-      direccion: cliente.direccion || "" 
+      direccion: cliente.direccion || "",
+      tipoPerfil: cliente.tipoPerfil || "FARMACIA"
     })
     setShowForm(true)
   }
@@ -106,9 +115,51 @@ export default function ClientesPage() {
     const ok = window.confirm(`¿Seguro que deseas ${accion} al cliente "${cliente.nombreCompleto}"?`)
     if (!ok) return
     try {
-      const res = await fetch(`/api/clientes/${cliente.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ activo: !cliente.activo }) })
+      const res = await fetch(`/api/clientes/${cliente.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activo: !cliente.activo })
+      })
       if (res.ok) fetchClientes()
-    } catch (error) { console.error("Error:", error) }
+    } catch (error) {
+      console.error("Error:", error)
+    }
+  }
+
+  const handleEnableClinicalProfile = async (cliente: Cliente) => {
+    const ok = window.confirm(`¿Seguro que deseas habilitar el perfil clínico para el cliente "${cliente.nombreCompleto}"?\nEsto le permitirá registrar antecedentes y atenciones de podología.`)
+    if (!ok) return
+    try {
+      const res = await fetch(`/api/pacientes/${cliente.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nombreCompleto: cliente.nombreCompleto,
+          cedula: cliente.cedula,
+          telefono: cliente.telefono,
+          correo: cliente.correo,
+          direccion: cliente.direccion,
+          tipoPerfil: "AMBOS",
+          activo: cliente.activo,
+          datosClinicos: {
+            antecedentes: "",
+            alergias: "",
+            observacionesClinicas: "",
+            diagnosticoGeneral: ""
+          }
+        })
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast.success("Perfil clínico habilitado exitosamente");
+        fetchClientes()
+      } else {
+        toast.error(data.error || "Error al habilitar el perfil clínico");
+      }
+    } catch (error) {
+      console.error("Error:", error)
+      toast.error("Error de conexión");
+    }
   }
 
   const handleHardDelete = async (cliente: Cliente) => {
@@ -144,7 +195,7 @@ export default function ClientesPage() {
                 <Users className="w-8 h-8 text-primary" />
                 Clientes
               </h1>
-              <p className="text-muted-foreground mt-1">Gestiona la base de datos de clientes</p>
+              <p className="text-muted-foreground mt-1">Gestiona la base de datos de clientes de la farmacia</p>
             </div>
             <Button onClick={showForm ? () => setShowForm(false) : handleOpenCreate} className="bg-primary hover:bg-primary/90 text-primary-foreground">
               <Plus className="w-4 h-4 mr-2" />
@@ -171,12 +222,12 @@ export default function ClientesPage() {
                     <Input required value={formData.nombreCompleto} onChange={(e) => setFormData({ ...formData, nombreCompleto: e.target.value })} className="bg-muted/30 border-border" placeholder="Ej: Juan Carlos Pérez López" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-foreground mb-1">Cédula <span className="text-muted-foreground text-xs font-normal">(Opcional)</span></label>
-                    <Input value={formData.cedula} onChange={(e) => setFormData({ ...formData, cedula: e.target.value })} className="bg-muted/30 border-border" placeholder="Ej: 001-130605-1005A" />
+                    <label className="block text-sm font-medium text-foreground mb-1">Cédula <span className="text-red-500">*</span></label>
+                    <Input required value={formData.cedula} onChange={(e) => setFormData({ ...formData, cedula: e.target.value })} className="bg-muted/30 border-border" placeholder="Ej: 001-130605-1005A" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-foreground mb-1">Teléfono <span className="text-muted-foreground text-xs font-normal">(Opcional)</span></label>
-                    <Input value={formData.telefono} onChange={(e) => setFormData({ ...formData, telefono: e.target.value })} className="bg-muted/30 border-border" placeholder="Ej: 88881234" />
+                    <label className="block text-sm font-medium text-foreground mb-1">Teléfono <span className="text-red-500">*</span></label>
+                    <Input required value={formData.telefono} onChange={(e) => setFormData({ ...formData, telefono: e.target.value })} className="bg-muted/30 border-border" placeholder="Ej: 88881234" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-foreground mb-1">Correo <span className="text-muted-foreground text-xs font-normal">(Opcional)</span></label>
@@ -214,7 +265,16 @@ export default function ClientesPage() {
                   <tbody className="divide-y divide-border">
                     {filteredClientes.map((cliente) => (
                       <tr key={cliente.id} className="hover:bg-muted/20 transition-colors">
-                        <td className="px-6 py-4 text-sm font-medium text-foreground">{cliente.nombreCompleto}</td>
+                        <td className="px-6 py-4 text-sm font-medium text-foreground">
+                          <div>{cliente.nombreCompleto}</div>
+                          <div className="text-[10px] mt-1">
+                            {cliente.tipoPerfil === "AMBOS" ? (
+                              <span className="text-cyan-500 font-semibold bg-cyan-500/10 px-2 py-0.5 rounded-full border border-cyan-500/20">Farmacia + Clínica</span>
+                            ) : (
+                              <span className="text-emerald-500 font-semibold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">Solo Farmacia</span>
+                            )}
+                          </div>
+                        </td>
                         <td className="px-6 py-4 text-sm text-muted-foreground">{cliente.cedula || "—"}</td>
                         <td className="px-6 py-4 text-sm text-muted-foreground">{cliente.telefono || "—"}</td>
                         <td className="px-6 py-4 text-sm text-muted-foreground">{cliente.correo || "—"}</td>
@@ -225,7 +285,20 @@ export default function ClientesPage() {
                         </td>
                         <td className="px-6 py-4 text-sm">
                           <div className="flex gap-1">
-                            <Button size="sm" variant="ghost" onClick={() => handleEdit(cliente)} className="text-muted-foreground hover:text-foreground"><Edit2 className="w-4 h-4" /></Button>
+                            <Button size="sm" variant="ghost" onClick={() => handleEdit(cliente)} className="text-muted-foreground hover:text-foreground" title="Editar"><Edit2 className="w-4 h-4" /></Button>
+                            
+                            {cliente.tipoPerfil === "FARMACIA" && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleEnableClinicalProfile(cliente)}
+                                className="text-cyan-500 hover:text-cyan-400 hover:bg-cyan-500/10"
+                                title="Habilitar Perfil Clínico"
+                              >
+                                <Heart className="w-4 h-4" />
+                              </Button>
+                            )}
+
                             <Button size="sm" variant="ghost" onClick={() => handleToggleActivo(cliente)} className="text-amber-500 hover:text-amber-400 hover:bg-amber-500/10" title={cliente.activo ? "Desactivar" : "Reactivar"}>
                               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
                             </Button>
@@ -241,8 +314,6 @@ export default function ClientesPage() {
           </Card>
         </div>
       </main>
-
     </div>
   )
 }
-

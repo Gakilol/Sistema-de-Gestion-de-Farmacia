@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
-import { categoriaSchema, emptyToNull } from "@/lib/validations"
+import { laboratorioSchema, emptyToNull } from "@/lib/validations"
 import { registrarLog } from "@/lib/audit"
 
 export async function GET(request: NextRequest) {
@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams
     const search = searchParams.get("search") || ""
-    const estado = searchParams.get("estado") ?? "todos" // todos, activos, inactivos
+    const estado = searchParams.get("estado") ?? "activos" // todos, activos, inactivos
 
     const where: any = {
       nombre: { contains: search, mode: "insensitive" },
@@ -25,20 +25,20 @@ export async function GET(request: NextRequest) {
       where.activo = false
     }
 
-    const categorias = await prisma.categoriaProducto.findMany({
+    const laboratorios = await prisma.laboratorio.findMany({
       where,
       include: {
         _count: {
-          select: { productos: true },
-        },
+          select: { productos: true }
+        }
       },
       orderBy: { nombre: "asc" },
     })
 
-    return NextResponse.json(categorias)
+    return NextResponse.json(laboratorios)
   } catch (error) {
-    console.error("Error fetching categorías:", error)
-    return NextResponse.json({ error: "Error fetching categorías" }, { status: 500 })
+    console.error("Error fetching laboratorios:", error)
+    return NextResponse.json({ error: "Error fetching laboratorios" }, { status: 500 })
   }
 }
 
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const validation = categoriaSchema.safeParse(body)
+    const validation = laboratorioSchema.safeParse(body)
 
     if (!validation.success) {
       return NextResponse.json(
@@ -68,35 +68,39 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { nombre, descripcion, activo } = validation.data
+    const { nombre, pais, direccion, telefono, correo, contacto, observaciones, activo } = validation.data
 
-    const duplicate = await prisma.categoriaProducto.findFirst({
+    const duplicate = await prisma.laboratorio.findFirst({
       where: { nombre: { equals: nombre, mode: "insensitive" } }
     })
     if (duplicate) {
-      return NextResponse.json({ error: "La categoría ya existe" }, { status: 400 })
+      return NextResponse.json({ error: "Ya existe un laboratorio registrado con este nombre" }, { status: 400 })
     }
 
-    const categoria = await prisma.categoriaProducto.create({
+    const laboratorio = await prisma.laboratorio.create({
       data: {
         nombre,
-        descripcion: emptyToNull(descripcion),
+        pais: emptyToNull(pais),
+        direccion: emptyToNull(direccion),
+        telefono: emptyToNull(telefono),
+        correo: emptyToNull(correo),
+        contacto: emptyToNull(contacto),
+        observaciones: emptyToNull(observaciones),
         activo: activo ?? true,
-        createdBy: user.id,
       },
     })
 
     registrarLog({
-      accion: "CREAR_CATEGORIA",
-      entidad: "CategoriaProducto",
-      entidadId: categoria.id,
+      accion: "CREAR_LABORATORIO",
+      entidad: "Laboratorio",
+      entidadId: laboratorio.id,
       idUsuario: user.id,
-      detalles: { nombre: categoria.nombre }
+      detalles: { nombre: laboratorio.nombre }
     })
 
-    return NextResponse.json(categoria, { status: 201 })
+    return NextResponse.json(laboratorio, { status: 201 })
   } catch (error: any) {
-    console.error("Error creating categoría:", error)
-    return NextResponse.json({ error: error.message || "Error al crear la categoría" }, { status: 500 })
+    console.error("Error creating laboratorio:", error)
+    return NextResponse.json({ error: error.message || "Error al crear el laboratorio" }, { status: 500 })
   }
 }

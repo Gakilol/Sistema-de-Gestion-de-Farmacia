@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
-import { productoSchema, emptyToNull } from "@/lib/validations"
+import { productoUpdateSchema, emptyToNull } from "@/lib/validations"
 import { registrarLog } from "@/lib/audit"
 
 // Obtener un producto por id (incluye lotes, movimientos y estadísticas)
@@ -137,7 +137,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     console.log(`PUT /api/productos/${id} received body:`, body)
 
     // Zod validation
-    const parsed = productoSchema.safeParse(body)
+    const parsed = productoUpdateSchema.safeParse(body)
     if (!parsed.success) {
       console.log(`PUT /api/productos/${id} validation failed:`, parsed.error.format())
       return NextResponse.json(
@@ -155,8 +155,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         codigoBarras: emptyToNull(data.codigoBarras),
         descripcion: emptyToNull(data.descripcion),
         idCategoria: data.idCategoria,
+        idLaboratorio: data.idLaboratorio,
         laboratorio: emptyToNull(data.laboratorio),
         concentracion: emptyToNull(data.concentracion),
+        formaPresentacion: emptyToNull(data.formaPresentacion),
         unidadMedida: emptyToNull(data.unidadMedida),
         precioCompra: data.precioCompra || 0,
         precioVenta: data.precioVenta,
@@ -164,6 +166,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         precioCaja: data.precioCaja,
         unidadesPorBlister: data.unidadesPorBlister,
         unidadesPorCaja: data.unidadesPorCaja,
+        blísteresPorCaja: data.blísteresPorCaja,
+        margenUtilidad: data.margenUtilidad,
+        precioSugerido: data.precioSugerido,
         stockMinimo: data.stockMinimo,
         activo: data.activo,
       },

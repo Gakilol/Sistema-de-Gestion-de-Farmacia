@@ -10,7 +10,7 @@ import { toast } from "sonner"
 import * as XLSX from "xlsx"
 import { 
   BarChart3, TrendingUp, AlertTriangle, Activity, Calendar, Search, 
-  Download, User, ListOrdered, RefreshCw, FileText, Loader2, ArrowUpRight 
+  Download, User, ListOrdered, RefreshCw, FileText, Loader2, ArrowUpRight, DollarSign
 } from "lucide-react"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts"
 
@@ -39,6 +39,7 @@ interface ProductoMasVendido {
   id: number
   nombre: string
   categoria: string
+  laboratorio: string
   cantidad: number
   total: number
 }
@@ -69,6 +70,35 @@ interface MovimientoDetalle {
   detalle: string
 }
 
+interface UtilidadBrutaVenta {
+  id: number
+  fecha: string
+  cliente: string
+  total: number
+  cogs: number
+  utilidad: number
+  margenPct: number
+}
+
+interface UtilidadBrutaResumen {
+  totalVentas: number
+  totalCogs: number
+  totalUtilidad: number
+  margenPct: number
+}
+
+interface UtilidadPorProductoItem {
+  id: number
+  nombre: string
+  categoria: string
+  laboratorio: string
+  cantidadVendida: number
+  ingresosTotales: number
+  cogs: number
+  utilidad: number
+  margenPct: number
+}
+
 export default function ReportesPage() {
   const [kpis, setKpis] = useState<KPIs | null>(null)
   const [grafico, setGrafico] = useState<VentasGrafico[]>([])
@@ -77,6 +107,10 @@ export default function ReportesPage() {
   const [clientesFrecuentes, setClientesFrecuentes] = useState<ClienteFrecuente[]>([])
   const [stockBajo, setStockBajo] = useState<StockBajoDetalle[]>([])
   const [movimientos, setMovimientos] = useState<MovimientoDetalle[]>([])
+  
+  // Nuevos reportes de utilidad
+  const [utilidadBruta, setUtilidadBruta] = useState<{ ventas: UtilidadBrutaVenta[]; resumen: UtilidadBrutaResumen } | null>(null)
+  const [utilidadPorProducto, setUtilidadPorProducto] = useState<UtilidadPorProductoItem[]>([])
 
   // States
   const [loading, setLoading] = useState(true)
@@ -84,14 +118,25 @@ export default function ReportesPage() {
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
-  const [activeTab, setActiveTab] = useState<"resumen" | "productos" | "clientes" | "stock" | "movimientos">("resumen")
+  const [activeTab, setActiveTab] = useState<"resumen" | "productos" | "utilidad-bruta" | "utilidad-por-producto" | "clientes" | "stock" | "movimientos">("resumen")
+
+  // Helper local para obtener fecha en Managua TZ
+  function getManaguaToday() {
+    const now = new Date()
+    const managua = new Date(now.getTime() - 6 * 60 * 60 * 1000)
+    return managua.toISOString().split("T")[0]
+  }
+
+  function getManaguaFirstDayOfMonth() {
+    const now = new Date()
+    const managua = new Date(now.getTime() - 6 * 60 * 60 * 1000)
+    return `${managua.toISOString().split("-")[0]}-${managua.toISOString().split("-")[1]}-01`
+  }
 
   // Load initial data
   useEffect(() => {
-    // Establecer por defecto el mes actual en el input
-    const hoy = new Date()
-    const primerDia = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split("T")[0]
-    const ultimoDia = hoy.toISOString().split("T")[0]
+    const primerDia = getManaguaFirstDayOfMonth()
+    const ultimoDia = getManaguaToday()
     setStartDate(primerDia)
     setEndDate(ultimoDia)
     
@@ -106,14 +151,16 @@ export default function ReportesPage() {
       if (end) queryParams.append("endDate", end)
 
       // Fetch endpoints parallelly
-      const [kpisRes, graficoRes, vencerRes, masVendidosRes, clientesRes, stockRes, movRes] = await Promise.all([
+      const [kpisRes, graficoRes, vencerRes, masVendidosRes, clientesRes, stockRes, movRes, utilBrutaRes, utilProdRes] = await Promise.all([
         fetch(`/api/reportes?type=kpis&${queryParams.toString()}`),
         fetch(`/api/reportes?type=ventas-grafico&${queryParams.toString()}`),
         fetch(`/api/reportes?type=por-vencer&${queryParams.toString()}`),
         fetch(`/api/reportes?type=productos-mas-vendidos&${queryParams.toString()}`),
         fetch(`/api/reportes?type=clientes-frecuentes&${queryParams.toString()}`),
         fetch(`/api/reportes?type=stock-bajo&${queryParams.toString()}`),
-        fetch(`/api/reportes?type=movimientos&${queryParams.toString()}`)
+        fetch(`/api/reportes?type=movimientos&${queryParams.toString()}`),
+        fetch(`/api/reportes?type=utilidad-bruta&${queryParams.toString()}`),
+        fetch(`/api/reportes?type=utilidad-por-producto&${queryParams.toString()}`)
       ])
 
       if (kpisRes.ok) setKpis(await kpisRes.json())
@@ -123,6 +170,8 @@ export default function ReportesPage() {
       if (clientesRes.ok) setClientesFrecuentes(await clientesRes.json())
       if (stockRes.ok) setStockBajo(await stockRes.json())
       if (movRes.ok) setMovimientos(await movRes.json())
+      if (utilBrutaRes.ok) setUtilidadBruta(await utilBrutaRes.json())
+      if (utilProdRes.ok) setUtilidadPorProducto(await utilProdRes.json())
     } catch (error) {
       console.error("Error cargando reportes:", error)
       toast.error("Error al conectar con la base de datos de reportes")
@@ -151,7 +200,7 @@ export default function ReportesPage() {
         const kpisData = [
           { Métrica: "Total Ventas", Valor: `C$${kpis.totalVentas.toFixed(2)}` },
           { Métrica: "Total Compras", Valor: `C$${kpis.totalCompras.toFixed(2)}` },
-          { Métrica: "Ganancia Neta", Valor: `C$${kpis.gananciaNeta.toFixed(2)}` },
+          { Métrica: "Utilidad Bruta (Real)", Valor: `C$${kpis.gananciaNeta.toFixed(2)}` },
           { Métrica: "Transacciones Totales", Valor: kpis.transaccionesCount },
           { Métrica: "Productos Stock Bajo", Valor: kpis.stockBajo }
         ]
@@ -159,19 +208,49 @@ export default function ReportesPage() {
         XLSX.utils.book_append_sheet(workbook, wsKPI, "Resumen KPIs")
       }
 
-      // Sheet 2: Mas Vendidos
+      // Sheet 2: Utilidad Bruta Detalle
+      if (utilidadBruta && utilidadBruta.ventas.length > 0) {
+        const wsUtilBruta = XLSX.utils.json_to_sheet(utilidadBruta.ventas.map(v => ({
+          Venta_ID: v.id,
+          Fecha: new Date(v.fecha).toLocaleDateString("es-NI"),
+          Cliente: v.cliente,
+          Total_Facturado: `C$${v.total.toFixed(2)}`,
+          Costo_Ventas_COGS: `C$${v.cogs.toFixed(2)}`,
+          Utilidad_Bruta: `C$${v.utilidad.toFixed(2)}`,
+          Margen: `${v.margenPct.toFixed(1)}%`
+        })))
+        XLSX.utils.book_append_sheet(workbook, wsUtilBruta, "Utilidad Bruta Transaccional")
+      }
+
+      // Sheet 3: Utilidad Por Producto Rentabilidad
+      if (utilidadPorProducto.length > 0) {
+        const wsUtilProd = XLSX.utils.json_to_sheet(utilidadPorProducto.map(p => ({
+          Producto: p.nombre,
+          Laboratorio: p.laboratorio,
+          Categoría: p.categoria,
+          Cantidad_Vendida: p.cantidadVendida,
+          Ingresos_Totales: `C$${p.ingresosTotales.toFixed(2)}`,
+          Costo_Compra: `C$${p.cogs.toFixed(2)}`,
+          Utilidad_Bruta: `C$${p.utilidad.toFixed(2)}`,
+          Margen: `${p.margenPct.toFixed(1)}%`
+        })))
+        XLSX.utils.book_append_sheet(workbook, wsUtilProd, "Rentabilidad por Producto")
+      }
+
+      // Sheet 4: Mas Vendidos
       if (masVendidos.length > 0) {
         const wsProd = XLSX.utils.json_to_sheet(masVendidos.map((p, idx) => ({
           Puesto: idx + 1,
           Producto: p.nombre,
+          Laboratorio: p.laboratorio,
           Categoría: p.categoria,
           Cantidad_Vendida: p.cantidad,
           Total_Recaudado: `C$${p.total.toFixed(2)}`
         })))
-        XLSX.utils.book_append_sheet(workbook, wsProd, "Productos Más Vendidos")
+        XLSX.utils.book_append_sheet(workbook, wsProd, "Volumen Más Vendidos")
       }
 
-      // Sheet 3: Clientes Frecuentes
+      // Sheet 5: Clientes Frecuentes
       if (clientesFrecuentes.length > 0) {
         const wsCli = XLSX.utils.json_to_sheet(clientesFrecuentes.map((c, idx) => ({
           Puesto: idx + 1,
@@ -183,7 +262,7 @@ export default function ReportesPage() {
         XLSX.utils.book_append_sheet(workbook, wsCli, "Clientes Frecuentes")
       }
 
-      // Sheet 4: Stock Bajo
+      // Sheet 6: Stock Bajo
       if (stockBajo.length > 0) {
         const wsStock = XLSX.utils.json_to_sheet(stockBajo.map(s => ({
           Producto: s.nombre,
@@ -195,23 +274,23 @@ export default function ReportesPage() {
         XLSX.utils.book_append_sheet(workbook, wsStock, "Stock Bajo")
       }
 
-      // Sheet 5: Movimientos
+      // Sheet 7: Movimientos
       if (movimientos.length > 0) {
         const wsMov = XLSX.utils.json_to_sheet(movimientos.map(m => ({
           ID: m.id,
           Tipo: m.tipo,
-          Fecha: new Date(m.fecha).toLocaleString(),
+          Fecha: new Date(m.fecha).toLocaleString("es-NI"),
           Total: `C$${m.total.toFixed(2)}`,
           Usuario: m.usuario,
           Detalle: m.detalle
         })))
-        XLSX.utils.book_append_sheet(workbook, wsMov, "Movimientos")
+        XLSX.utils.book_append_sheet(workbook, wsMov, "Movimientos Kardex")
       }
 
       const startStr = startDate ? `_desde_${startDate}` : ""
       const endStr = endDate ? `_hasta_${endDate}` : ""
-      XLSX.writeFile(workbook, `Reporte_Farmacia${startStr}${endStr}.xlsx`)
-      toast.success("Excel exportado exitosamente")
+      XLSX.writeFile(workbook, `Reporte_Farmacia_Completo${startStr}${endStr}.xlsx`)
+      toast.success("Excel exportado exitosamente con todas las hojas")
     } catch (e) {
       console.error(e)
       toast.error("Error al exportar Excel")
@@ -229,17 +308,48 @@ export default function ReportesPage() {
           ["Metrica", "Valor"],
           ["Total Ventas", kpis.totalVentas.toFixed(2)],
           ["Total Compras", kpis.totalCompras.toFixed(2)],
-          ["Ganancia Neta", kpis.gananciaNeta.toFixed(2)],
+          ["Utilidad Bruta", kpis.gananciaNeta.toFixed(2)],
           ["Transacciones Totales", kpis.transaccionesCount],
           ["Productos Stock Bajo", kpis.stockBajo]
         ].map(e => e.join(",")).join("\n")
         filename = "Resumen_KPIs"
+      } else if (activeTab === "utilidad-bruta") {
+        if (!utilidadBruta) return
+        csvContent = [
+          ["ID Venta", "Fecha", "Cliente", "Total Facturado", "Costo Ventas COGS", "Utilidad Bruta", "Margen %"],
+          ...utilidadBruta.ventas.map(v => [
+            v.id,
+            new Date(v.fecha).toLocaleDateString("es-NI"),
+            `"${v.cliente.replace(/"/g, '""')}"`,
+            v.total.toFixed(2),
+            v.cogs.toFixed(2),
+            v.utilidad.toFixed(2),
+            `${v.margenPct.toFixed(1)}%`
+          ])
+        ].map(e => e.join(",")).join("\n")
+        filename = "Utilidad_Bruta"
+      } else if (activeTab === "utilidad-por-producto") {
+        csvContent = [
+          ["Producto", "Laboratorio", "Categoria", "Unidades Vendidas", "Ingresos Totales", "Costo Compra COGS", "Utilidad Bruta", "Margen %"],
+          ...utilidadPorProducto.map(p => [
+            `"${p.nombre.replace(/"/g, '""')}"`,
+            `"${p.laboratorio.replace(/"/g, '""')}"`,
+            `"${p.categoria.replace(/"/g, '""')}"`,
+            p.cantidadVendida,
+            p.ingresosTotales.toFixed(2),
+            p.cogs.toFixed(2),
+            p.utilidad.toFixed(2),
+            `${p.margenPct.toFixed(1)}%`
+          ])
+        ].map(e => e.join(",")).join("\n")
+        filename = "Rentabilidad_Por_Producto"
       } else if (activeTab === "productos") {
         csvContent = [
-          ["Puesto", "Producto", "Categoria", "Cantidad Vendida", "Total Recaudado"],
+          ["Puesto", "Producto", "Laboratorio", "Categoria", "Cantidad Vendida", "Total Recaudado"],
           ...masVendidos.map((p, idx) => [
             idx + 1,
             `"${p.nombre.replace(/"/g, '""')}"`,
+            `"${p.laboratorio.replace(/"/g, '""')}"`,
             `"${p.categoria.replace(/"/g, '""')}"`,
             p.cantidad,
             p.total.toFixed(2)
@@ -276,7 +386,7 @@ export default function ReportesPage() {
           ...movimientos.map(m => [
             m.id,
             m.tipo,
-            new Date(m.fecha).toLocaleString(),
+            new Date(m.fecha).toLocaleString("es-NI"),
             m.total.toFixed(2),
             `"${m.usuario.replace(/"/g, '""')}"`,
             `"${m.detalle.replace(/"/g, '""')}"`
@@ -304,10 +414,23 @@ export default function ReportesPage() {
   }
 
   const handleExportPDF = () => {
-    window.print()
+    let type = "kpis"
+    if (activeTab === "resumen") {
+      type = "kpis"
+    } else if (activeTab === "utilidad-bruta") {
+      type = "utilidad-bruta"
+    } else if (activeTab === "utilidad-por-producto" || activeTab === "productos") {
+      type = "utilidad-por-producto"
+    } else {
+      // Fallback para pestañas normales
+      window.print()
+      return
+    }
+
+    // Abrir endpoint de exportación en una nueva pestaña
+    window.open(`/api/reportes/export?type=${type}&startDate=${startDate}&endDate=${endDate}`, "_blank")
   }
 
-  // Filters search queries inside tables
   const filterBySearch = (text: string) => {
     return text.toLowerCase().includes(searchQuery.toLowerCase())
   }
@@ -325,9 +448,9 @@ export default function ReportesPage() {
                 <BarChart3 className="w-8 h-8 text-primary" />
                 Reportes y Analíticas
               </h1>
-              <p className="text-muted-foreground mt-1">Monitoreo dinámico del rendimiento físico y financiero</p>
+              <p className="text-muted-foreground mt-1">Monitoreo dinámico del rendimiento físico y financiero (Nicaragua)</p>
             </div>
-            <div className="flex gap-2 no-print">
+            <div className="flex gap-2 no-print flex-wrap">
               <Button 
                 variant="outline" 
                 onClick={handleRefresh} 
@@ -341,7 +464,7 @@ export default function ReportesPage() {
                 className="bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-2"
               >
                 <Download className="w-4 h-4" />
-                Excel
+                Exportar Excel
               </Button>
               <Button 
                 onClick={handleExportCSV} 
@@ -355,7 +478,7 @@ export default function ReportesPage() {
                 className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-2"
               >
                 <FileText className="w-4 h-4" />
-                PDF
+                PDF Profesional
               </Button>
             </div>
           </div>
@@ -401,7 +524,9 @@ export default function ReportesPage() {
           <div className="flex border-b border-border mb-6 overflow-x-auto gap-2">
             {[
               { id: "resumen", label: "Resumen General", icon: Activity },
-              { id: "productos", label: "Más Vendidos", icon: ListOrdered },
+              { id: "utilidad-bruta", label: "Utilidad Bruta (Transaccional)", icon: DollarSign },
+              { id: "utilidad-por-producto", label: "Rentabilidad por Producto", icon: TrendingUp },
+              { id: "productos", label: "Volumen Más Vendidos", icon: ListOrdered },
               { id: "clientes", label: "Clientes Frecuentes", icon: User },
               { id: "stock", label: "Stock Bajo", icon: AlertTriangle },
               { id: "movimientos", label: "Historial de Movimientos", icon: FileText }
@@ -490,11 +615,11 @@ export default function ReportesPage() {
                     <Card className="glass-card p-6 border-l-4 border-l-emerald-500 hover:scale-[1.01] transition-transform">
                       <div className="flex justify-between items-start">
                         <div>
-                          <p className="text-sm font-medium text-muted-foreground mb-1">Ganancia Estimada</p>
+                          <p className="text-sm font-medium text-muted-foreground mb-1">Utilidad Bruta Real</p>
                           <h3 className={`text-2xl font-bold ${kpis?.gananciaNeta && kpis.gananciaNeta >= 0 ? "text-emerald-500" : "text-red-500"}`}>
                             C${kpis?.gananciaNeta.toFixed(2) || "0.00"}
                           </h3>
-                          <p className="text-xs text-muted-foreground mt-2">Diferencia bruta (Ventas - Compras)</p>
+                          <p className="text-xs text-muted-foreground mt-2">Ventas - Costos de Adquisición (COGS)</p>
                         </div>
                         <div className="p-2.5 bg-emerald-500/10 rounded-lg">
                           <ArrowUpRight className="w-5 h-5 text-emerald-500" />
@@ -559,7 +684,7 @@ export default function ReportesPage() {
                               <div key={v.id} className="flex justify-between items-center p-3 rounded-lg bg-amber-500/5 border border-amber-500/10">
                                 <div className="min-w-0 flex-1 pr-2">
                                   <p className="font-semibold text-foreground text-sm truncate">{v.nombre}</p>
-                                  <p className="text-xs text-muted-foreground">Stock Actual: {v.stockActual} uds</p>
+                                  <p className="text-xs text-muted-foreground">Stock Actual: {v.stockActual} und</p>
                                 </div>
                                 <div className="text-right shrink-0">
                                   <p className="text-xs font-bold text-amber-600">
@@ -581,14 +706,117 @@ export default function ReportesPage() {
                 </div>
               )}
 
-              {/* TAB 2: PRODUCTOS MÁS VENDIDOS */}
+              {/* TAB 2: UTILIDAD BRUTA TRANSACCIONAL */}
+              {activeTab === "utilidad-bruta" && (
+                <div className="space-y-6">
+                  {/* Resumen de Utilidad */}
+                  {utilidadBruta && (
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <Card className="glass-card p-4">
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Ingresos del Rango</p>
+                        <p className="text-xl font-bold text-foreground">C${utilidadBruta.resumen.totalVentas.toFixed(2)}</p>
+                      </Card>
+                      <Card className="glass-card p-4">
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Costo de Ventas (COGS)</p>
+                        <p className="text-xl font-bold text-amber-500">C${utilidadBruta.resumen.totalCogs.toFixed(2)}</p>
+                      </Card>
+                      <Card className="glass-card p-4">
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Utilidad Bruta Acumulada</p>
+                        <p className="text-xl font-bold text-emerald-500">C${utilidadBruta.resumen.totalUtilidad.toFixed(2)}</p>
+                      </Card>
+                      <Card className="glass-card p-4">
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Margen Comercial Promedio</p>
+                        <p className="text-xl font-bold text-primary">{utilidadBruta.resumen.margenPct.toFixed(1)}%</p>
+                      </Card>
+                    </div>
+                  )}
+
+                  <Card className="glass-card overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-muted/30 border-b border-border">
+                          <tr>
+                            {["Venta ID", "Fecha", "Cliente", "Total Facturado", "Costo de Venta (COGS)", "Utilidad Bruta", "Margen %"].map((h) => (
+                              <th key={h} className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                          {!utilidadBruta || utilidadBruta.ventas.length === 0 ? (
+                            <tr>
+                              <td colSpan={7} className="px-6 py-8 text-center text-muted-foreground text-sm">No hay registros de utilidad en este rango</td>
+                            </tr>
+                          ) : (
+                            utilidadBruta.ventas
+                              .filter(v => filterBySearch(String(v.id)) || filterBySearch(v.cliente))
+                              .map((v) => (
+                                <tr key={v.id} className="hover:bg-muted/10 transition-colors">
+                                  <td className="px-6 py-4 text-sm font-semibold text-primary">#{v.id}</td>
+                                  <td className="px-6 py-4 text-sm text-muted-foreground">
+                                    {new Date(v.fecha).toLocaleDateString("es-NI")}
+                                  </td>
+                                  <td className="px-6 py-4 text-sm font-medium text-foreground">{v.cliente}</td>
+                                  <td className="px-6 py-4 text-sm font-semibold text-foreground">C${v.total.toFixed(2)}</td>
+                                  <td className="px-6 py-4 text-sm text-amber-500">C${v.cogs.toFixed(2)}</td>
+                                  <td className="px-6 py-4 text-sm font-bold text-emerald-600">C${v.utilidad.toFixed(2)}</td>
+                                  <td className="px-6 py-4 text-sm font-semibold text-muted-foreground">{v.margenPct.toFixed(1)}%</td>
+                                </tr>
+                              ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </Card>
+                </div>
+              )}
+
+              {/* TAB 3: RENTABILIDAD POR PRODUCTO */}
+              {activeTab === "utilidad-por-producto" && (
+                <Card className="glass-card overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-muted/30 border-b border-border">
+                        <tr>
+                          {["Producto", "Laboratorio", "Categoría", "Cantidad Vendida", "Ingresos Totales", "Costo Adquisición", "Utilidad Bruta", "Margen %"].map((h) => (
+                            <th key={h} className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {utilidadPorProducto.length === 0 ? (
+                          <tr>
+                            <td colSpan={8} className="px-6 py-8 text-center text-muted-foreground text-sm">No hay transacciones registradas</td>
+                          </tr>
+                        ) : (
+                          utilidadPorProducto
+                            .filter(p => filterBySearch(p.nombre) || filterBySearch(p.laboratorio) || filterBySearch(p.categoria))
+                            .map((p) => (
+                              <tr key={p.id} className="hover:bg-muted/10 transition-colors">
+                                <td className="px-6 py-4 text-sm font-medium text-foreground">{p.nombre}</td>
+                                <td className="px-6 py-4 text-sm text-muted-foreground">{p.laboratorio}</td>
+                                <td className="px-6 py-4 text-sm text-muted-foreground">{p.categoria}</td>
+                                <td className="px-6 py-4 text-sm text-foreground">{p.cantidadVendida} und</td>
+                                <td className="px-6 py-4 text-sm font-semibold text-foreground">C${p.ingresosTotales.toFixed(2)}</td>
+                                <td className="px-6 py-4 text-sm text-amber-500">C${p.cogs.toFixed(2)}</td>
+                                <td className="px-6 py-4 text-sm font-bold text-emerald-600">C${p.utilidad.toFixed(2)}</td>
+                                <td className="px-6 py-4 text-sm font-bold text-primary">{p.margenPct.toFixed(1)}%</td>
+                              </tr>
+                            ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+              )}
+
+              {/* TAB 4: VOLUMEN MÁS VENDIDOS */}
               {activeTab === "productos" && (
                 <Card className="glass-card overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full">
                       <thead className="bg-muted/30 border-b border-border">
                         <tr>
-                          {["Puesto", "Nombre de Producto", "Categoría", "Cantidad Vendida", "Total Recaudado"].map((h) => (
+                          {["Puesto", "Nombre de Producto", "Laboratorio", "Categoría", "Cantidad Vendida", "Total Recaudado"].map((h) => (
                             <th key={h} className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">{h}</th>
                           ))}
                         </tr>
@@ -596,17 +824,18 @@ export default function ReportesPage() {
                       <tbody className="divide-y divide-border">
                         {masVendidos.filter(p => filterBySearch(p.nombre) || filterBySearch(p.categoria)).length === 0 ? (
                           <tr>
-                            <td colSpan={5} className="px-6 py-8 text-center text-muted-foreground text-sm">No hay ventas registradas</td>
+                            <td colSpan={6} className="px-6 py-8 text-center text-muted-foreground text-sm">No hay ventas registradas</td>
                           </tr>
                         ) : (
                           masVendidos
-                            .filter(p => filterBySearch(p.nombre) || filterBySearch(p.categoria))
+                            .filter(p => filterBySearch(p.nombre) || filterBySearch(p.categoria) || filterBySearch(p.laboratorio))
                             .map((p, idx) => (
                               <tr key={p.id} className="hover:bg-muted/10 transition-colors">
                                 <td className="px-6 py-4 text-sm font-semibold text-primary">#{idx + 1}</td>
                                 <td className="px-6 py-4 text-sm font-medium text-foreground">{p.nombre}</td>
+                                <td className="px-6 py-4 text-sm text-muted-foreground">{p.laboratorio}</td>
                                 <td className="px-6 py-4 text-sm text-muted-foreground">{p.categoria}</td>
-                                <td className="px-6 py-4 text-sm font-bold text-foreground">{p.cantidad} uds</td>
+                                <td className="px-6 py-4 text-sm font-bold text-foreground">{p.cantidad} und</td>
                                 <td className="px-6 py-4 text-sm font-bold text-emerald-600">C${p.total.toFixed(2)}</td>
                               </tr>
                             ))
@@ -617,7 +846,7 @@ export default function ReportesPage() {
                 </Card>
               )}
 
-              {/* TAB 3: CLIENTES FRECUENTES */}
+              {/* TAB 5: CLIENTES FRECUENTES */}
               {activeTab === "clientes" && (
                 <Card className="glass-card overflow-hidden">
                   <div className="overflow-x-auto">
@@ -655,7 +884,7 @@ export default function ReportesPage() {
                 </Card>
               )}
 
-              {/* TAB 4: STOCK BAJO */}
+              {/* TAB 6: STOCK BAJO */}
               {activeTab === "stock" && (
                 <Card className="glass-card overflow-hidden">
                   <div className="overflow-x-auto">
@@ -679,9 +908,9 @@ export default function ReportesPage() {
                               <tr key={s.id} className="hover:bg-muted/10 transition-colors">
                                 <td className="px-6 py-4 text-sm font-medium text-foreground">{s.nombre}</td>
                                 <td className="px-6 py-4 text-sm text-muted-foreground">{s.categoria}</td>
-                                <td className="px-6 py-4 text-sm font-bold text-red-500">{s.stockActual} uds</td>
-                                <td className="px-6 py-4 text-sm text-muted-foreground">{s.stockMinimo} uds</td>
-                                <td className="px-6 py-4 text-sm font-bold text-amber-600">-{s.diferencia} uds</td>
+                                <td className="px-6 py-4 text-sm font-bold text-red-500">{s.stockActual} und</td>
+                                <td className="px-6 py-4 text-sm text-muted-foreground">{s.stockMinimo} und</td>
+                                <td className="px-6 py-4 text-sm font-bold text-amber-600">-{s.diferencia} und</td>
                                 <td className="px-6 py-4 text-sm">
                                   <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-600 animate-pulse">Reabastecer</span>
                                 </td>
@@ -694,7 +923,7 @@ export default function ReportesPage() {
                 </Card>
               )}
 
-              {/* TAB 5: MOVIMIENTOS DETALLADOS */}
+              {/* TAB 7: HISTORIAL DE MOVIMIENTOS KARDEX */}
               {activeTab === "movimientos" && (
                 <Card className="glass-card overflow-hidden">
                   <div className="overflow-x-auto">

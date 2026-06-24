@@ -14,6 +14,9 @@ import {
   Scan, AlertTriangle, UserPlus, ScanLine
 } from "lucide-react"
 import { toast } from "sonner"
+import useSWR from "swr"
+
+const fetcher = (url: string) => fetch(url).then((r) => r.json())
 
 interface Lote {
   id: number
@@ -170,6 +173,9 @@ export default function NuevaVentaPage() {
   const [tipoComprobante, setTipoComprobante] = useState("RECIBO")
   const [rucCliente, setRucCliente] = useState("")
   const [montoRecibido, setMontoRecibido] = useState("")
+  const [selectedDescuento, setSelectedDescuento] = useState("")
+
+  const { data: descuentos = [] } = useSWR<any[]>("/api/descuentos?estado=ACTIVO", fetcher)
 
   // Scanner states
   const [scannerOpen, setScannerOpen] = useState(false)
@@ -328,13 +334,31 @@ export default function NuevaVentaPage() {
 
   const total = lineas.reduce((sum, l) => sum + l.subtotal, 0)
 
-  const cambio = (metodoPago === "EFECTIVO" && montoRecibido && Number(montoRecibido) >= total)
-    ? Number(montoRecibido) - total
+  // Find selected discount object
+  const descObj = descuentos.find((d: any) => String(d.id) === selectedDescuento)
+  
+  let discountTotal = 0
+  if (descObj) {
+    if (descObj.tipo === "PORCENTAJE") {
+      discountTotal = total * (Number(descObj.valor) / 100)
+      if (descObj.maxDescuento) {
+        discountTotal = Math.min(discountTotal, Number(descObj.maxDescuento))
+      }
+    } else if (descObj.tipo === "MONTO") {
+      discountTotal = Number(descObj.valor)
+    }
+    discountTotal = Math.min(discountTotal, total)
+  }
+
+  const totalNeto = total - discountTotal
+
+  const cambio = (metodoPago === "EFECTIVO" && montoRecibido && Number(montoRecibido) >= totalNeto)
+    ? Number(montoRecibido) - totalNeto
     : 0
 
   const handleRegistrarVenta = async () => {
     if (lineas.length === 0) { toast.error("Agregue al menos un producto"); return }
-    if (metodoPago === "EFECTIVO" && montoRecibido && Number(montoRecibido) < total) {
+    if (metodoPago === "EFECTIVO" && montoRecibido && Number(montoRecibido) < totalNeto) {
       toast.error("El monto recibido no cubre el total de la venta")
       return
     }
@@ -352,6 +376,8 @@ export default function NuevaVentaPage() {
           montoRecibido: montoRecibido ? Number(montoRecibido) : null,
           cambio: montoRecibido ? cambio : null,
           rucCliente: tipoComprobante === "FACTURA" ? rucCliente : null,
+          idDescuento: selectedDescuento ? Number.parseInt(selectedDescuento) : null,
+          descuentoTotal: discountTotal,
         }),
       })
       const data = await res.json()
@@ -745,7 +771,7 @@ export default function NuevaVentaPage() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-foreground mb-1">Cambio (Vuelto)</label>
-                        <Input type="text" disabled value={montoRecibido && Number(montoRecibido) >= total ? `C$${cambio.toFixed(2)}` : "C$0.00"} className="bg-muted/30 border-border text-sm font-semibold text-emerald-500" />
+                        <Input type="text" disabled value={montoRecibido && Number(montoRecibido) >= totalNeto ? `C$${cambio.toFixed(2)}` : "C$0.00"} className="bg-muted/30 border-border text-sm font-semibold text-emerald-500" />
                       </div>
                     </div>
                   )}
@@ -834,14 +860,42 @@ export default function NuevaVentaPage() {
                     </div>
                   </div>
 
-                  <div className="pt-4 border-t border-border">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-sm text-muted-foreground">Productos</span>
-                      <span className="text-2xl font-bold text-foreground">{lineas.length}</span>
+                  <div className="pt-4 border-t border-border space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium text-foreground mb-1">Descuento General</label>
+                      <select
+                        value={selectedDescuento}
+                        onChange={(e) => setSelectedDescuento(e.target.value)}
+                        className={selectClass}
+                      >
+                        <option value="">Ningún descuento</option>
+                        {descuentos.map((d: any) => (
+                          <option key={d.id} value={d.id}>
+                            {d.motivo} ({d.tipo === "PORCENTAJE" ? `${Number(d.valor).toFixed(0)}%` : `C$${Number(d.valor).toFixed(2)}`})
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Total</span>
-                      <span className="text-2xl font-bold text-primary">C${total.toFixed(2)}</span>
+
+                    <div className="space-y-1.5 pt-2 border-t border-border/40">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">Artículos</span>
+                        <span className="font-medium text-foreground">{lineas.length}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">Subtotal</span>
+                        <span className="font-medium text-foreground">C${total.toFixed(2)}</span>
+                      </div>
+                      {discountTotal > 0 && (
+                        <div className="flex items-center justify-between text-xs text-red-500">
+                          <span>Descuento</span>
+                          <span className="font-semibold">-C${discountTotal.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between pt-2 border-t border-border/60">
+                        <span className="text-sm font-semibold text-muted-foreground">Total Neto</span>
+                        <span className="text-2xl font-bold text-primary">C${totalNeto.toFixed(2)}</span>
+                      </div>
                     </div>
                   </div>
 

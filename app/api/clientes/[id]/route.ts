@@ -45,7 +45,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       )
     }
 
-    const { nombreCompleto, telefono, correo, cedula, ruc, direccion, activo } = validation.data
+    const { nombreCompleto, telefono, correo, cedula, ruc, direccion, activo, tipoPerfil, fechaNacimiento, sexo } = validation.data
 
     // 1. Validar duplicados de Cédula
     if (cedula) {
@@ -136,6 +136,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         cedula: emptyToNull(cedula),
         ruc: emptyToNull(ruc),
         direccion: emptyToNull(direccion),
+        tipoPerfil: tipoPerfil || "FARMACIA",
+        fechaNacimiento: fechaNacimiento ? new Date(fechaNacimiento) : null,
+        sexo: emptyToNull(sexo),
         activo: activo ?? true,
       },
     })
@@ -186,28 +189,25 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     }
 
     const { id } = await params
+    const clientId = Number.parseInt(id)
     
-    // Check if it has sales, if so, maybe prevent deletion
     const cliente = await prisma.cliente.findUnique({
-      where: { id: Number.parseInt(id) },
-      include: { _count: { select: { ventas: true } } }
+      where: { id: clientId }
     })
 
     if (!cliente) {
       return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 })
     }
 
-    if (cliente._count.ventas > 0) {
-      return NextResponse.json({ error: "No se puede eliminar el cliente porque tiene ventas asociadas. Considérelo desactivarlo en su lugar." }, { status: 400 })
-    }
-
-    await prisma.cliente.delete({
-      where: { id: Number.parseInt(id) },
+    // Logical delete: set activo to false
+    await prisma.cliente.update({
+      where: { id: clientId },
+      data: { activo: false }
     })
 
-    return NextResponse.json({ message: "Cliente eliminado" })
+    return NextResponse.json({ success: true, message: "Cliente desactivado lógicamente" })
   } catch (error) {
-    console.error("Error deleting cliente:", error)
+    console.error("Error deleting cliente lógicamente:", error)
     return NextResponse.json({ error: "Error deleting cliente" }, { status: 500 })
   }
 }

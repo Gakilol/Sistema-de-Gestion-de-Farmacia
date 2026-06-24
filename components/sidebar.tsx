@@ -21,6 +21,9 @@ import {
   Truck,
   ClipboardList,
   Sparkles,
+  Layers,
+  Activity,
+  Trash2,
 } from "lucide-react"
 
 import { useCurrentUser } from "../app/hooks/useCurrentUser"
@@ -86,12 +89,16 @@ export function Sidebar() {
   // 🔹 Opciones SOLO ADMIN (van siempre en bloque y orden fijo)
   const adminLinks = [
     { href: "/productos", label: "Productos", icon: Package },
+    { href: "/admin/categorias", label: "Categorías", icon: Layers },
+    { href: "/admin/laboratorios", label: "Laboratorios", icon: Settings },
     { href: "/proveedores", label: "Proveedores", icon: Truck },
     { href: "/compras", label: "Compras", icon: ShoppingCart },
     { href: "/inventario", label: "Inventario", icon: ClipboardList },
+    { href: "/admin/servicios-podologia", label: "Servicios Podología", icon: Activity },
     { href: "/usuarios", label: "Usuarios", icon: Settings },
     { href: "/reportes", label: "Reportes", icon: TrendingUp },
     { href: "/auditoria", label: "Auditoría", icon: ClipboardList },
+    { href: "/admin/limpieza-datos", label: "Limpieza de Datos", icon: Trash2 },
   ]
 
   const NavLink = ({ item }: { item: { href: string; label: string; icon: any } }) => {
@@ -177,6 +184,7 @@ export function Sidebar() {
               </p>
               <div className="space-y-0.5">
                 <NavLink item={{ href: "/clinica", label: "Clínica", icon: ClipboardList }} />
+                <NavLink item={{ href: "/pacientes", label: "Pacientes", icon: Users }} />
               </div>
             </div>
           )}

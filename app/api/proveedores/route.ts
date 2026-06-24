@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
+import { proveedorSchema, emptyToNull } from "@/lib/validations"
+import { registrarLog } from "@/lib/audit"
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,11 +13,23 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams
     const search = searchParams.get("search") || ""
+    const estado = searchParams.get("estado") ?? "activos"
+
+    const where: any = {
+      OR: [
+        { nombre: { contains: search, mode: "insensitive" } },
+        { ruc: { contains: search, mode: "insensitive" } },
+      ],
+    }
+
+    if (estado === "activos") {
+      where.activo = true
+    } else if (estado === "inactivos") {
+      where.activo = false
+    }
 
     const proveedores = await prisma.proveedor.findMany({
-      where: {
-        nombre: { contains: search, mode: "insensitive" },
-      },
+      where,
       orderBy: { nombre: "asc" },
     })
 
@@ -42,29 +56,94 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    const { nombre, telefono, correo, direccion } = await request.json()
+    const body = await request.json()
+    const validation = proveedorSchema.safeParse(body)
 
-    if (!nombre) {
-      return NextResponse.json({ error: "Nombre es requerido" }, { status: 400 })
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: validation.error.issues[0].message, details: validation.error.issues },
+        { status: 400 }
+      )
+    }
+
+    const { nombre, telefono, correo, direccion, ruc, contacto, activo } = validation.data
+
+    // Check duplicates manually to provide clean error messages
+    const duplicateChecks = []
+    if (nombre) {
+      duplicateChecks.push(
+        prisma.proveedor.findFirst({
+          where: { nombre: { equals: nombre, mode: "insensitive" } }
+        }).then(res => { if (res) throw new Error("Ya existe un proveedor registrado con este nombre"); })
+      )
+    }
+
+    if (ruc) {
+      const cleanRuc = ruc.replace(/[\s-]/g, "").toUpperCase()
+      const formattedRuc = `${cleanRuc.substring(0, 3)}-${cleanRuc.substring(3, 9)}-${cleanRuc.substring(9, 13)}${cleanRuc.charAt(13)}`
+      duplicateChecks.push(
+        prisma.proveedor.findFirst({
+          where: {
+            OR: [
+              { ruc: cleanRuc },
+              { ruc: formattedRuc }
+            ]
+          }
+        }).then(res => { if (res) throw new Error("El RUC ya está registrado para otro proveedor"); })
+      )
+    }
+
+    if (telefono) {
+      const cleanTel = telefono.replace(/[\s-]/g, "")
+      duplicateChecks.push(
+        prisma.proveedor.findFirst({
+          where: {
+            OR: [
+              { telefono: cleanTel },
+              { telefono }
+            ]
+          }
+        }).then(res => { if (res) throw new Error("El teléfono ya está registrado para otro proveedor"); })
+      )
+    }
+
+    if (correo) {
+      duplicateChecks.push(
+        prisma.proveedor.findFirst({
+          where: { correo: { equals: correo, mode: "insensitive" } }
+        }).then(res => { if (res) throw new Error("El correo electrónico ya está registrado para otro proveedor"); })
+      )
+    }
+
+    try {
+      await Promise.all(duplicateChecks)
+    } catch (e: any) {
+      return NextResponse.json({ error: e.message }, { status: 400 })
     }
 
     const proveedor = await prisma.proveedor.create({
       data: {
         nombre,
-        telefono: telefono || null,
-        correo: correo || null,
-        direccion: direccion || null,
+        telefono: emptyToNull(telefono),
+        correo: emptyToNull(correo),
+        direccion: emptyToNull(direccion),
+        ruc: emptyToNull(ruc),
+        contacto: emptyToNull(contacto),
+        activo: activo ?? true,
       },
+    })
+
+    registrarLog({
+      accion: "CREAR_PROVEEDOR",
+      entidad: "Proveedor",
+      entidadId: proveedor.id,
+      idUsuario: user.id,
+      detalles: { nombre: proveedor.nombre }
     })
 
     return NextResponse.json(proveedor, { status: 201 })
   } catch (error: any) {
     console.error("Error creating proveedor:", error)
-    // Expose real Prisma error in response for easier debugging
-    const message =
-      error?.meta?.target
-        ? `Ya existe un proveedor con ese ${error.meta.target.join(", ")}`
-        : error?.message || "Error al crear el proveedor"
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: error.message || "Error al crear el proveedor" }, { status: 500 })
   }
 }
