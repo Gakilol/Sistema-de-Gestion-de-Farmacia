@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
       clientes: await prisma.cliente.count({ where: { esDatoPrueba: true } }),
       categorias: await prisma.categoriaProducto.count({ where: { esDatoPrueba: true } }),
       productos: await prisma.producto.count({ where: { esDatoPrueba: true } }),
-      lotes: await prisma.lote.count({ where: { esDatoPrueba: true } }),
+      lotes: await prisma.lote.count({ where: { producto: { esDatoPrueba: true } } }),
       devoluciones: await prisma.devolucionProveedor.count({ where: { esDatoPrueba: true } }),
       citas: await prisma.cita.count({ where: { esDatoPrueba: true } }),
       atenciones: await prisma.atencionPodologica.count({ where: { esDatoPrueba: true } }),
@@ -73,13 +73,13 @@ export async function POST(request: NextRequest) {
       const testUserIds = (await tx.usuario.findMany({ where: { esDatoPrueba: true }, select: { id: true } })).map(u => u.id)
       const testClientIds = (await tx.cliente.findMany({ where: { esDatoPrueba: true }, select: { id: true } })).map(c => c.id)
       const testProductIds = (await tx.producto.findMany({ where: { esDatoPrueba: true }, select: { id: true } })).map(p => p.id)
-      const testLoteIds = (await tx.lote.findMany({ where: { esDatoPrueba: true }, select: { id: true } })).map(l => l.id)
+      const testLoteIds = (await tx.lote.findMany({ where: { producto: { esDatoPrueba: true } }, select: { id: true } })).map(l => l.id)
 
       // 2.1. Eliminar DetalleVentaLote
       await tx.detalleVentaLote.deleteMany({
         where: {
           OR: [
-            { lote: { esDatoPrueba: true } },
+            { lote: { producto: { esDatoPrueba: true } } },
             { lote: { idProducto: { in: testProductIds } } },
             { detalleVenta: { idProducto: { in: testProductIds } } },
             { detalleVenta: { venta: { idCliente: { in: testClientIds } } } },
@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
       await tx.lote.deleteMany({
         where: {
           OR: [
-            { esDatoPrueba: true },
+            { producto: { esDatoPrueba: true } },
             { idProducto: { in: testProductIds } }
           ]
         }

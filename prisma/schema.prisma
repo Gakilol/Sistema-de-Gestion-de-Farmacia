@@ -97,7 +97,6 @@ model Producto {
   unidadesPorCaja Int?
   blísteresPorCaja Int?
   margenUtilidad  Decimal? @db.Decimal(10, 2)
-  precioSugerido  Decimal? @db.Decimal(10, 2)
   stockActual     Int     @default(0)  // Computed from Lote totals — read-only in UI
   stockMinimo     Int?
   activo          Boolean @default(true)

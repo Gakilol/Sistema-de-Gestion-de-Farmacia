@@ -168,7 +168,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         unidadesPorCaja: data.unidadesPorCaja,
         blísteresPorCaja: data.blísteresPorCaja,
         margenUtilidad: data.margenUtilidad,
-        precioSugerido: data.precioSugerido,
         stockMinimo: data.stockMinimo,
         activo: data.activo,
       },

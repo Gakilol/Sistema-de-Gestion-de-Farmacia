@@ -107,8 +107,6 @@ export default function ProductosPage() {
   const [unidadesPorCaja, setUnidadesPorCaja] = useState("")
   const [blisteresPorCaja, setBlisteresPorCaja] = useState("")
   const [margenUtilidad, setMargenUtilidad] = useState("")
-  const [precioSugerido, setPrecioSugerido] = useState("")
-  const [margenConfig, setMargenConfig] = useState("20")
   const [stockMinimo, setStockMinimo] = useState("")
   const [stockInicial, setStockInicial] = useState("")
   const [loteInicial, setLoteInicial] = useState("")
@@ -119,24 +117,15 @@ export default function ProductosPage() {
   const [formError, setFormError] = useState<string | null>(null)
   const [precioVentaError, setPrecioVentaError] = useState<string | null>(null)
 
-  const recalculateMarginAndSugerido = (pcVal: string, pvVal: string, marginPctConfig: string) => {
+  const recalculateMargin = (pcVal: string, pvVal: string) => {
     const pc = parseFloat(pcVal)
     const pv = parseFloat(pvVal)
-    const mConfig = parseFloat(marginPctConfig)
 
-    if (!isNaN(pc) && pc >= 0) {
-      if (!isNaN(mConfig)) {
-        setPrecioSugerido((pc * (1 + mConfig / 100)).toFixed(2))
-      }
-      if (!isNaN(pv) && pv > 0) {
-        const marginReal = ((pv - pc) / pv) * 100
-        setMargenUtilidad(marginReal.toFixed(1))
-      } else {
-        setMargenUtilidad("")
-      }
+    if (!isNaN(pc) && pc >= 0 && !isNaN(pv) && pv > 0) {
+      const marginReal = ((pv - pc) / pv) * 100
+      setMargenUtilidad(marginReal.toFixed(1))
     } else {
       setMargenUtilidad("")
-      setPrecioSugerido("")
     }
   }
 
@@ -348,8 +337,6 @@ export default function ProductosPage() {
     setUnidadesPorCaja("")
     setBlisteresPorCaja("")
     setMargenUtilidad("")
-    setPrecioSugerido("")
-    setMargenConfig("20")
     setStockMinimo("")
     setStockInicial("")
     setLoteInicial("")
@@ -388,16 +375,14 @@ export default function ProductosPage() {
       setUnidadesPorCaja(p.unidadesPorCaja != null ? String(p.unidadesPorCaja) : "")
       setBlisteresPorCaja(p.blísteresPorCaja != null ? String(p.blísteresPorCaja) : "")
       setMargenUtilidad(p.margenUtilidad ? String(p.margenUtilidad) : "")
-      setPrecioSugerido(p.precioSugerido ? String(p.precioSugerido) : "")
       setStockMinimo(p.stockMinimo != null ? String(p.stockMinimo) : "")
       setEsServicio(p.esServicio || false)
       setEsDatoPrueba(p.esDatoPrueba || false)
 
-      // Calculate initial margin/sugerido on load
-      recalculateMarginAndSugerido(
+      // Calculate initial margin on load
+      recalculateMargin(
         p.precioCompra ? String(p.precioCompra) : "",
-        p.precioVenta && Number(p.precioVenta) > 0 ? String(p.precioVenta) : "",
-        "20"
+        p.precioVenta && Number(p.precioVenta) > 0 ? String(p.precioVenta) : ""
       )
 
       setShowForm(true)
@@ -483,16 +468,6 @@ export default function ProductosPage() {
     }
   }
 
-  // ─── Helpers para sugerencia de precios con margen 20% ───
-  const calcSugerido = (precioCompraVal: string, unidades: string) => {
-    const pc = parseFloat(precioCompraVal)
-    const u = parseInt(unidades)
-    if (!isNaN(pc) && pc > 0 && !isNaN(u) && u > 0) {
-      return (pc * u * 1.20).toFixed(2)
-    }
-    return ""
-  }
-
   const handlePrecioCompraChange = (value: string) => {
     setPrecioCompra(value)
     // Validar precio de venta en tiempo real
@@ -507,16 +482,7 @@ export default function ProductosPage() {
     } else {
       setPrecioVentaError(null)
     }
-    // Sugerir precios de blister y caja
-    if (unidadesPorBlister) {
-      const sugerido = calcSugerido(value, unidadesPorBlister)
-      if (sugerido) setPrecioBlister(sugerido)
-    }
-    if (unidadesPorCaja) {
-      const sugerido = calcSugerido(value, unidadesPorCaja)
-      if (sugerido) setPrecioCaja(sugerido)
-    }
-    recalculateMarginAndSugerido(value, precioVenta, margenConfig)
+    recalculateMargin(value, precioVenta)
   }
 
   const handlePrecioVentaChange = (value: string) => {
@@ -532,28 +498,15 @@ export default function ProductosPage() {
     } else {
       setPrecioVentaError(null)
     }
-    recalculateMarginAndSugerido(precioCompra, value, margenConfig)
-  }
-
-  const handleMargenConfigChange = (value: string) => {
-    setMargenConfig(value)
-    recalculateMarginAndSugerido(precioCompra, precioVenta, value)
+    recalculateMargin(precioCompra, value)
   }
 
   const handleUnidadesPorBlisterChange = (value: string) => {
     setUnidadesPorBlister(value)
-    if (precioCompra) {
-      const sugerido = calcSugerido(precioCompra, value)
-      if (sugerido) setPrecioBlister(sugerido)
-    }
   }
 
   const handleUnidadesPorCajaChange = (value: string) => {
     setUnidadesPorCaja(value)
-    if (precioCompra) {
-      const sugerido = calcSugerido(precioCompra, value)
-      if (sugerido) setPrecioCaja(sugerido)
-    }
   }
   const handleSaveProducto = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -612,7 +565,6 @@ export default function ProductosPage() {
         unidadesPorCaja: unidadesPorCaja || null,
         blísteresPorCaja: blisteresPorCaja || null,
         margenUtilidad: margenUtilidad || null,
-        precioSugerido: precioSugerido || null,
         esServicio,
         esDatoPrueba,
       }
@@ -1027,36 +979,7 @@ export default function ProductosPage() {
                       />
                       <p className="text-xs text-muted-foreground mt-1">Precio al público por 1 pastilla o unidad suelta.</p>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-foreground/80 mb-1">Margen Objetivo Sugerido (%)</label>
-                      <Input
-                        type="number"
-                        value={margenConfig}
-                        onChange={(e) => handleMargenConfigChange(e.target.value)}
-                        className="bg-background border-border text-foreground"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-foreground/80 mb-1">Precio Unitario Sugerido</label>
-                      <div className="flex gap-2">
-                        <Input
-                          readOnly
-                          value={precioSugerido ? `C$ ${precioSugerido}` : "—"}
-                          className="bg-muted border-border text-foreground font-semibold"
-                        />
-                        {precioSugerido && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handlePrecioVentaChange(precioSugerido)}
-                            className="border-primary text-primary hover:bg-primary/10 shrink-0"
-                          >
-                            Aplicar
-                          </Button>
-                        )}
-                      </div>
-                    </div>
+
                     <div>
                       <label className="block text-sm font-medium text-foreground/80 mb-1">Margen Real Calculado</label>
                       <div className="flex items-center gap-2 h-10">
