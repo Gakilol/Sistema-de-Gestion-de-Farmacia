@@ -1011,11 +1011,7 @@ export default function ProductosPage() {
                         placeholder="Ej: 45.00"
                         className="bg-background border-border text-foreground"
                       />
-                      {precioCompra && unidadesPorBlister && calcSugerido(precioCompra, unidadesPorBlister) ? (
-                        <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-1">💡 Sugerido (20%): C${calcSugerido(precioCompra, unidadesPorBlister)}</p>
-                      ) : (
-                        <p className="text-xs text-muted-foreground mt-1">Precio al vender un blíster completo.</p>
-                      )}
+                      <p className="text-xs text-muted-foreground mt-1">Precio al vender un blíster completo.</p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-foreground/80 mb-1">
@@ -1030,11 +1026,7 @@ export default function ProductosPage() {
                         placeholder="Ej: 400.00"
                         className="bg-background border-border text-foreground"
                       />
-                      {precioCompra && unidadesPorCaja && calcSugerido(precioCompra, unidadesPorCaja) ? (
-                        <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-1">💡 Sugerido (20%): C${calcSugerido(precioCompra, unidadesPorCaja)}</p>
-                      ) : (
-                        <p className="text-xs text-muted-foreground mt-1">Precio al vender la caja cerrada completa.</p>
-                      )}
+                      <p className="text-xs text-muted-foreground mt-1">Precio al vender la caja cerrada completa.</p>
                     </div>
                   </div>
                 </div>
