@@ -13,6 +13,7 @@ import * as XLSX from "xlsx"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useCurrentUser } from "@/app/hooks/useCurrentUser"
 import { ScannerModal } from "@/components/scanner-modal"
+import { useBarcodeScanner } from "@/hooks/useBarcodeScanner"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
@@ -138,6 +139,26 @@ export default function ProductosPage() {
   const [editLoteCodigo, setEditLoteCodigo] = useState("")
   const [editLoteVencimiento, setEditLoteVencimiento] = useState("")
   const [editLoteLoading, setEditLoteLoading] = useState(false)
+
+  // Hook para lector de códigos de barras físico
+  useBarcodeScanner(
+    (code) => {
+      if (showForm) {
+        setCodigoBarras(code)
+        toast.success(`Código de barras escaneado: ${code}`)
+      } else {
+        setSearch(code)
+        const match = productos.find(p => p.codigoBarras && p.codigoBarras.trim() === code.trim())
+        if (match) {
+          handleOpenDetails(match)
+          toast.success(`Producto encontrado: ${match.nombre}`)
+        } else {
+          toast.info(`Código escaneado: ${code} (No se encontró en catálogo)`)
+        }
+      }
+    },
+    !scannerOpen && !showAjusteModal && !showCategoryModal && !showDetailsModal && !showEditLoteModal
+  )
 
   const handleOpenEditLote = (lote: any) => {
     setEditLoteId(lote.id)
@@ -303,7 +324,12 @@ export default function ProductosPage() {
   const filteredProductos = allProducts
     .filter((p) => {
       // Text search
-      if (search && !p.nombre.toLowerCase().includes(search.toLowerCase())) return false
+      if (search) {
+        const query = search.toLowerCase()
+        const matchesNombre = p.nombre.toLowerCase().includes(query)
+        const matchesBarcode = p.codigoBarras && p.codigoBarras.toLowerCase().includes(query)
+        if (!matchesNombre && !matchesBarcode) return false
+      }
       // Category filter
       if (filterCategoria && p.categoria.nombre !== filterCategoria) return false
       // Tab filter
@@ -967,7 +993,18 @@ export default function ProductosPage() {
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-foreground/80 mb-1">Código de Barras</label>
                       <div className="flex gap-2">
-                        <Input value={codigoBarras} onChange={(e) => setCodigoBarras(e.target.value)} placeholder="Ej: 7441001123456" className="bg-background border-border text-foreground" />
+                        <Input
+                          value={codigoBarras}
+                          onChange={(e) => setCodigoBarras(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault()
+                              toast.success("Código de barras capturado")
+                            }
+                          }}
+                          placeholder="Ej: 7441001123456"
+                          className="bg-background border-border text-foreground"
+                        />
                         <Button
                           type="button"
                           variant="outline"
@@ -1239,6 +1276,19 @@ export default function ProductosPage() {
                   placeholder="Buscar producto por nombre..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      const searchTrimmed = search.trim()
+                      if (searchTrimmed) {
+                        const match = productos.find(p => p.codigoBarras && p.codigoBarras.trim() === searchTrimmed)
+                        if (match) {
+                          handleOpenDetails(match)
+                          toast.success(`Producto encontrado: ${match.nombre}`)
+                        }
+                      }
+                    }
+                  }}
                   className="pl-10 bg-muted/30 border-border w-full"
                 />
               </div>

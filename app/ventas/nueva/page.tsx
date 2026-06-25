@@ -29,6 +29,7 @@ interface Lote {
 interface Producto {
   id: number
   nombre: string
+  codigoBarras?: string | null
   precioVenta: string
   precioBlister?: string | null
   precioCaja?: string | null
@@ -211,7 +212,8 @@ export default function NuevaVentaPage() {
   }, [])
 
   const filteredProductos = productos.filter(p =>
-    p.nombre.toLowerCase().includes(productoSearch.toLowerCase())
+    p.nombre.toLowerCase().includes(productoSearch.toLowerCase()) ||
+    (p.codigoBarras && p.codigoBarras.toLowerCase().includes(productoSearch.toLowerCase()))
   )
 
   const filteredClientes = clientes.filter(c =>
@@ -499,6 +501,31 @@ export default function NuevaVentaPage() {
                           placeholder="Buscar por nombre o escanear código de barras..."
                           className={`${selectClass} pl-10`}
                           autoComplete="off"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault()
+                              const searchTrimmed = productoSearch.trim()
+                              if (searchTrimmed) {
+                                const match = productos.find(
+                                  p =>
+                                    (p.codigoBarras && p.codigoBarras.trim() === searchTrimmed) ||
+                                    p.nombre.toLowerCase() === searchTrimmed.toLowerCase()
+                                )
+                                if (match) {
+                                  setSelectedProducto(match)
+                                  const defaultUnit = match.precioVenta && Number(match.precioVenta) > 0 ? "UNIDAD" : (match.precioBlister && Number(match.precioBlister) > 0 ? "BLISTER" : "CAJA")
+                                  setTipoUnidad(defaultUnit)
+                                  setProductoSearch("")
+                                  setShowProductoDropdown(false)
+                                  toast.success(`✓ Producto: ${match.nombre}`)
+                                } else {
+                                  handleScanCode(searchTrimmed)
+                                  setProductoSearch("")
+                                  setShowProductoDropdown(false)
+                                }
+                              }
+                            }
+                          }}
                         />
                       </div>
                     )}
@@ -700,6 +727,28 @@ export default function NuevaVentaPage() {
                           placeholder="Buscar por nombre o cédula..."
                           className={`${selectClass} pl-10`}
                           autoComplete="off"
+                          onKeyDown={async (e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault()
+                              const searchTrimmed = clienteSearch.trim()
+                              if (searchTrimmed) {
+                                const exactMatch = clientes.find(
+                                  c => c.cedula && c.cedula.replace(/-/g, "") === searchTrimmed.replace(/-/g, "")
+                                )
+                                if (exactMatch) {
+                                  setSelectedCliente(String(exactMatch.id))
+                                  setShowClienteDropdown(false)
+                                  setClienteSearch("")
+                                  setRucCliente(exactMatch.ruc || "")
+                                  toast.success(`✓ Cliente: ${exactMatch.nombreCompleto}`)
+                                } else {
+                                  await handleScanCode(searchTrimmed)
+                                  setClienteSearch("")
+                                  setShowClienteDropdown(false)
+                                }
+                              }
+                            }
+                          }}
                         />
                       </div>
                     )}

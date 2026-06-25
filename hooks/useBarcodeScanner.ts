@@ -19,10 +19,8 @@ export function useBarcodeScanner(
   minLength = 6
 ) {
   const bufferRef = useRef<string>("")
-  const lastKeyTimeRef = useRef<number>(0)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const MAX_INTERVAL_MS = 40   // Velocidad máxima entre teclas de escáner físico
   const RESET_TIMEOUT_MS = 250 // Si no hay input en 250ms, limpiar buffer
 
   const handleKeyDown = useCallback(
@@ -34,17 +32,6 @@ export function useBarcodeScanner(
         target.tagName === "TEXTAREA" ||
         target.tagName === "SELECT" ||
         target.isContentEditable
-
-      // Los escáneres físicos normalmente no tienen un input enfocado,
-      // pero si lo tienen, seguimos escuchando para Enter (confirm scan)
-      const now = Date.now()
-      const interval = now - lastKeyTimeRef.current
-      lastKeyTimeRef.current = now
-
-      // Si el intervalo es mayor al máximo, es escritura humana — resetear buffer
-      if (interval > MAX_INTERVAL_MS * 3 && bufferRef.current.length > 0) {
-        bufferRef.current = ""
-      }
 
       // Limpiar timer de reset
       if (timerRef.current) {
@@ -63,20 +50,14 @@ export function useBarcodeScanner(
         return
       }
 
-      // Solo capturar si el intervalo sugiere escáner físico (rápido)
-      // o si no hay input enfocado
+      // Capturar la tecla si no hay un elemento de input enfocado
       if (!isInputFocused) {
         if (e.key.length === 1) {
-          // Solo acumular si el intervalo es rápido (escáner) o buffer ya tiene contenido rápido
-          if (interval <= MAX_INTERVAL_MS || bufferRef.current.length === 0) {
-            bufferRef.current += e.key
-          } else if (bufferRef.current.length > 0 && interval <= MAX_INTERVAL_MS * 2) {
-            bufferRef.current += e.key
-          }
+          bufferRef.current += e.key
         }
       }
 
-      // Auto-reset si no hay más input
+      // Auto-reset si no hay más input en el tiempo de espera
       timerRef.current = setTimeout(() => {
         bufferRef.current = ""
       }, RESET_TIMEOUT_MS)
