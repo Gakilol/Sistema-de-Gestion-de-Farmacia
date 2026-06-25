@@ -478,7 +478,7 @@ export default function NuevaVentaPage() {
                       <div className="flex items-center gap-2 p-2.5 rounded-lg bg-muted/30 border border-primary/40 text-foreground text-sm">
                         <div className="flex-1 min-w-0">
                           <span className="font-medium">{selectedProducto.nombre}</span>
-                          <span className="text-xs text-muted-foreground ml-2">Stock: {selectedProducto.stockActual} uds</span>
+                          <span className="text-xs text-muted-foreground ml-2">Stock: {selectedProducto.stockActual} und</span>
                         </div>
                         <button
                           type="button"
@@ -508,7 +508,7 @@ export default function NuevaVentaPage() {
                           <div className="px-4 py-3 text-sm text-muted-foreground text-center">No se encontraron productos</div>
                         ) : (
                           filteredProductos.map((p) => {
-                            let stockDisplay = `${p.stockActual} uds`
+                            let stockDisplay = `${p.stockActual} und`
                             const parts = []
                             if (p.unidadesPorCaja && p.unidadesPorCaja > 0) {
                               parts.push(`${Math.floor(p.stockActual / p.unidadesPorCaja)} cajas`)

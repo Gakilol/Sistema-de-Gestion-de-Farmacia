@@ -10,6 +10,7 @@ import { Plus, Edit2, Trash2, Users, Search, Heart } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
 import { clienteSchema } from "@/lib/validations"
+import { useCurrentUser } from "@/app/hooks/useCurrentUser"
 
 interface Cliente {
   id: number
@@ -23,6 +24,9 @@ interface Cliente {
 }
 
 export default function ClientesPage() {
+  const { user: currentUser } = useCurrentUser()
+  const isAuthorized = currentUser?.rolNombre === "ADMIN" || currentUser?.rolNombre === "DOCTOR"
+
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
@@ -287,7 +291,7 @@ export default function ClientesPage() {
                           <div className="flex gap-1">
                             <Button size="sm" variant="ghost" onClick={() => handleEdit(cliente)} className="text-muted-foreground hover:text-foreground" title="Editar"><Edit2 className="w-4 h-4" /></Button>
                             
-                            {cliente.tipoPerfil === "FARMACIA" && (
+                            {cliente.tipoPerfil === "FARMACIA" && isAuthorized && (
                               <Button
                                 size="sm"
                                 variant="ghost"

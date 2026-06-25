@@ -284,7 +284,7 @@ export default function InventarioPage() {
     }
     const loteObj = devLotes.find(l => l.id === parseInt(selectedLoteId))
     if (loteObj && cant > loteObj.stockActual) {
-      toast.error(`La cantidad no puede superar el stock actual del lote (${loteObj.stockActual} uds)`)
+      toast.error(`La cantidad no puede superar el stock actual del lote (${loteObj.stockActual} und)`)
       return
     }
 
@@ -822,7 +822,7 @@ export default function InventarioPage() {
                               <p className="text-xs text-muted-foreground font-mono mt-0.5">Lote: {lote.codigoLote} — Venció el: {formatDate(lote.fechaVencimiento)}</p>
                             </div>
                             <div className="text-right">
-                              <p className="text-sm font-bold text-red-500">{lote.stockActual} uds</p>
+                              <p className="text-sm font-bold text-red-500">{lote.stockActual} und</p>
                               <p className="text-[10px] text-muted-foreground uppercase font-semibold">retener inmediatamente</p>
                             </div>
                           </div>
@@ -856,7 +856,7 @@ export default function InventarioPage() {
                               </div>
                               <div className="text-right">
                                 <p className={`text-sm font-bold ${isCrit ? "text-red-500" : isWarn ? "text-amber-500" : "text-foreground"}`}>{lote.diasRestantes} días</p>
-                                <p className="text-xs text-muted-foreground">{lote.stockActual} uds</p>
+                                <p className="text-xs text-muted-foreground">{lote.stockActual} und</p>
                               </div>
                             </div>
                           )
@@ -984,7 +984,7 @@ export default function InventarioPage() {
                                 <span className="px-2 py-0.5 rounded bg-muted/40 text-xs font-mono text-foreground">{dev.lote.codigoLote}</span>
                               </td>
                               <td className="px-4 py-3 text-xs text-muted-foreground">{dev.proveedor?.nombre || "—"}</td>
-                              <td className="px-4 py-3 text-sm text-foreground font-semibold">{dev.cantidad} uds</td>
+                              <td className="px-4 py-3 text-sm text-foreground font-semibold">{dev.cantidad} und</td>
                               <td className="px-4 py-3 text-xs">
                                 <span className="px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-500 font-bold border border-orange-500/20">{dev.motivo}</span>
                               </td>
@@ -1077,7 +1077,7 @@ export default function InventarioPage() {
                   <option value="">Selecciona un lote...</option>
                   {devLotes.map(l => (
                     <option key={l.id} value={l.id}>
-                      {l.codigoLote} (Disponible: {l.stockActual} uds {l.fechaVencimiento ? `| Vence: ${formatDate(l.fechaVencimiento)}` : ""})
+                      {l.codigoLote} (Disponible: {l.stockActual} und {l.fechaVencimiento ? `| Vence: ${formatDate(l.fechaVencimiento)}` : ""})
                     </option>
                   ))}
                 </select>

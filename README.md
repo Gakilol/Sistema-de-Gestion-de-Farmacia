@@ -218,6 +218,41 @@ NEXT_PUBLIC_APP_URL="http://localhost:3000"
 
 ---
 
+## 💾 Respaldos y Restauración Local de la Base de Datos
+
+El sistema incluye herramientas automatizadas en Node.js y scripts en PowerShell para el respaldo y restauración de la base de datos en entornos de producción o desarrollo local.
+
+### 1. Respaldo por Consola (Node.js)
+Para generar un respaldo de la base de datos configurada en tu archivo `.env` en un archivo SQL plano (con sentencias `DROP TABLE IF EXISTS` para máxima compatibilidad):
+```bash
+npm run db:backup
+```
+El archivo se generará en el directorio [backups/](file:///c:/Users/Gaki/Documents/podocare-system-master/Sistema%20de%20Gestion%20de%20Farmacia/backups) con el formato `backup_YYYY-MM-DD_HH-mm.sql`.
+
+### 2. Respaldos y Restauración Avanzada (PowerShell)
+Se incluye un script unificado en [scripts/backup_db.ps1](file:///c:/Users/Gaki/Documents/podocare-system-master/Sistema%20de%20Gestion%20de%20Farmacia/scripts/backup_db.ps1) que utiliza los binarios oficiales de PostgreSQL (`pg_dump` y `pg_restore`) en formato custom comprimido:
+
+* **Realizar un Respaldo:**
+  ```powershell
+  powershell -File scripts/backup_db.ps1 -Action backup -BackupDir "C:\farmacia\backups"
+  ```
+  Esto creará un archivo `.dump` en la ruta especificada y limpiará de forma automática los archivos con antigüedad mayor a 30 días.
+
+* **Restaurar un Respaldo:**
+  > [!WARNING]
+  > La restauración reemplazará por completo los datos actuales en el servidor de destino. Asegúrate de respaldar antes de continuar.
+  ```powershell
+  powershell -File scripts/backup_db.ps1 -Action restore -BackupFile "C:\farmacia\backups\respaldo_farmacia_XYZ.dump"
+  ```
+
+### 3. Restauración de Respaldos SQL Planos
+Si tienes un archivo de respaldo en formato `.sql` (por ejemplo, los de la carpeta `backups/`), puedes restaurarlo utilizando la herramienta interactiva `psql`:
+```bash
+psql -d "TU_DATABASE_URL" -f "backups/backup_YYYY-MM-DD_HH-mm.sql"
+```
+
+---
+
 ## 🔒 Auditoría de Seguridad Aplicada
 * **Prevención de SQL Injections**: Parametrización nativa en todas las consultas del ORM Prisma.
 * **Cifrado de Contraseñas**: Hash `bcrypt` con factor de coste de 10 rondas.

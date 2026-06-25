@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth"
 import bcrypt from "bcryptjs"
 import { usuarioSchema } from "@/lib/validations"
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser()
     if (!user) {
@@ -20,7 +20,34 @@ export async function GET() {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
+    const { searchParams } = new URL(request.url)
+    const idRol = searchParams.get("idRol")
+    const estado = searchParams.get("estado") ?? "todos" // todos, activos, inactivos
+    const search = searchParams.get("search")
+
+    const where: any = {
+      eliminadoEn: null // Solo usuarios no eliminados lógicamente
+    }
+
+    if (idRol) {
+      where.idRol = Number.parseInt(idRol)
+    }
+
+    if (estado === "activos") {
+      where.activo = true
+    } else if (estado === "inactivos") {
+      where.activo = false
+    }
+
+    if (search && search.trim() !== "") {
+      where.OR = [
+        { nombreCompleto: { contains: search, mode: "insensitive" } },
+        { correo: { contains: search, mode: "insensitive" } }
+      ]
+    }
+
     const usuarios = await prisma.usuario.findMany({
+      where,
       include: { rol: true },
       orderBy: { nombreCompleto: "asc" },
     })
@@ -30,6 +57,7 @@ export async function GET() {
         id: u.id,
         nombreCompleto: u.nombreCompleto,
         correo: u.correo,
+        idRol: u.idRol,
         rolNombre: u.rol.nombre,
         activo: u.activo,
         createdAt: u.createdAt,

@@ -196,10 +196,10 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       }
     }
 
-    // Perform logical delete: set activo to false
+    // Perform logical delete: set activo to false and record when it was deleted
     const usuarioEliminado = await prisma.usuario.update({
       where: { id: targetId },
-      data: { activo: false }
+      data: { activo: false, eliminadoEn: new Date() }
     })
 
     registrarLog({

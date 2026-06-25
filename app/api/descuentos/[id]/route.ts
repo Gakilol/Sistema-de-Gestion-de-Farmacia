@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth"
 import { descuentoSchema } from "@/lib/validations"
 import { registrarLog } from "@/lib/audit"
 
+// GET /api/descuentos/[id]
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await getCurrentUser()
@@ -15,7 +16,10 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     const descuento = await prisma.descuento.findUnique({
       where: { id: Number.parseInt(id) },
       include: {
-        usuario: { select: { id: true, nombreCompleto: true } }
+        usuario: { select: { id: true, nombreCompleto: true } },
+        productos: { select: { idProducto: true } },
+        categorias: { select: { idCategoria: true } },
+        clientes: { select: { idCliente: true } }
       }
     })
 
@@ -23,13 +27,22 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: "Descuento no encontrado" }, { status: 404 })
     }
 
-    return NextResponse.json(descuento)
+    // Adaptar para el frontend (devolver IDs como arreglos planos)
+    const formatted = {
+      ...descuento,
+      productosIds: descuento.productos.map(p => p.idProducto),
+      categoriasIds: descuento.categorias.map(c => c.idCategoria),
+      clientesIds: descuento.clientes.map(c => c.idCliente),
+    }
+
+    return NextResponse.json(formatted)
   } catch (error) {
     console.error("Error fetching descuento:", error)
     return NextResponse.json({ error: "Error fetching descuento" }, { status: 500 })
   }
 }
 
+// PUT /api/descuentos/[id] (ADMIN)
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await getCurrentUser()
@@ -58,38 +71,80 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       )
     }
 
-    const { tipo, valor, motivo, fechaInicio, fechaFin, montoMinimo, maxDescuento, esAcumulable, estado } = validation.data
+    const data = validation.data
 
-    const descuento = await prisma.descuento.update({
-      where: { id: discountId },
-      data: {
-        tipo,
-        valor,
-        motivo,
-        fechaInicio: fechaInicio ? new Date(fechaInicio) : null,
-        fechaFin: fechaFin ? new Date(fechaFin) : null,
-        montoMinimo,
-        maxDescuento,
-        esAcumulable: esAcumulable ?? false,
-        estado: estado ?? "ACTIVO",
-      },
+    const descuentoActualizado = await prisma.$transaction(async (tx) => {
+      // 1. Limpiar relaciones previas
+      await tx.descuentoProducto.deleteMany({ where: { idDescuento: discountId } })
+      await tx.descuentoCategoria.deleteMany({ where: { idDescuento: discountId } })
+      await tx.descuentoCliente.deleteMany({ where: { idDescuento: discountId } })
+
+      // 2. Actualizar descuento principal
+      const desc = await tx.descuento.update({
+        where: { id: discountId },
+        data: {
+          nombre: data.nombre,
+          descripcion: data.descripcion,
+          tipoAplicacion: data.tipoAplicacion,
+          tipoValor: data.tipoValor,
+          tipo: data.tipoValor === "PORCENTAJE" ? "PORCENTAJE" : "MONTO", // compatibility
+          valor: data.valor,
+          motivo: data.nombre, // compatibility
+          fechaInicio: data.fechaInicio ? new Date(data.fechaInicio) : null,
+          fechaFin: data.fechaFin ? new Date(data.fechaFin) : null,
+          montoMinimoCompra: data.montoMinimoCompra,
+          montoMinimo: data.montoMinimoCompra, // compatibility
+          cantidadMinima: data.cantidadMinima,
+          limiteUso: data.limiteUso,
+          esAcumulable: data.esAcumulable ?? false,
+          activo: data.activo ?? true,
+          estado: (data.activo ?? true) ? "ACTIVO" : "INACTIVO", // compatibility
+        },
+      })
+
+      // 3. Re-asociar según tipo de aplicación
+      if (data.tipoAplicacion === "PRODUCTO" && data.productosIds && data.productosIds.length > 0) {
+        await tx.descuentoProducto.createMany({
+          data: data.productosIds.map(prodId => ({
+            idDescuento: desc.id,
+            idProducto: prodId
+          }))
+        })
+      } else if (data.tipoAplicacion === "CATEGORIA" && data.categoriasIds && data.categoriasIds.length > 0) {
+        await tx.descuentoCategoria.createMany({
+          data: data.categoriasIds.map(catId => ({
+            idDescuento: desc.id,
+            idCategoria: catId
+          }))
+        })
+      } else if (data.tipoAplicacion === "CLIENTE" && data.clientesIds && data.clientesIds.length > 0) {
+        await tx.descuentoCliente.createMany({
+          data: data.clientesIds.map(cliId => ({
+            idDescuento: desc.id,
+            idCliente: cliId
+          }))
+        })
+      }
+
+      return desc
     })
 
     registrarLog({
       accion: "ACTUALIZAR_DESCUENTO",
       entidad: "Descuento",
-      entidadId: descuento.id,
+      entidadId: descuentoActualizado.id,
       idUsuario: user.id,
-      detalles: { motivo: descuento.motivo, valor: Number(descuento.valor), tipo: descuento.tipo }
+      detalles: { nombre: descuentoActualizado.nombre, valor: Number(descuentoActualizado.valor), tipoAplicacion: descuentoActualizado.tipoAplicacion }
     })
 
-    return NextResponse.json(descuento)
+    return NextResponse.json(descuentoActualizado)
   } catch (error) {
     console.error("Error updating descuento:", error)
     return NextResponse.json({ error: "Error al actualizar el descuento" }, { status: 500 })
   }
 }
 
+// PATCH /api/descuentos/[id] (ADMIN)
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await getCurrentUser()
@@ -108,23 +163,26 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const { id } = await params
     const discountId = Number.parseInt(id)
-    const { estado } = await request.json()
+    const { activo } = await request.json()
 
-    if (estado !== "ACTIVO" && estado !== "INACTIVO") {
-      return NextResponse.json({ error: "Estado de descuento inválido" }, { status: 400 })
+    if (activo === undefined) {
+      return NextResponse.json({ error: "El campo activo es requerido" }, { status: 400 })
     }
 
     const descuento = await prisma.descuento.update({
       where: { id: discountId },
-      data: { estado },
+      data: {
+        activo: Boolean(activo),
+        estado: Boolean(activo) ? "ACTIVO" : "INACTIVO" // compatibility
+      },
     })
 
     registrarLog({
-      accion: estado === "ACTIVO" ? "ACTIVAR_DESCUENTO" : "DESACTIVAR_DESCUENTO",
+      accion: descuento.activo ? "ACTIVAR_DESCUENTO" : "DESACTIVAR_DESCUENTO",
       entidad: "Descuento",
       entidadId: descuento.id,
       idUsuario: user.id,
-      detalles: { motivo: descuento.motivo, estado }
+      detalles: { nombre: descuento.nombre, activo: descuento.activo }
     })
 
     return NextResponse.json(descuento)
@@ -134,7 +192,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+// DELETE /api/descuentos/[id] (ADMIN)
+export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await getCurrentUser()
     if (!user) {
@@ -167,17 +226,20 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     }
 
     if (count > 0) {
-      // Perform logical delete: set status to INACTIVO
+      // Perform logical delete
       await prisma.descuento.update({
         where: { id: discountId },
-        data: { estado: "INACTIVO" }
+        data: {
+          activo: false,
+          estado: "INACTIVO"
+        }
       })
       registrarLog({
         accion: "DESACTIVAR_DESCUENTO_POR_DELETE",
         entidad: "Descuento",
         entidadId: discountId,
         idUsuario: user.id,
-        detalles: { motivo: descuento.motivo, nota: "Desactivado lógicamente por tener ventas asociadas" }
+        detalles: { nombre: descuento.nombre, nota: "Desactivado lógicamente por tener ventas asociadas" }
       })
       return NextResponse.json({ success: true, message: "Descuento desactivado por tener historial" })
     }
@@ -192,7 +254,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       entidad: "Descuento",
       entidadId: discountId,
       idUsuario: user.id,
-      detalles: { motivo: descuento.motivo }
+      detalles: { nombre: descuento.nombre }
     })
 
     return NextResponse.json({ success: true, message: "Descuento eliminado exitosamente" })

@@ -227,18 +227,18 @@ export default function ComprasPage() {
                           <tr key={p.id} className="hover:bg-muted/10 transition-colors">
                             <td className="px-5 py-3 font-medium text-foreground">{p.nombre}</td>
                             <td className="px-5 py-3">
-                              <span className="px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 text-xs font-bold">{p.stockActual} uds</span>
+                              <span className="px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 text-xs font-bold">{p.stockActual} und</span>
                             </td>
-                            <td className="px-5 py-3 text-muted-foreground text-xs">{p.stockMinimo} uds</td>
+                            <td className="px-5 py-3 text-muted-foreground text-xs">{p.stockMinimo} und</td>
                             <td className="px-5 py-3">
                               <span className="flex items-center gap-1 text-xs text-orange-400 font-medium">
                                 <TrendingDown className="w-3 h-3" />
-                                {p.stockMinimo - p.stockActual} uds
+                                {p.stockMinimo - p.stockActual} und
                               </span>
                             </td>
                             <td className="px-5 py-3">
                               <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-bold border border-primary/20">
-                                +{p.cantidadOptima} uds
+                                +{p.cantidadOptima} und
                               </span>
                             </td>
                           </tr>
@@ -347,7 +347,7 @@ export default function ComprasPage() {
                           </div>
                           <div>
                             <label className="block text-xs font-medium text-muted-foreground mb-1">Cantidad <span className="text-red-500">*</span></label>
-                            <Input type="number" min={1} value={d.cantidad} onChange={e => handleDetalleChange(i, "cantidad", e.target.value)} placeholder="Uds" className="bg-muted/30 border-border" />
+                            <Input type="number" min={1} value={d.cantidad} onChange={e => handleDetalleChange(i, "cantidad", e.target.value)} placeholder="Und" className="bg-muted/30 border-border" />
                           </div>
                           <div>
                             <label className="block text-xs font-medium text-muted-foreground mb-1">Costo Unitario <span className="text-red-500">*</span></label>

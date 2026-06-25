@@ -7,6 +7,10 @@ interface RegistrarLogParams {
   idUsuario?: number | null
   detalles?: Record<string, any>
   modulo?: string
+  datosAnteriores?: any
+  datosNuevos?: any
+  ip?: string | null
+  motivo?: string | null
 }
 
 /**
@@ -15,7 +19,18 @@ interface RegistrarLogParams {
  * de errores para no interferir con el flujo principal de la aplicación.
  */
 export function registrarLog(params: RegistrarLogParams): void {
-  const { accion, entidad, entidadId, idUsuario, detalles, modulo = "FARMACIA" } = params
+  const {
+    accion,
+    entidad,
+    entidadId,
+    idUsuario,
+    detalles,
+    modulo = "FARMACIA",
+    datosAnteriores = null,
+    datosNuevos = null,
+    ip = null,
+    motivo = null
+  } = params
 
   // Fire-and-forget: no hacemos await para no bloquear la respuesta HTTP
   prisma.auditoriaLog
@@ -27,6 +42,10 @@ export function registrarLog(params: RegistrarLogParams): void {
         idUsuario: idUsuario ?? null,
         detalles: detalles ? JSON.stringify(detalles) : null,
         modulo,
+        datosAnteriores: datosAnteriores ?? undefined,
+        datosNuevos: datosNuevos ?? undefined,
+        ip,
+        motivo,
       },
     })
     .catch((err) => {

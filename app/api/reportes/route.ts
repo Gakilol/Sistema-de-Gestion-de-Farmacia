@@ -371,12 +371,20 @@ export async function GET(request: NextRequest) {
           }
         }
         const netTotal = Number(s.total)
+        const descuentoGeneral = Number(s.descuentoTotal || 0)
+        const descuentoLineas = s.detalles.reduce((sum, d) => sum + Number(d.descuentoLinea || 0), 0)
+        const totalDescuento = descuentoGeneral + descuentoLineas
+        const totalBruto = netTotal + totalDescuento
         const grossProfit = netTotal - saleCogs
         const margenPct = netTotal > 0 ? (grossProfit / netTotal) * 100 : 0
         return {
           id: s.id,
           fecha: s.fecha,
           cliente: s.cliente?.nombreCompleto || "Público General",
+          totalBruto,
+          descuentoLineas,
+          descuentoGeneral,
+          totalDescuento,
           total: netTotal,
           cogs: saleCogs,
           utilidad: grossProfit,
@@ -384,6 +392,10 @@ export async function GET(request: NextRequest) {
         }
       })
 
+      const totalVentasBrutas = reportData.reduce((sum, item) => sum + item.totalBruto, 0)
+      const totalDescuentosLineas = reportData.reduce((sum, item) => sum + item.descuentoLineas, 0)
+      const totalDescuentosGenerales = reportData.reduce((sum, item) => sum + item.descuentoGeneral, 0)
+      const totalDescuentos = reportData.reduce((sum, item) => sum + item.totalDescuento, 0)
       const totalVentas = reportData.reduce((sum, item) => sum + item.total, 0)
       const totalCogs = reportData.reduce((sum, item) => sum + item.cogs, 0)
       const totalUtilidad = totalVentas - totalCogs
@@ -392,6 +404,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         ventas: reportData,
         resumen: {
+          totalVentasBrutas,
+          totalDescuentosLineas,
+          totalDescuentosGenerales,
+          totalDescuentos,
           totalVentas,
           totalCogs,
           totalUtilidad,
@@ -415,9 +431,19 @@ export async function GET(request: NextRequest) {
           },
           lotes: {
             include: { lote: true }
-          }
+          },
+          venta: true
         }
       })
+
+      // Group details by idVenta to calculate sale's sum of det.subtotal (ventaSubtotal)
+      const saleSubtotalMap: Record<number, number> = {}
+      for (const d of details) {
+        if (!saleSubtotalMap[d.idVenta]) {
+          saleSubtotalMap[d.idVenta] = 0
+        }
+        saleSubtotalMap[d.idVenta] += Number(d.subtotal)
+      }
 
       const productMap: Record<number, {
         id: number
@@ -425,6 +451,9 @@ export async function GET(request: NextRequest) {
         categoria: string
         laboratorio: string
         cantidadVendida: number
+        ingresosBrutos: number
+        descuentoLinea: number
+        descuentoGeneralProrrateado: number
         ingresosTotales: number
         cogs: number
         utilidad: number
@@ -441,6 +470,9 @@ export async function GET(request: NextRequest) {
             categoria: d.producto.categoria?.nombre || "Sin Categoría",
             laboratorio: d.producto.laboratorioRef?.nombre || d.producto.laboratorio || "Sin Laboratorio",
             cantidadVendida: 0,
+            ingresosBrutos: 0,
+            descuentoLinea: 0,
+            descuentoGeneralProrrateado: 0,
             ingresosTotales: 0,
             cogs: 0,
             utilidad: 0,
@@ -448,9 +480,17 @@ export async function GET(request: NextRequest) {
           }
         }
 
+        const ventaSubtotal = saleSubtotalMap[d.idVenta] || 0
+        const generalDiscount = Number(d.venta?.descuentoTotal || 0)
+        const proportionalGeneralDiscount = ventaSubtotal > 0 
+          ? (Number(d.subtotal) / ventaSubtotal) * generalDiscount 
+          : 0
+
         const entry = productMap[pid]
         entry.cantidadVendida += d.cantidad
-        entry.ingresosTotales += Number(d.subtotal)
+        entry.ingresosBrutos += Number(d.precioUnitario) * d.cantidad
+        entry.descuentoLinea += Number(d.descuentoLinea || 0)
+        entry.descuentoGeneralProrrateado += proportionalGeneralDiscount
 
         let lineCogs = 0
         for (const detLote of d.lotes) {
@@ -460,10 +500,12 @@ export async function GET(request: NextRequest) {
       }
 
       const list = Object.values(productMap).map(item => {
-        const utilidad = item.ingresosTotales - item.cogs
-        const margenPct = item.ingresosTotales > 0 ? (utilidad / item.ingresosTotales) * 100 : 0
+        const ingresosTotales = item.ingresosBrutos - item.descuentoLinea - item.descuentoGeneralProrrateado
+        const utilidad = ingresosTotales - item.cogs
+        const margenPct = ingresosTotales > 0 ? (utilidad / ingresosTotales) * 100 : 0
         return {
           ...item,
+          ingresosTotales,
           utilidad,
           margenPct
         }

@@ -14,6 +14,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       where: { id: idProducto },
       include: { 
         categoria: true,
+        formaFarmaceutica: true,
         lotes: {
           orderBy: { fechaVencimiento: "asc" },
         },
@@ -159,6 +160,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         laboratorio: emptyToNull(data.laboratorio),
         concentracion: emptyToNull(data.concentracion),
         formaPresentacion: emptyToNull(data.formaPresentacion),
+        idFormaFarmaceutica: data.idFormaFarmaceutica,
         unidadMedida: emptyToNull(data.unidadMedida),
         precioCompra: data.precioCompra || 0,
         precioVenta: data.precioVenta,

@@ -74,6 +74,10 @@ interface UtilidadBrutaVenta {
   id: number
   fecha: string
   cliente: string
+  totalBruto: number
+  descuentoLineas: number
+  descuentoGeneral: number
+  totalDescuento: number
   total: number
   cogs: number
   utilidad: number
@@ -81,6 +85,10 @@ interface UtilidadBrutaVenta {
 }
 
 interface UtilidadBrutaResumen {
+  totalVentasBrutas: number
+  totalDescuentosLineas: number
+  totalDescuentosGenerales: number
+  totalDescuentos: number
   totalVentas: number
   totalCogs: number
   totalUtilidad: number
@@ -93,6 +101,9 @@ interface UtilidadPorProductoItem {
   categoria: string
   laboratorio: string
   cantidadVendida: number
+  ingresosBrutos: number
+  descuentoLinea: number
+  descuentoGeneralProrrateado: number
   ingresosTotales: number
   cogs: number
   utilidad: number
@@ -210,11 +221,15 @@ export default function ReportesPage() {
 
       // Sheet 2: Utilidad Bruta Detalle
       if (utilidadBruta && utilidadBruta.ventas.length > 0) {
-        const wsUtilBruta = XLSX.utils.json_to_sheet(utilidadBruta.ventas.map(v => ({
+        const wsUtilBruta = XLSX.utils.json_to_sheet(utilidadBruta.ventas.map((v: any) => ({
           Venta_ID: v.id,
           Fecha: new Date(v.fecha).toLocaleDateString("es-NI"),
           Cliente: v.cliente,
-          Total_Facturado: `C$${v.total.toFixed(2)}`,
+          Total_Bruto: `C$${v.totalBruto.toFixed(2)}`,
+          Descuento_Linea: `C$${v.descuentoLineas.toFixed(2)}`,
+          Descuento_General: `C$${v.descuentoGeneral.toFixed(2)}`,
+          Total_Descuento: `C$${v.totalDescuento.toFixed(2)}`,
+          Total_Neto: `C$${v.total.toFixed(2)}`,
           Costo_Ventas_COGS: `C$${v.cogs.toFixed(2)}`,
           Utilidad_Bruta: `C$${v.utilidad.toFixed(2)}`,
           Margen: `${v.margenPct.toFixed(1)}%`
@@ -224,12 +239,15 @@ export default function ReportesPage() {
 
       // Sheet 3: Utilidad Por Producto Rentabilidad
       if (utilidadPorProducto.length > 0) {
-        const wsUtilProd = XLSX.utils.json_to_sheet(utilidadPorProducto.map(p => ({
+        const wsUtilProd = XLSX.utils.json_to_sheet(utilidadPorProducto.map((p: any) => ({
           Producto: p.nombre,
           Laboratorio: p.laboratorio,
           Categoría: p.categoria,
           Cantidad_Vendida: p.cantidadVendida,
-          Ingresos_Totales: `C$${p.ingresosTotales.toFixed(2)}`,
+          Ingresos_Brutos: `C$${p.ingresosBrutos.toFixed(2)}`,
+          Descuento_Linea: `C$${p.descuentoLinea.toFixed(2)}`,
+          Descuento_General_Prorrateado: `C$${p.descuentoGeneralProrrateado.toFixed(2)}`,
+          Ingresos_Netos: `C$${p.ingresosTotales.toFixed(2)}`,
           Costo_Compra: `C$${p.cogs.toFixed(2)}`,
           Utilidad_Bruta: `C$${p.utilidad.toFixed(2)}`,
           Margen: `${p.margenPct.toFixed(1)}%`
@@ -316,11 +334,15 @@ export default function ReportesPage() {
       } else if (activeTab === "utilidad-bruta") {
         if (!utilidadBruta) return
         csvContent = [
-          ["ID Venta", "Fecha", "Cliente", "Total Facturado", "Costo Ventas COGS", "Utilidad Bruta", "Margen %"],
-          ...utilidadBruta.ventas.map(v => [
+          ["ID Venta", "Fecha", "Cliente", "Total Bruto", "Descuento Linea", "Descuento General", "Total Descuento", "Total Neto", "Costo Ventas COGS", "Utilidad Bruta", "Margen %"],
+          ...utilidadBruta.ventas.map((v: any) => [
             v.id,
             new Date(v.fecha).toLocaleDateString("es-NI"),
             `"${v.cliente.replace(/"/g, '""')}"`,
+            v.totalBruto.toFixed(2),
+            v.descuentoLineas.toFixed(2),
+            v.descuentoGeneral.toFixed(2),
+            v.totalDescuento.toFixed(2),
             v.total.toFixed(2),
             v.cogs.toFixed(2),
             v.utilidad.toFixed(2),
@@ -330,12 +352,15 @@ export default function ReportesPage() {
         filename = "Utilidad_Bruta"
       } else if (activeTab === "utilidad-por-producto") {
         csvContent = [
-          ["Producto", "Laboratorio", "Categoria", "Unidades Vendidas", "Ingresos Totales", "Costo Compra COGS", "Utilidad Bruta", "Margen %"],
-          ...utilidadPorProducto.map(p => [
+          ["Producto", "Laboratorio", "Categoria", "Unidades Vendidas", "Ingresos Brutos", "Descuento Linea", "Descuento General Prorrateado", "Ingresos Netos", "Costo Compra COGS", "Utilidad Bruta", "Margen %"],
+          ...utilidadPorProducto.map((p: any) => [
             `"${p.nombre.replace(/"/g, '""')}"`,
             `"${p.laboratorio.replace(/"/g, '""')}"`,
             `"${p.categoria.replace(/"/g, '""')}"`,
             p.cantidadVendida,
+            p.ingresosBrutos.toFixed(2),
+            p.descuentoLinea.toFixed(2),
+            p.descuentoGeneralProrrateado.toFixed(2),
             p.ingresosTotales.toFixed(2),
             p.cogs.toFixed(2),
             p.utilidad.toFixed(2),
@@ -711,9 +736,17 @@ export default function ReportesPage() {
                 <div className="space-y-6">
                   {/* Resumen de Utilidad */}
                   {utilidadBruta && (
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                       <Card className="glass-card p-4">
-                        <p className="text-xs font-medium text-muted-foreground mb-1">Ingresos del Rango</p>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Ingresos Brutos</p>
+                        <p className="text-xl font-bold text-foreground">C${utilidadBruta.resumen.totalVentasBrutas.toFixed(2)}</p>
+                      </Card>
+                      <Card className="glass-card p-4">
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Descuentos Totales</p>
+                        <p className="text-xl font-bold text-red-500">C${utilidadBruta.resumen.totalDescuentos.toFixed(2)}</p>
+                      </Card>
+                      <Card className="glass-card p-4">
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Ingresos Netos</p>
                         <p className="text-xl font-bold text-foreground">C${utilidadBruta.resumen.totalVentas.toFixed(2)}</p>
                       </Card>
                       <Card className="glass-card p-4">
@@ -722,11 +755,7 @@ export default function ReportesPage() {
                       </Card>
                       <Card className="glass-card p-4">
                         <p className="text-xs font-medium text-muted-foreground mb-1">Utilidad Bruta Acumulada</p>
-                        <p className="text-xl font-bold text-emerald-500">C${utilidadBruta.resumen.totalUtilidad.toFixed(2)}</p>
-                      </Card>
-                      <Card className="glass-card p-4">
-                        <p className="text-xs font-medium text-muted-foreground mb-1">Margen Comercial Promedio</p>
-                        <p className="text-xl font-bold text-primary">{utilidadBruta.resumen.margenPct.toFixed(1)}%</p>
+                        <p className="text-xl font-bold text-emerald-500">C${utilidadBruta.resumen.totalUtilidad.toFixed(2)} ({(utilidadBruta.resumen.margenPct || 0).toFixed(1)}%)</p>
                       </Card>
                     </div>
                   )}
@@ -736,30 +765,33 @@ export default function ReportesPage() {
                       <table className="w-full">
                         <thead className="bg-muted/30 border-b border-border">
                           <tr>
-                            {["Venta ID", "Fecha", "Cliente", "Total Facturado", "Costo de Venta (COGS)", "Utilidad Bruta", "Margen %"].map((h) => (
-                              <th key={h} className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">{h}</th>
+                            {["Venta ID", "Fecha", "Cliente", "Total Bruto", "Desc. Línea", "Desc. Gral", "Total Neto", "Costo (COGS)", "Utilidad Bruta", "Margen %"].map((h) => (
+                              <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">{h}</th>
                             ))}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
                           {!utilidadBruta || utilidadBruta.ventas.length === 0 ? (
                             <tr>
-                              <td colSpan={7} className="px-6 py-8 text-center text-muted-foreground text-sm">No hay registros de utilidad en este rango</td>
+                              <td colSpan={10} className="px-6 py-8 text-center text-muted-foreground text-sm">No hay registros de utilidad en este rango</td>
                             </tr>
                           ) : (
                             utilidadBruta.ventas
                               .filter(v => filterBySearch(String(v.id)) || filterBySearch(v.cliente))
                               .map((v) => (
                                 <tr key={v.id} className="hover:bg-muted/10 transition-colors">
-                                  <td className="px-6 py-4 text-sm font-semibold text-primary">#{v.id}</td>
-                                  <td className="px-6 py-4 text-sm text-muted-foreground">
+                                  <td className="px-4 py-3 text-sm font-semibold text-primary">#{v.id}</td>
+                                  <td className="px-4 py-3 text-sm text-muted-foreground">
                                     {new Date(v.fecha).toLocaleDateString("es-NI")}
                                   </td>
-                                  <td className="px-6 py-4 text-sm font-medium text-foreground">{v.cliente}</td>
-                                  <td className="px-6 py-4 text-sm font-semibold text-foreground">C${v.total.toFixed(2)}</td>
-                                  <td className="px-6 py-4 text-sm text-amber-500">C${v.cogs.toFixed(2)}</td>
-                                  <td className="px-6 py-4 text-sm font-bold text-emerald-600">C${v.utilidad.toFixed(2)}</td>
-                                  <td className="px-6 py-4 text-sm font-semibold text-muted-foreground">{v.margenPct.toFixed(1)}%</td>
+                                  <td className="px-4 py-3 text-sm font-medium text-foreground">{v.cliente}</td>
+                                  <td className="px-4 py-3 text-sm font-semibold text-foreground">C${v.totalBruto.toFixed(2)}</td>
+                                  <td className="px-4 py-3 text-sm text-red-500">C${v.descuentoLineas.toFixed(2)}</td>
+                                  <td className="px-4 py-3 text-sm text-red-500">C${v.descuentoGeneral.toFixed(2)}</td>
+                                  <td className="px-4 py-3 text-sm font-semibold text-foreground">C${v.total.toFixed(2)}</td>
+                                  <td className="px-4 py-3 text-sm text-amber-500">C${v.cogs.toFixed(2)}</td>
+                                  <td className="px-4 py-3 text-sm font-bold text-emerald-600">C${v.utilidad.toFixed(2)}</td>
+                                  <td className="px-4 py-3 text-sm font-semibold text-muted-foreground">{v.margenPct.toFixed(1)}%</td>
                                 </tr>
                               ))
                           )}
@@ -777,29 +809,32 @@ export default function ReportesPage() {
                     <table className="w-full">
                       <thead className="bg-muted/30 border-b border-border">
                         <tr>
-                          {["Producto", "Laboratorio", "Categoría", "Cantidad Vendida", "Ingresos Totales", "Costo Adquisición", "Utilidad Bruta", "Margen %"].map((h) => (
-                            <th key={h} className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">{h}</th>
+                          {["Producto", "Laboratorio", "Categoría", "Cant. Vendida", "Total Bruto", "Desc. Línea", "Desc. Gral", "Total Neto", "Costo Total", "Utilidad Bruta", "Margen %"].map((h) => (
+                            <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
                         {utilidadPorProducto.length === 0 ? (
                           <tr>
-                            <td colSpan={8} className="px-6 py-8 text-center text-muted-foreground text-sm">No hay transacciones registradas</td>
+                            <td colSpan={11} className="px-6 py-8 text-center text-muted-foreground text-sm">No hay transacciones registradas</td>
                           </tr>
                         ) : (
                           utilidadPorProducto
                             .filter(p => filterBySearch(p.nombre) || filterBySearch(p.laboratorio) || filterBySearch(p.categoria))
                             .map((p) => (
                               <tr key={p.id} className="hover:bg-muted/10 transition-colors">
-                                <td className="px-6 py-4 text-sm font-medium text-foreground">{p.nombre}</td>
-                                <td className="px-6 py-4 text-sm text-muted-foreground">{p.laboratorio}</td>
-                                <td className="px-6 py-4 text-sm text-muted-foreground">{p.categoria}</td>
-                                <td className="px-6 py-4 text-sm text-foreground">{p.cantidadVendida} und</td>
-                                <td className="px-6 py-4 text-sm font-semibold text-foreground">C${p.ingresosTotales.toFixed(2)}</td>
-                                <td className="px-6 py-4 text-sm text-amber-500">C${p.cogs.toFixed(2)}</td>
-                                <td className="px-6 py-4 text-sm font-bold text-emerald-600">C${p.utilidad.toFixed(2)}</td>
-                                <td className="px-6 py-4 text-sm font-bold text-primary">{p.margenPct.toFixed(1)}%</td>
+                                <td className="px-4 py-3 text-sm font-medium text-foreground">{p.nombre}</td>
+                                <td className="px-4 py-3 text-sm text-muted-foreground">{p.laboratorio}</td>
+                                <td className="px-4 py-3 text-sm text-muted-foreground">{p.categoria}</td>
+                                <td className="px-4 py-3 text-sm text-foreground">{p.cantidadVendida} und</td>
+                                <td className="px-4 py-3 text-sm font-semibold text-foreground">C${p.ingresosBrutos.toFixed(2)}</td>
+                                <td className="px-4 py-3 text-sm text-red-500">C${p.descuentoLinea.toFixed(2)}</td>
+                                <td className="px-4 py-3 text-sm text-red-500">C${p.descuentoGeneralProrrateado.toFixed(2)}</td>
+                                <td className="px-4 py-3 text-sm font-semibold text-foreground">C${p.ingresosTotales.toFixed(2)}</td>
+                                <td className="px-4 py-3 text-sm text-amber-500">C${p.cogs.toFixed(2)}</td>
+                                <td className="px-4 py-3 text-sm font-bold text-emerald-600">C${p.utilidad.toFixed(2)}</td>
+                                <td className="px-4 py-3 text-sm font-bold text-primary">{p.margenPct.toFixed(1)}%</td>
                               </tr>
                             ))
                         )}

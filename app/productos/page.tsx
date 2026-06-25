@@ -64,6 +64,7 @@ export default function ProductosPage() {
   const { data: productos = [], mutate: mutateProductos, isLoading: loadingProductos } = useSWR<Producto[]>("/api/productos?estado=todos", fetcher)
   const { data: categorias = [], mutate: mutateCategorias } = useSWR<Categoria[]>("/api/categorias", fetcher)
   const { data: laboratorios = [] } = useSWR<Laboratorio[]>("/api/laboratorios?estado=activos", fetcher)
+  const { data: formasFarmaceuticas = [] } = useSWR<any[]>("/api/formas-farmaceuticas?estado=activos", fetcher)
   
   const { user } = useCurrentUser()
   const isAdmin = user?.rolNombre === "ADMIN"
@@ -98,6 +99,7 @@ export default function ProductosPage() {
   const [laboratorio, setLaboratorio] = useState("")
   const [idLaboratorio, setIdLaboratorio] = useState<string>("")
   const [formaPresentacion, setFormPresentacion] = useState("")
+  const [idFormaFarmaceutica, setIdFormaFarmaceutica] = useState<string>("")
   const [concentracion, setConcentracion] = useState("")
   const [unidadMedida, setUnidadMedida] = useState("")
   const [precioCompra, setPrecioCompra] = useState("")
@@ -328,6 +330,7 @@ export default function ProductosPage() {
     setLaboratorio("")
     setIdLaboratorio("")
     setFormPresentacion("")
+    setIdFormaFarmaceutica("")
     setConcentracion("")
     setUnidadMedida("")
     setPrecioCompra("")
@@ -366,6 +369,7 @@ export default function ProductosPage() {
       setLaboratorio(p.laboratorio || "")
       setIdLaboratorio(p.idLaboratorio ? String(p.idLaboratorio) : "")
       setFormPresentacion(p.formaPresentacion || "")
+      setIdFormaFarmaceutica(p.idFormaFarmaceutica ? String(p.idFormaFarmaceutica) : "")
       setConcentracion(p.concentracion || "")
       setUnidadMedida(p.unidadMedida || "")
       setPrecioCompra(p.precioCompra ? String(p.precioCompra) : "")
@@ -545,6 +549,22 @@ export default function ProductosPage() {
       }
     }
 
+    const selectedForm = formasFarmaceuticas.find((f: any) => String(f.id) === idFormaFarmaceutica)
+    if (!esServicio) {
+      if (!idFormaFarmaceutica) {
+        setFormError("La forma farmacéutica es obligatoria")
+        toast.error("Selecciona una forma farmacéutica")
+        setFormLoading(false)
+        return
+      }
+      if (selectedForm && selectedForm.nombre === "Otra presentación" && (!formaPresentacion || formaPresentacion.trim() === "")) {
+        setFormError("Debes especificar la presentación cuando seleccionas 'Otra presentación'")
+        toast.error("Especifica la presentación")
+        setFormLoading(false)
+        return
+      }
+    }
+
     try {
       const body: any = {
         nombre,
@@ -555,6 +575,7 @@ export default function ProductosPage() {
         laboratorio: laboratorios.find((l: any) => String(l.id) === idLaboratorio)?.nombre || null,
         concentracion: concentracion || null,
         formaPresentacion: formaPresentacion || null,
+        idFormaFarmaceutica: idFormaFarmaceutica ? Number(idFormaFarmaceutica) : null,
         unidadMedida: unidadMedida || null,
         precioCompra: precioCompra || null,
         stockMinimo: stockMinimo || null,
@@ -836,27 +857,49 @@ export default function ProductosPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-foreground/80 mb-1">Forma de Presentación</label>
+                      <label className="block text-sm font-medium text-foreground/80 mb-1">Forma Farmacéutica {!esServicio && <span className="text-red-500">*</span>}</label>
                       <select
+                        required={!esServicio}
                         className="w-full rounded-md border border-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all bg-background text-foreground"
-                        value={formaPresentacion}
-                        onChange={(e) => setFormPresentacion(e.target.value)}
+                        value={idFormaFarmaceutica}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setIdFormaFarmaceutica(val);
+                          const selected = formasFarmaceuticas.find((f: any) => String(f.id) === val);
+                          if (selected && selected.nombre !== "Otra presentación") {
+                            setFormPresentacion(selected.nombre);
+                          } else {
+                            setFormPresentacion("");
+                          }
+                        }}
                       >
-                        <option value="">Seleccionar presentación...</option>
-                        <option value="Tableta">Tableta</option>
-                        <option value="Cápsula">Cápsula</option>
-                        <option value="Jarabe">Jarabe</option>
-                        <option value="Suspensión">Suspensión</option>
-                        <option value="Crema">Crema</option>
-                        <option value="Ungüento">Ungüento</option>
-                        <option value="Inyectable">Inyectable</option>
-                        <option value="Gotas">Gotas</option>
-                        <option value="Spray">Spray</option>
-                        <option value="Gel">Gel</option>
-                        <option value="Polvo">Polvo</option>
-                        <option value="Otro">Otro</option>
+                        <option value="">Seleccionar forma...</option>
+                        {formasFarmaceuticas.map((forma: any) => (
+                          <option key={forma.id} value={forma.id}>
+                            {forma.nombre}
+                          </option>
+                        ))}
                       </select>
                     </div>
+                    {(() => {
+                      const selected = formasFarmaceuticas.find((f: any) => String(f.id) === idFormaFarmaceutica);
+                      const isOtra = selected && selected.nombre === "Otra presentación";
+                      if (isOtra) {
+                        return (
+                          <div>
+                            <label className="block text-sm font-medium text-foreground/80 mb-1">Especificar presentación <span className="text-red-500">*</span></label>
+                            <Input
+                              required
+                              value={formaPresentacion}
+                              onChange={(e) => setFormPresentacion(e.target.value)}
+                              placeholder="Ej: Polvo especial, etc."
+                              className="bg-background border-border text-foreground"
+                            />
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                     <div>
                       <label className="block text-sm font-medium text-foreground/80 mb-1">Concentración</label>
                       <Input
@@ -1460,7 +1503,7 @@ export default function ProductosPage() {
               {/* Stock actual */}
               <div className="p-3 rounded-xl bg-muted/40 border border-border flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Stock actual</span>
-                <span className="text-xl font-bold text-foreground">{ajusteProducto.stockActual} <span className="text-xs font-normal text-muted-foreground">uds</span></span>
+                <span className="text-xl font-bold text-foreground">{ajusteProducto.stockActual} <span className="text-xs font-normal text-muted-foreground">und</span></span>
               </div>
 
               {/* Nuevo stock */}
@@ -1594,6 +1637,7 @@ export default function ProductosPage() {
                     </div>
                     <p className="text-sm text-primary font-medium mt-1">Categoría: {selectedProduct.categoria?.nombre || "Sin Categoría"}</p>
                     <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-xs text-muted-foreground">
+                      {selectedProduct.formaFarmaceutica?.nombre && <span>Forma: <strong>{selectedProduct.formaFarmaceutica.nombre}</strong></span>}
                       {selectedProduct.laboratorio && <span>Lab: <strong>{selectedProduct.laboratorio}</strong></span>}
                       {selectedProduct.concentracion && <span>Conc: <strong>{selectedProduct.concentracion}</strong></span>}
                       {selectedProduct.unidadMedida && <span>Medida: <strong>{selectedProduct.unidadMedida}</strong></span>}
@@ -1634,7 +1678,7 @@ export default function ProductosPage() {
                       <div className="bg-background/60 p-3 rounded-lg border border-border">
                         <p className="text-xs text-muted-foreground font-medium">Por Blister</p>
                         <div className="mt-1 space-y-1">
-                          <p className="text-xs text-muted-foreground">Capacidad: <span className="font-medium text-foreground">{selectedProduct.unidadesPorBlister ? `${selectedProduct.unidadesPorBlister} uds` : "No define"}</span></p>
+                          <p className="text-xs text-muted-foreground">Capacidad: <span className="font-medium text-foreground">{selectedProduct.unidadesPorBlister ? `${selectedProduct.unidadesPorBlister} und` : "No define"}</span></p>
                           <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
                             Venta: {selectedProduct.precioBlister ? `C$${Number(selectedProduct.precioBlister).toFixed(2)}` : "—"}
                           </p>
@@ -1645,7 +1689,7 @@ export default function ProductosPage() {
                       <div className="bg-background/60 p-3 rounded-lg border border-border">
                         <p className="text-xs text-muted-foreground font-medium">Por Caja</p>
                         <div className="mt-1 space-y-1">
-                          <p className="text-xs text-muted-foreground">Capacidad: <span className="font-medium text-foreground">{selectedProduct.unidadesPorCaja ? `${selectedProduct.unidadesPorCaja} uds` : "No define"}</span></p>
+                          <p className="text-xs text-muted-foreground">Capacidad: <span className="font-medium text-foreground">{selectedProduct.unidadesPorCaja ? `${selectedProduct.unidadesPorCaja} und` : "No define"}</span></p>
                           <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
                             Venta: {selectedProduct.precioCaja ? `C$${Number(selectedProduct.precioCaja).toFixed(2)}` : "—"}
                           </p>
@@ -1669,7 +1713,7 @@ export default function ProductosPage() {
                               const s = formatStock(selectedProduct)
                               return (
                                 <div className="space-y-1.5">
-                                  <p className="text-base font-bold text-foreground">{s.total} <span className="text-xs text-muted-foreground font-normal">uds totales</span></p>
+                                  <p className="text-base font-bold text-foreground">{s.total} <span className="text-xs text-muted-foreground font-normal">und totales</span></p>
                                   {(s.cajas !== null || s.blisters !== null) && (
                                     <div className="flex items-center gap-1.5 flex-wrap">
                                       {s.cajas !== null && (
@@ -1683,7 +1727,7 @@ export default function ProductosPage() {
                                         </span>
                                       )}
                                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200/30 dark:border-blue-500/20">
-                                        {s.sueltas} Uds
+                                        {s.sueltas} und
                                       </span>
                                     </div>
                                   )}
@@ -1695,7 +1739,7 @@ export default function ProductosPage() {
                         <div className="grid grid-cols-2 gap-2 pt-1 border-t border-amber-500/10">
                           <div>
                             <p className="text-xs text-muted-foreground">Mínimo Requerido</p>
-                            <p className="text-sm font-semibold text-foreground">{selectedProduct.stockMinimo != null ? `${selectedProduct.stockMinimo} uds` : "—"}</p>
+                            <p className="text-sm font-semibold text-foreground">{selectedProduct.stockMinimo != null ? `${selectedProduct.stockMinimo} und` : "—"}</p>
                           </div>
                           <div>
                             <p className="text-xs text-muted-foreground">Estado Stock</p>
@@ -1750,7 +1794,7 @@ export default function ProductosPage() {
                       <div className="grid grid-cols-3 gap-4">
                         <div className="bg-background/60 p-3 rounded-lg border border-border">
                           <p className="text-xs text-muted-foreground font-medium">Unidades Vendidas</p>
-                          <p className="text-lg font-bold text-foreground mt-1">{selectedProduct.stats.totalVendidos || 0} uds</p>
+                          <p className="text-lg font-bold text-foreground mt-1">{selectedProduct.stats.totalVendidos || 0} und</p>
                         </div>
                         <div className="bg-background/60 p-3 rounded-lg border border-border">
                           <p className="text-xs text-muted-foreground font-medium">Ventas Realizadas</p>
@@ -1813,7 +1857,7 @@ export default function ProductosPage() {
                                           <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/30">★ FEFO (Siguiente)</span>
                                         )}
                                       </td>
-                                      <td className="py-2.5 text-foreground">{lote.stockActual} uds</td>
+                                      <td className="py-2.5 text-foreground">{lote.stockActual} und</td>
                                       {isAdmin && (
                                         <td className="py-2.5 text-foreground">
                                           C${Number(lote.costoCompra || 0).toFixed(2)}

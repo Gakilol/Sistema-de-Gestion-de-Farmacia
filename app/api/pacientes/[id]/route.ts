@@ -212,6 +212,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       await tx.datosClinicosPaciente.upsert({
         where: { idCliente },
         update: {
+          tipoSangre: emptyToNull(datosClinicos?.tipoSangre),
           antecedentes: emptyToNull(datosClinicos?.antecedentes),
           alergias: emptyToNull(datosClinicos?.alergias),
           observacionesClinicas: emptyToNull(datosClinicos?.observacionesClinicas),
@@ -219,6 +220,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         },
         create: {
           idCliente,
+          tipoSangre: emptyToNull(datosClinicos?.tipoSangre),
           antecedentes: emptyToNull(datosClinicos?.antecedentes),
           alergias: emptyToNull(datosClinicos?.alergias),
           observacionesClinicas: emptyToNull(datosClinicos?.observacionesClinicas),

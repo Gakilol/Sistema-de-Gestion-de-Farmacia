@@ -48,7 +48,7 @@ export const clienteSchema = z.object({
   telefono: z.preprocess(
     normalizeNicaraguaPhone,
     z.string().trim().refine(validateNicaraguaPhone, {
-      message: "Ingrese un número celular válido de Nicaragua de 8 dígitos con prefijo aceptado"
+      message: "El número de teléfono debe tener 8 dígitos y comenzar con 5, 6, 7 u 8"
     })
   ),
   correo: z.preprocess(
@@ -89,6 +89,11 @@ export const clienteSchema = z.object({
   fechaNacimiento: z.string().optional().nullable(),
   sexo: z.string().optional().nullable(),
   activo: z.boolean().optional().default(true),
+  antecedentes: z.string().optional().nullable(),
+  alergias: z.string().optional().nullable(),
+  observacionesClinicas: z.string().optional().nullable(),
+  diagnosticoGeneral: z.string().optional().nullable(),
+  tipoSangre: z.string().optional().nullable(),
 });
 
 export const usuarioSchema = z.object({
@@ -140,7 +145,7 @@ export const proveedorSchema = z.object({
   telefono: z.preprocess(
     normalizeNicaraguaPhone,
     z.string().trim().refine(validateNicaraguaPhone, {
-      message: "Ingrese un número celular válido de Nicaragua de 8 dígitos con prefijo aceptado"
+      message: "El número de teléfono debe tener 8 dígitos y comenzar con 5, 6, 7 u 8"
     })
   ),
   correo: z.preprocess(
@@ -170,7 +175,7 @@ export const laboratorioSchema = z.object({
   telefono: z.preprocess(
     normalizeNicaraguaPhone,
     z.string().trim().refine(validateNicaraguaPhone, {
-      message: "Ingrese un número celular válido de Nicaragua de 8 dígitos con prefijo aceptado"
+      message: "El número de teléfono debe tener 8 dígitos y comenzar con 5, 6, 7 u 8"
     }).or(z.literal("")).nullable().optional()
   ).nullable().optional(),
   correo: z.preprocess(
@@ -197,15 +202,21 @@ export const servicioSchema = z.object({
 });
 
 export const descuentoSchema = z.object({
-  tipo: z.enum(["PORCENTAJE", "MONTO"]),
+  nombre: z.string().trim().min(3, "El nombre del descuento debe tener al menos 3 caracteres"),
+  descripcion: z.string().trim().optional().nullable(),
+  tipoAplicacion: z.enum(["PRODUCTO", "CATEGORIA", "CLIENTE", "VENTA_GENERAL"]),
+  tipoValor: z.enum(["PORCENTAJE", "MONTO_FIJO"]),
   valor: z.preprocess((a) => (a ? parseFloat(String(a)) : 0), z.number().positive("El valor del descuento debe ser mayor a 0")),
-  motivo: z.string().trim().min(1, "El motivo es requerido"),
   fechaInicio: z.string().optional().nullable(),
   fechaFin: z.string().optional().nullable(),
-  montoMinimo: z.preprocess((a) => (a ? parseFloat(String(a)) : null), z.number().min(0).nullable().optional()),
-  maxDescuento: z.preprocess((a) => (a ? parseFloat(String(a)) : null), z.number().min(0).nullable().optional()),
+  montoMinimoCompra: z.preprocess((a) => (a ? parseFloat(String(a)) : null), z.number().min(0).nullable().optional()),
+  cantidadMinima: z.preprocess((a) => (a ? parseInt(String(a), 10) : 0), z.number().int().min(0).optional().default(0)),
+  limiteUso: z.preprocess((a) => (a ? parseInt(String(a), 10) : null), z.number().int().positive().nullable().optional()),
   esAcumulable: z.boolean().optional().default(false),
-  estado: z.enum(["ACTIVO", "INACTIVO"]).default("ACTIVO"),
+  activo: z.boolean().optional().default(true),
+  productosIds: z.array(z.number().int().positive()).optional().default([]),
+  categoriasIds: z.array(z.number().int().positive()).optional().default([]),
+  clientesIds: z.array(z.number().int().positive()).optional().default([]),
 });
 
 export const productoCreateSchema = z.object({
@@ -217,6 +228,7 @@ export const productoCreateSchema = z.object({
   laboratorio: z.string().optional().nullable(),
   concentracion: z.string().optional().nullable(),
   formaPresentacion: z.string().optional().nullable(),
+  idFormaFarmaceutica: z.preprocess((a) => (a ? parseInt(String(a), 10) : null), z.number().int().positive().nullable().optional()),
   unidadMedida: z.string().optional().nullable(),
   precioCompra: z.preprocess((a) => (a ? parseFloat(String(a)) : null), z.number().min(0, "El precio de compra no puede ser negativo").nullable().optional()),
   precioVenta: z.preprocess((a) => (a !== null && a !== undefined && a !== "" ? parseFloat(String(a)) : 0), z.number().min(0, "El precio de venta no puede ser negativo").optional().default(0)),
@@ -307,7 +319,49 @@ export const productoCreateSchema = z.object({
 }, {
   message: "La fecha de vencimiento no puede ser anterior al día de hoy",
   path: ["fechaVencimientoInicial"]
-});
+}).refine(data => {
+  if (!data.esServicio) {
+    return !!data.concentracion && data.concentracion.trim() !== "";
+  }
+  return true;
+}, {
+  message: "La concentración es obligatoria para productos de farmacia",
+  path: ["concentracion"]
+}).refine(data => {
+  if (!data.esServicio) {
+    return !!data.formaPresentacion && data.formaPresentacion.trim() !== "";
+  }
+  return true;
+}, {
+  message: "La forma de presentación es obligatoria para productos de farmacia",
+  path: ["formaPresentacion"]
+}).refine(data => {
+  if (!data.esServicio) {
+    return !!data.idFormaFarmaceutica;
+  }
+  return true;
+}, {
+  message: "La forma farmacéutica es obligatoria para productos de farmacia",
+  path: ["idFormaFarmaceutica"]
+}).transform(data => ({
+  ...data,
+  codigoBarras: data.codigoBarras ?? null,
+  descripcion: data.descripcion ?? null,
+  idLaboratorio: data.idLaboratorio ?? null,
+  laboratorio: data.laboratorio ?? null,
+  concentracion: data.concentracion ?? null,
+  formaPresentacion: data.formaPresentacion ?? null,
+  idFormaFarmaceutica: data.idFormaFarmaceutica ?? null,
+  unidadMedida: data.unidadMedida ?? null,
+  precioCompra: data.precioCompra ?? null,
+  precioBlister: data.precioBlister ?? null,
+  precioCaja: data.precioCaja ?? null,
+  unidadesPorBlister: data.unidadesPorBlister ?? null,
+  unidadesPorCaja: data.unidadesPorCaja ?? null,
+  blísteresPorCaja: data.blísteresPorCaja ?? null,
+  margenUtilidad: data.margenUtilidad ?? null,
+  stockMinimo: data.stockMinimo ?? null,
+}));
 
 export const productoUpdateSchema = z.object({
   nombre: z.string().min(2, "El nombre debe tener al menos 2 caracteres"),
@@ -318,6 +372,7 @@ export const productoUpdateSchema = z.object({
   laboratorio: z.string().optional().nullable(),
   concentracion: z.string().optional().nullable(),
   formaPresentacion: z.string().optional().nullable(),
+  idFormaFarmaceutica: z.preprocess((a) => (a ? parseInt(String(a), 10) : null), z.number().int().positive().nullable().optional()),
   unidadMedida: z.string().optional().nullable(),
   precioCompra: z.preprocess((a) => (a ? parseFloat(String(a)) : null), z.number().min(0, "El precio de compra no puede ser negativo").nullable().optional()),
   precioVenta: z.preprocess((a) => (a !== null && a !== undefined && a !== "" ? parseFloat(String(a)) : 0), z.number().min(0, "El precio de venta no puede ser negativo").optional().default(0)),
@@ -371,7 +426,49 @@ export const productoUpdateSchema = z.object({
 }, {
   message: "El precio por caja debe ser mayor o igual al precio unitario",
   path: ["precioCaja"]
-});
+}).refine(data => {
+  if (!data.esServicio) {
+    return !!data.concentracion && data.concentracion.trim() !== "";
+  }
+  return true;
+}, {
+  message: "La concentración es obligatoria para productos de farmacia",
+  path: ["concentracion"]
+}).refine(data => {
+  if (!data.esServicio) {
+    return !!data.formaPresentacion && data.formaPresentacion.trim() !== "";
+  }
+  return true;
+}, {
+  message: "La forma de presentación es obligatoria para productos de farmacia",
+  path: ["formaPresentacion"]
+}).refine(data => {
+  if (!data.esServicio) {
+    return !!data.idFormaFarmaceutica;
+  }
+  return true;
+}, {
+  message: "La forma farmacéutica es obligatoria para productos de farmacia",
+  path: ["idFormaFarmaceutica"]
+}).transform(data => ({
+  ...data,
+  codigoBarras: data.codigoBarras ?? null,
+  descripcion: data.descripcion ?? null,
+  idLaboratorio: data.idLaboratorio ?? null,
+  laboratorio: data.laboratorio ?? null,
+  concentracion: data.concentracion ?? null,
+  formaPresentacion: data.formaPresentacion ?? null,
+  idFormaFarmaceutica: data.idFormaFarmaceutica ?? null,
+  unidadMedida: data.unidadMedida ?? null,
+  precioCompra: data.precioCompra ?? null,
+  precioBlister: data.precioBlister ?? null,
+  precioCaja: data.precioCaja ?? null,
+  unidadesPorBlister: data.unidadesPorBlister ?? null,
+  unidadesPorCaja: data.unidadesPorCaja ?? null,
+  blísteresPorCaja: data.blísteresPorCaja ?? null,
+  margenUtilidad: data.margenUtilidad ?? null,
+  stockMinimo: data.stockMinimo ?? null,
+}));
 
 export const ventaSchema = z.object({
   idCliente: z.number().int().positive().optional().nullable(),

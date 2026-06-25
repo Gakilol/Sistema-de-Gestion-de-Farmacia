@@ -46,12 +46,23 @@ export default function UsuariosPage() {
 
   const { user: loggedInUser } = useCurrentUser()
 
-  useEffect(() => { fetchUsuarios() }, [])
+  const [search, setSearch] = useState("")
+  const [idRol, setIdRol] = useState("")
+  const [estado, setEstado] = useState("todos")
+
+  useEffect(() => {
+    fetchUsuarios()
+  }, [search, idRol, estado])
 
   const fetchUsuarios = async () => {
     try {
       setLoading(true); setError("")
-      const res = await fetch("/api/usuarios")
+      const params = new URLSearchParams()
+      if (search) params.append("search", search)
+      if (idRol) params.append("idRol", idRol)
+      if (estado) params.append("estado", estado)
+
+      const res = await fetch(`/api/usuarios?${params.toString()}`)
       let data: any = null
       try { data = await res.json() } catch { data = null }
       if (!res.ok) { setUsuarios([]); setError(data?.error || "No autorizado"); return }
@@ -445,6 +456,49 @@ export default function UsuariosPage() {
                 </form>
               </Card>
             </div>
+          )}
+
+          {/* Filtros de Búsqueda, Rol y Estado */}
+          {!error && (
+            <Card className="glass-card p-4 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-search"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+                  </span>
+                  <Input 
+                    type="text" 
+                    placeholder="Buscar por nombre o correo..." 
+                    value={search} 
+                    onChange={(e) => setSearch(e.target.value)} 
+                    className="pl-10 bg-muted/30 border-border" 
+                  />
+                </div>
+                <div>
+                  <select 
+                    value={idRol} 
+                    onChange={(e) => setIdRol(e.target.value)} 
+                    className="w-full h-10 px-3 rounded-md bg-muted/30 border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  >
+                    <option value="">Todos los Roles</option>
+                    <option value="1">ADMIN - Administrador</option>
+                    <option value="2">EMPLEADO - Farmacia / Caja</option>
+                    <option value="3">DOCTOR - Doctor / Podólogo</option>
+                  </select>
+                </div>
+                <div>
+                  <select 
+                    value={estado} 
+                    onChange={(e) => setEstado(e.target.value)} 
+                    className="w-full h-10 px-3 rounded-md bg-muted/30 border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  >
+                    <option value="todos">Todos los Estados</option>
+                    <option value="activos">Activos</option>
+                    <option value="inactivos">Inactivos</option>
+                  </select>
+                </div>
+              </div>
+            </Card>
           )}
 
           {/* User List Table */}

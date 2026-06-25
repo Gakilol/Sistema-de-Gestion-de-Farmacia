@@ -25,6 +25,7 @@ import {
   Activity,
   Trash2,
   RefreshCw,
+  Tag,
 } from "lucide-react"
 
 import { useCurrentUser } from "../app/hooks/useCurrentUser"
@@ -92,14 +93,14 @@ export function Sidebar() {
     { href: "/productos", label: "Productos", icon: Package },
     { href: "/admin/categorias", label: "Categorías", icon: Layers },
     { href: "/admin/laboratorios", label: "Laboratorios", icon: Settings },
+    { href: "/admin/formas-farmaceuticas", label: "Formas Farmacéuticas", icon: Settings },
+    { href: "/admin/descuentos", label: "Descuentos", icon: Tag },
     { href: "/proveedores", label: "Proveedores", icon: Truck },
     { href: "/compras", label: "Compras", icon: ShoppingCart },
     { href: "/inventario", label: "Inventario", icon: ClipboardList },
     { href: "/usuarios", label: "Usuarios", icon: Settings },
     { href: "/reportes", label: "Reportes", icon: TrendingUp },
     { href: "/auditoria", label: "Auditoría", icon: ClipboardList },
-    { href: "/admin/limpieza-datos", label: "Limpieza de Datos", icon: Trash2 },
-    { href: "/admin/mantenimiento/reiniciar-secuencias", label: "Reiniciar Secuencias", icon: RefreshCw },
   ]
 
   const NavLink = ({ item }: { item: { href: string; label: string; icon: any } }) => {

@@ -160,16 +160,24 @@ export const ReporteUtilidadBrutaDocument = ({ data, start, end }: { data: any, 
 
         <Text style={styles.sectionTitle}>Resumen Financiero</Text>
         <View style={styles.kpiGrid}>
-          <View style={[styles.kpiCard, { width: '31%' }]}>
-            <Text style={styles.kpiLabel}>Ingresos Netos Totales</Text>
+          <View style={[styles.kpiCard, { width: '18%' }]}>
+            <Text style={styles.kpiLabel}>Ingresos Brutos</Text>
+            <Text style={styles.kpiValue}>{formatCordobas(resumen.totalVentasBrutas)}</Text>
+          </View>
+          <View style={[styles.kpiCard, { width: '18%' }]}>
+            <Text style={styles.kpiLabel}>Descuentos Totales</Text>
+            <Text style={styles.kpiValue}>{formatCordobas(resumen.totalDescuentos)}</Text>
+          </View>
+          <View style={[styles.kpiCard, { width: '18%' }]}>
+            <Text style={styles.kpiLabel}>Ingresos Netos</Text>
             <Text style={styles.kpiValue}>{formatCordobas(resumen.totalVentas)}</Text>
           </View>
-          <View style={[styles.kpiCard, { width: '31%' }]}>
-            <Text style={styles.kpiLabel}>Costo de Mercancía Vendida (COGS)</Text>
+          <View style={[styles.kpiCard, { width: '18%' }]}>
+            <Text style={styles.kpiLabel}>Costo COGS</Text>
             <Text style={styles.kpiValue}>{formatCordobas(resumen.totalCogs)}</Text>
           </View>
-          <View style={[styles.kpiCard, { width: '31%' }]}>
-            <Text style={styles.kpiLabel}>Utilidad Bruta (Margen: {Number(resumen.margenPct || 0).toFixed(1)}%)</Text>
+          <View style={[styles.kpiCard, { width: '18%' }]}>
+            <Text style={styles.kpiLabel}>Utilidad (Margen: {Number(resumen.margenPct || 0).toFixed(1)}%)</Text>
             <Text style={styles.kpiValue}>{formatCordobas(resumen.totalUtilidad)}</Text>
           </View>
         </View>
@@ -177,22 +185,28 @@ export const ReporteUtilidadBrutaDocument = ({ data, start, end }: { data: any, 
         <Text style={styles.sectionTitle}>Listado de Facturas y Ventas</Text>
         <View style={styles.table}>
           <View style={[styles.tableRow, styles.tableHeader]}>
-            <Text style={[styles.tableColHeader, { width: '8%' }]}>ID Venta</Text>
-            <Text style={[styles.tableColHeader, { width: '17%' }]}>Fecha</Text>
-            <Text style={[styles.tableColHeader, { width: '25%' }]}>Cliente</Text>
-            <Text style={[styles.tableColHeader, { width: '16%', textAlign: 'right' }]}>Total Neto</Text>
-            <Text style={[styles.tableColHeader, { width: '16%', textAlign: 'right' }]}>COGS (Costo)</Text>
-            <Text style={[styles.tableColHeader, { width: '18%', textAlign: 'right' }]}>Utilidad Bruta</Text>
+            <Text style={[styles.tableColHeader, { width: '6%' }]}>ID Venta</Text>
+            <Text style={[styles.tableColHeader, { width: '11%' }]}>Fecha</Text>
+            <Text style={[styles.tableColHeader, { width: '17%' }]}>Cliente</Text>
+            <Text style={[styles.tableColHeader, { width: '11%', textAlign: 'right' }]}>Total Bruto</Text>
+            <Text style={[styles.tableColHeader, { width: '9%', textAlign: 'right' }]}>Desc. Línea</Text>
+            <Text style={[styles.tableColHeader, { width: '9%', textAlign: 'right' }]}>Desc. Gral</Text>
+            <Text style={[styles.tableColHeader, { width: '12%', textAlign: 'right' }]}>Total Neto</Text>
+            <Text style={[styles.tableColHeader, { width: '12%', textAlign: 'right' }]}>COGS (Costo)</Text>
+            <Text style={[styles.tableColHeader, { width: '13%', textAlign: 'right' }]}>Utilidad Bruta</Text>
           </View>
 
           {ventas.map((v: any) => (
             <View style={styles.tableRow} key={v.id}>
-              <Text style={[styles.tableCol, { width: '8%' }]}>#{v.id}</Text>
-              <Text style={[styles.tableCol, { width: '17%' }]}>{new Date(v.fecha).toLocaleString('es-NI')}</Text>
-              <Text style={[styles.tableCol, { width: '25%' }]}>{v.cliente}</Text>
-              <Text style={[styles.tableCol, { width: '16%', textAlign: 'right' }]}>{formatCordobas(v.total)}</Text>
-              <Text style={[styles.tableCol, { width: '16%', textAlign: 'right' }]}>{formatCordobas(v.cogs)}</Text>
-              <Text style={[styles.tableCol, { width: '18%', textAlign: 'right', fontFamily: 'Helvetica-Bold' }]}>{formatCordobas(v.utilidad)}</Text>
+              <Text style={[styles.tableCol, { width: '6%' }]}>#{v.id}</Text>
+              <Text style={[styles.tableCol, { width: '11%' }]}>{new Date(v.fecha).toLocaleDateString('es-NI')}</Text>
+              <Text style={[styles.tableCol, { width: '17%' }]}>{v.cliente}</Text>
+              <Text style={[styles.tableCol, { width: '11%', textAlign: 'right' }]}>{formatCordobas(v.totalBruto)}</Text>
+              <Text style={[styles.tableCol, { width: '9%', textAlign: 'right' }]}>{formatCordobas(v.descuentoLineas)}</Text>
+              <Text style={[styles.tableCol, { width: '9%', textAlign: 'right' }]}>{formatCordobas(v.descuentoGeneral)}</Text>
+              <Text style={[styles.tableCol, { width: '12%', textAlign: 'right' }]}>{formatCordobas(v.total)}</Text>
+              <Text style={[styles.tableCol, { width: '12%', textAlign: 'right' }]}>{formatCordobas(v.cogs)}</Text>
+              <Text style={[styles.tableCol, { width: '13%', textAlign: 'right', fontFamily: 'Helvetica-Bold' }]}>{formatCordobas(v.utilidad)}</Text>
             </View>
           ))}
         </View>
@@ -208,6 +222,8 @@ export const ReporteUtilidadBrutaDocument = ({ data, start, end }: { data: any, 
 
 // Utilidad por Producto Report Document (Landscape)
 export const ReporteUtilidadProductoDocument = ({ data, start, end }: { data: any[], start: string, end: string }) => {
+  const totalBruto = data.reduce((sum, item) => sum + item.ingresosBrutos, 0);
+  const totalDescuentos = data.reduce((sum, item) => sum + item.descuentoLinea + item.descuentoGeneralProrrateado, 0);
   const totalVentas = data.reduce((sum, item) => sum + item.ingresosTotales, 0);
   const totalCogs = data.reduce((sum, item) => sum + item.cogs, 0);
   const totalUtilidad = totalVentas - totalCogs;
@@ -223,16 +239,24 @@ export const ReporteUtilidadProductoDocument = ({ data, start, end }: { data: an
 
         <Text style={styles.sectionTitle}>Rentabilidad Acumulada</Text>
         <View style={styles.kpiGrid}>
-          <View style={[styles.kpiCard, { width: '31%' }]}>
-            <Text style={styles.kpiLabel}>Ingresos Comerciales</Text>
+          <View style={[styles.kpiCard, { width: '18%' }]}>
+            <Text style={styles.kpiLabel}>Ingresos Brutos</Text>
+            <Text style={styles.kpiValue}>{formatCordobas(totalBruto)}</Text>
+          </View>
+          <View style={[styles.kpiCard, { width: '18%' }]}>
+            <Text style={styles.kpiLabel}>Descuentos Totales</Text>
+            <Text style={styles.kpiValue}>{formatCordobas(totalDescuentos)}</Text>
+          </View>
+          <View style={[styles.kpiCard, { width: '18%' }]}>
+            <Text style={styles.kpiLabel}>Ingresos Netos</Text>
             <Text style={styles.kpiValue}>{formatCordobas(totalVentas)}</Text>
           </View>
-          <View style={[styles.kpiCard, { width: '31%' }]}>
-            <Text style={styles.kpiLabel}>Costo Total Comercial (COGS)</Text>
+          <View style={[styles.kpiCard, { width: '18%' }]}>
+            <Text style={styles.kpiLabel}>Costo COGS</Text>
             <Text style={styles.kpiValue}>{formatCordobas(totalCogs)}</Text>
           </View>
-          <View style={[styles.kpiCard, { width: '31%' }]}>
-            <Text style={styles.kpiLabel}>Utilidad Comercial (Margen: {margenGeneral.toFixed(1)}%)</Text>
+          <View style={[styles.kpiCard, { width: '18%' }]}>
+            <Text style={styles.kpiLabel}>Utilidad (Margen: {margenGeneral.toFixed(1)}%)</Text>
             <Text style={styles.kpiValue}>{formatCordobas(totalUtilidad)}</Text>
           </View>
         </View>
@@ -240,24 +264,30 @@ export const ReporteUtilidadProductoDocument = ({ data, start, end }: { data: an
         <Text style={styles.sectionTitle}>Rentabilidad Desglosada por Producto</Text>
         <View style={styles.table}>
           <View style={[styles.tableRow, styles.tableHeader]}>
-            <Text style={[styles.tableColHeader, { width: '22%' }]}>Producto</Text>
-            <Text style={[styles.tableColHeader, { width: '13%' }]}>Categoría</Text>
-            <Text style={[styles.tableColHeader, { width: '13%' }]}>Laboratorio</Text>
-            <Text style={[styles.tableColHeader, { width: '10%', textAlign: 'center' }]}>Cant. Vendida</Text>
-            <Text style={[styles.tableColHeader, { width: '14%', textAlign: 'right' }]}>Ventas Netas</Text>
-            <Text style={[styles.tableColHeader, { width: '14%', textAlign: 'right' }]}>Costo Total</Text>
-            <Text style={[styles.tableColHeader, { width: '14%', textAlign: 'right' }]}>Utilidad</Text>
+            <Text style={[styles.tableColHeader, { width: '17%' }]}>Producto</Text>
+            <Text style={[styles.tableColHeader, { width: '10%' }]}>Categoría</Text>
+            <Text style={[styles.tableColHeader, { width: '10%' }]}>Laboratorio</Text>
+            <Text style={[styles.tableColHeader, { width: '7%', textAlign: 'center' }]}>Cant. Vend.</Text>
+            <Text style={[styles.tableColHeader, { width: '11%', textAlign: 'right' }]}>Total Bruto</Text>
+            <Text style={[styles.tableColHeader, { width: '10%', textAlign: 'right' }]}>Desc. Línea</Text>
+            <Text style={[styles.tableColHeader, { width: '10%', textAlign: 'right' }]}>Desc. Gral</Text>
+            <Text style={[styles.tableColHeader, { width: '11%', textAlign: 'right' }]}>Total Neto</Text>
+            <Text style={[styles.tableColHeader, { width: '10%', textAlign: 'right' }]}>Costo Total</Text>
+            <Text style={[styles.tableColHeader, { width: '11%', textAlign: 'right' }]}>Utilidad</Text>
           </View>
 
           {data.map((p: any) => (
             <View style={styles.tableRow} key={p.id}>
-              <Text style={[styles.tableCol, { width: '22%' }]}>{p.nombre}</Text>
-              <Text style={[styles.tableCol, { width: '13%' }]}>{p.categoria}</Text>
-              <Text style={[styles.tableCol, { width: '13%' }]}>{p.laboratorio}</Text>
-              <Text style={[styles.tableCol, { width: '10%', textAlign: 'center' }]}>{p.cantidadVendida} und</Text>
-              <Text style={[styles.tableCol, { width: '14%', textAlign: 'right' }]}>{formatCordobas(p.ingresosTotales)}</Text>
-              <Text style={[styles.tableCol, { width: '14%', textAlign: 'right' }]}>{formatCordobas(p.cogs)}</Text>
-              <Text style={[styles.tableCol, { width: '14%', textAlign: 'right', fontFamily: 'Helvetica-Bold' }]}>{formatCordobas(p.utilidad)}</Text>
+              <Text style={[styles.tableCol, { width: '17%' }]}>{p.nombre}</Text>
+              <Text style={[styles.tableCol, { width: '10%' }]}>{p.categoria}</Text>
+              <Text style={[styles.tableCol, { width: '10%' }]}>{p.laboratorio}</Text>
+              <Text style={[styles.tableCol, { width: '7%', textAlign: 'center' }]}>{p.cantidadVendida} und</Text>
+              <Text style={[styles.tableCol, { width: '11%', textAlign: 'right' }]}>{formatCordobas(p.ingresosBrutos)}</Text>
+              <Text style={[styles.tableCol, { width: '10%', textAlign: 'right' }]}>{formatCordobas(p.descuentoLinea)}</Text>
+              <Text style={[styles.tableCol, { width: '10%', textAlign: 'right' }]}>{formatCordobas(p.descuentoGeneralProrrateado)}</Text>
+              <Text style={[styles.tableCol, { width: '11%', textAlign: 'right' }]}>{formatCordobas(p.ingresosTotales)}</Text>
+              <Text style={[styles.tableCol, { width: '10%', textAlign: 'right' }]}>{formatCordobas(p.cogs)}</Text>
+              <Text style={[styles.tableCol, { width: '11%', textAlign: 'right', fontFamily: 'Helvetica-Bold' }]}>{formatCordobas(p.utilidad)}</Text>
             </View>
           ))}
         </View>

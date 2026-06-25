@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
 import { registrarLog } from "@/lib/audit"
 import { compraSchema } from "@/lib/validations"
+import { toManaguaStartOfDay, toManaguaEndOfDay } from "@/lib/timezone"
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,8 +20,8 @@ export async function GET(request: NextRequest) {
 
     if (startDate && endDate) {
       whereClause.fecha = {
-        gte: new Date(startDate),
-        lte: new Date(endDate),
+        gte: toManaguaStartOfDay(startDate),
+        lte: toManaguaEndOfDay(endDate),
       }
     }
 

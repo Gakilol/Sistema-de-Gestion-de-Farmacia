@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
       where,
       include: { 
         categoria: true,
+        formaFarmaceutica: true,
         lotes: {
           where: { activo: true, stockActual: { gt: 0 } },
           orderBy: { fechaVencimiento: "asc" },
@@ -119,8 +120,11 @@ export async function POST(request: NextRequest) {
           codigoBarras: emptyToNull(data.codigoBarras),
           descripcion: emptyToNull(data.descripcion),
           idCategoria: data.idCategoria,
+          idLaboratorio: data.idLaboratorio,
           laboratorio: emptyToNull(data.laboratorio),
           concentracion: emptyToNull(data.concentracion),
+          formaPresentacion: emptyToNull(data.formaPresentacion),
+          idFormaFarmaceutica: data.idFormaFarmaceutica,
           unidadMedida: emptyToNull(data.unidadMedida),
           precioCompra: data.precioCompra || 0,
           precioVenta: data.precioVenta,

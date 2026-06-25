@@ -167,6 +167,7 @@ export async function POST(request: NextRequest) {
           activo: data.activo ?? true,
           datosClinicos: {
             create: {
+              tipoSangre: emptyToNull(datosClinicos?.tipoSangre),
               antecedentes: emptyToNull(datosClinicos?.antecedentes),
               alergias: emptyToNull(datosClinicos?.alergias),
               observacionesClinicas: emptyToNull(datosClinicos?.observacionesClinicas),

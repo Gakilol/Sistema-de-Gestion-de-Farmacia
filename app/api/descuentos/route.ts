@@ -1,9 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
-import { descuentoSchema, emptyToNull } from "@/lib/validations"
+import { descuentoSchema } from "@/lib/validations"
 import { registrarLog } from "@/lib/audit"
 
+// GET /api/descuentos?estado=activos|inactivos|todos
 export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser()
@@ -12,21 +13,24 @@ export async function GET(request: NextRequest) {
     }
 
     const searchParams = request.nextUrl.searchParams
-    const estado = searchParams.get("estado") ?? "todos" // todos, activos, inactivos
+    const estado = searchParams.get("estado") ?? "todos"
 
     const where: any = {}
 
     if (estado === "activos") {
-      where.estado = "ACTIVO"
+      where.activo = true
     } else if (estado === "inactivos") {
-      where.estado = "INACTIVO"
+      where.activo = false
     }
 
     const descuentos = await prisma.descuento.findMany({
       where,
       include: {
         usuario: { select: { id: true, nombreCompleto: true } },
-        _count: { select: { ventas: true } }
+        _count: { select: { ventas: true } },
+        productos: { include: { producto: { select: { id: true, nombre: true } } } },
+        categorias: { include: { categoria: { select: { id: true, nombre: true } } } },
+        clientes: { include: { cliente: { select: { id: true, nombreCompleto: true } } } }
       },
       orderBy: { createdAt: "desc" },
     })
@@ -38,6 +42,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// POST /api/descuentos (ADMIN)
 export async function POST(request: NextRequest) {
   try {
     const user = await getCurrentUser()
@@ -64,21 +69,57 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { tipo, valor, motivo, fechaInicio, fechaFin, montoMinimo, maxDescuento, esAcumulable, estado } = validation.data
+    const data = validation.data
 
-    const descuento = await prisma.descuento.create({
-      data: {
-        tipo,
-        valor,
-        motivo,
-        fechaInicio: fechaInicio ? new Date(fechaInicio) : null,
-        fechaFin: fechaFin ? new Date(fechaFin) : null,
-        montoMinimo,
-        maxDescuento,
-        esAcumulable: esAcumulable ?? false,
-        estado: estado ?? "ACTIVO",
-        idUsuario: user.id,
-      },
+    const descuento = await prisma.$transaction(async (tx) => {
+      // Crear descuento principal
+      const desc = await tx.descuento.create({
+        data: {
+          nombre: data.nombre,
+          descripcion: data.descripcion,
+          tipoAplicacion: data.tipoAplicacion,
+          tipoValor: data.tipoValor,
+          tipo: data.tipoValor === "PORCENTAJE" ? "PORCENTAJE" : "MONTO", // compatibility
+          valor: data.valor,
+          motivo: data.nombre, // compatibility
+          fechaInicio: data.fechaInicio ? new Date(data.fechaInicio) : null,
+          fechaFin: data.fechaFin ? new Date(data.fechaFin) : null,
+          montoMinimoCompra: data.montoMinimoCompra,
+          montoMinimo: data.montoMinimoCompra, // compatibility
+          cantidadMinima: data.cantidadMinima,
+          limiteUso: data.limiteUso,
+          esAcumulable: data.esAcumulable ?? false,
+          activo: data.activo ?? true,
+          estado: (data.activo ?? true) ? "ACTIVO" : "INACTIVO", // compatibility
+          idUsuario: user.id,
+        },
+      })
+
+      // Asociar según tipo de aplicación
+      if (data.tipoAplicacion === "PRODUCTO" && data.productosIds && data.productosIds.length > 0) {
+        await tx.descuentoProducto.createMany({
+          data: data.productosIds.map(prodId => ({
+            idDescuento: desc.id,
+            idProducto: prodId
+          }))
+        })
+      } else if (data.tipoAplicacion === "CATEGORIA" && data.categoriasIds && data.categoriasIds.length > 0) {
+        await tx.descuentoCategoria.createMany({
+          data: data.categoriasIds.map(catId => ({
+            idDescuento: desc.id,
+            idCategoria: catId
+          }))
+        })
+      } else if (data.tipoAplicacion === "CLIENTE" && data.clientesIds && data.clientesIds.length > 0) {
+        await tx.descuentoCliente.createMany({
+          data: data.clientesIds.map(cliId => ({
+            idDescuento: desc.id,
+            idCliente: cliId
+          }))
+        })
+      }
+
+      return desc
     })
 
     registrarLog({
@@ -86,7 +127,7 @@ export async function POST(request: NextRequest) {
       entidad: "Descuento",
       entidadId: descuento.id,
       idUsuario: user.id,
-      detalles: { motivo: descuento.motivo, valor: Number(descuento.valor), tipo: descuento.tipo }
+      detalles: { nombre: descuento.nombre, valor: Number(descuento.valor), tipoAplicacion: descuento.tipoAplicacion }
     })
 
     return NextResponse.json(descuento, { status: 201 })

@@ -75,8 +75,41 @@ function LogRow({ log }: { log: any }) {
 
   let detallesObj: any = null
   try {
-    if (log.detalles) detallesObj = JSON.parse(log.detalles)
+    if (log.detalles && typeof log.detalles === "string") {
+      detallesObj = JSON.parse(log.detalles)
+    } else if (log.detalles) {
+      detallesObj = log.detalles
+    }
   } catch { /* json parse failed silently */ }
+
+  const getDiff = (ant: any, nvo: any) => {
+    if (!ant && !nvo) return null
+    const diffs: Array<{ key: string; oldVal: any; newVal: any }> = []
+    
+    const objAnt = ant && typeof ant === "object" ? ant : {}
+    const objNvo = nvo && typeof nvo === "object" ? nvo : {}
+    
+    const allKeys = Array.from(new Set([...Object.keys(objAnt), ...Object.keys(objNvo)]))
+    
+    for (const key of allKeys) {
+      const valAnt = objAnt[key]
+      const valNvo = objNvo[key]
+      
+      // Evitar diff en createdAt/updatedAt si no son los únicos cambios
+      if (key === "createdAt" || key === "updatedAt" || key === "fecha" || key === "hora") continue
+
+      if (JSON.stringify(valAnt) !== JSON.stringify(valNvo)) {
+        diffs.push({
+          key,
+          oldVal: valAnt,
+          newVal: valNvo
+        })
+      }
+    }
+    return diffs.length > 0 ? diffs : null
+  }
+
+  const diffs = getDiff(log.datosAnteriores, log.datosNuevos)
 
   return (
     <div className={`rounded-xl border transition-all duration-200 ${expanded ? "bg-muted/30" : "hover:bg-muted/20"}`}>
@@ -127,13 +160,61 @@ function LogRow({ log }: { log: any }) {
       </button>
 
       {/* Detalles expandidos */}
-      {expanded && detallesObj && (
-        <div className="px-4 pb-4">
-          <div className="rounded-lg bg-muted/40 border border-border p-4 font-mono text-xs overflow-x-auto">
-            <pre className="text-muted-foreground whitespace-pre-wrap break-all">
-              {JSON.stringify(detallesObj, null, 2)}
-            </pre>
-          </div>
+      {expanded && (
+        <div className="px-4 pb-4 space-y-3">
+          {/* IP y Motivo */}
+          {(log.ip || log.motivo) && (
+            <div className="flex gap-x-6 gap-y-1.5 flex-wrap p-2.5 rounded-lg bg-card border text-xs text-muted-foreground">
+              {log.ip && (
+                <span>IP origen: <strong className="text-foreground font-mono">{log.ip}</strong></span>
+              )}
+              {log.motivo && (
+                <span>Justificación/Motivo: <strong className="text-foreground italic">"{log.motivo}"</strong></span>
+              )}
+            </div>
+          )}
+
+          {/* Comparación JSON diff */}
+          {diffs ? (
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Comparativa de Cambios</span>
+              <div className="overflow-x-auto rounded-lg border border-border">
+                <table className="w-full text-xs font-sans text-left border-collapse">
+                  <thead>
+                    <tr className="bg-muted/80 text-muted-foreground font-semibold border-b border-border">
+                      <th className="p-2 font-semibold">Campo</th>
+                      <th className="p-2 font-semibold">Valor Anterior</th>
+                      <th className="p-2 font-semibold">Valor Nuevo</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {diffs.map((d, index) => (
+                      <tr key={index} className="hover:bg-muted/10">
+                        <td className="p-2 font-semibold text-foreground bg-muted/20 font-mono">{d.key}</td>
+                        <td className="p-2 text-red-500 dark:text-red-400 bg-red-500/[0.03] font-mono break-all whitespace-pre-wrap">
+                          {d.oldVal !== undefined && d.oldVal !== null ? (typeof d.oldVal === "object" ? JSON.stringify(d.oldVal) : String(d.oldVal)) : "—"}
+                        </td>
+                        <td className="p-2 text-emerald-600 dark:text-emerald-400 bg-emerald-500/[0.03] font-mono break-all whitespace-pre-wrap">
+                          {d.newVal !== undefined && d.newVal !== null ? (typeof d.newVal === "object" ? JSON.stringify(d.newVal) : String(d.newVal)) : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : detallesObj ? (
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Detalles del Evento</span>
+              <div className="rounded-lg bg-muted/40 border border-border p-4 font-mono text-xs overflow-x-auto">
+                <pre className="text-muted-foreground whitespace-pre-wrap break-all">
+                  {JSON.stringify(detallesObj, null, 2)}
+                </pre>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground italic">No hay detalles adicionales registrados.</p>
+          )}
         </div>
       )}
     </div>

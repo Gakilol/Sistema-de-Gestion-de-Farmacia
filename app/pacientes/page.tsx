@@ -33,6 +33,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
 import { clienteSchema } from "@/lib/validations"
 import { useCurrentUser } from "@/app/hooks/useCurrentUser"
+import { useRouter } from "next/navigation"
 
 interface DatosClinicos {
   antecedentes: string | null
@@ -90,12 +91,21 @@ interface InitialExamenInput {
 }
 
 export default function PacientesPage() {
+  const router = useRouter()
   const { user: currentUser, loading: authLoading } = useCurrentUser()
   const [pacientes, setPacientes] = useState<Paciente[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!authLoading && currentUser) {
+      if (currentUser.rolNombre !== "ADMIN" && currentUser.rolNombre !== "DOCTOR") {
+        router.push("/acceso-denegado")
+      }
+    }
+  }, [currentUser, authLoading, router])
 
   // Tabs inside the form
   const [formTab, setFormTab] = useState<"personales" | "clinicos" | "examenes_iniciales">("personales")
@@ -113,6 +123,7 @@ export default function PacientesPage() {
     fechaNacimiento: "",
     tipoPerfil: "CLINICA" as "CLINICA" | "AMBOS",
     datosClinicos: {
+      tipoSangre: "",
       antecedentes: "",
       alergias: "",
       observacionesClinicas: "",
@@ -287,6 +298,7 @@ export default function PacientesPage() {
       fechaNacimiento: "",
       tipoPerfil: "CLINICA",
       datosClinicos: {
+        tipoSangre: "",
         antecedentes: "",
         alergias: "",
         observacionesClinicas: "",
@@ -319,6 +331,7 @@ export default function PacientesPage() {
       fechaNacimiento: formattedDate,
       tipoPerfil: paciente.tipoPerfil === "AMBOS" ? "AMBOS" : "CLINICA",
       datosClinicos: {
+        tipoSangre: paciente.datosClinicos?.tipoSangre || "",
         antecedentes: paciente.datosClinicos?.antecedentes || "",
         alergias: paciente.datosClinicos?.alergias || "",
         observacionesClinicas: paciente.datosClinicos?.observacionesClinicas || "",
@@ -826,6 +839,26 @@ export default function PacientesPage() {
                   <div className="grid grid-cols-1 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-1 flex items-center gap-1">
+                        Tipo de Sangre
+                      </label>
+                      <select
+                        value={formData.datosClinicos.tipoSangre}
+                        onChange={(e) => setFormData({ ...formData, datosClinicos: { ...formData.datosClinicos, tipoSangre: e.target.value } })}
+                        className="flex h-10 w-full rounded-md border border-input bg-muted/30 border-border px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      >
+                        <option value="">Seleccionar grupo sanguíneo...</option>
+                        <option value="O+">O Positivo (O+)</option>
+                        <option value="O-">O Negativo (O-)</option>
+                        <option value="A+">A Positivo (A+)</option>
+                        <option value="A-">A Negativo (A-)</option>
+                        <option value="B+">B Positivo (B+)</option>
+                        <option value="B-">B Negativo (B-)</option>
+                        <option value="AB+">AB Positivo (AB+)</option>
+                        <option value="AB-">AB Negativo (AB-)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1 flex items-center gap-1">
                         <ShieldAlert className="w-4 h-4 text-amber-500" />
                         Alergias o Contraindicaciones
                       </label>
@@ -1097,6 +1130,12 @@ export default function PacientesPage() {
                       Ficha de Diagnóstico
                     </h3>
                     <div className="space-y-3 text-xs">
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground block mb-0.5">Tipo de Sangre</span>
+                        <p className="p-2 rounded bg-background border border-border text-foreground font-semibold">
+                          {selectedPaciente.datosClinicos?.tipoSangre || "No especificado"}
+                        </p>
+                      </div>
                       <div>
                         <span className="text-[10px] uppercase font-bold text-muted-foreground block mb-0.5">Alergias / Contraindicaciones</span>
                         <p className={`p-2 rounded bg-background border border-border ${selectedPaciente.datosClinicos?.alergias ? "text-red-500 font-semibold" : "text-muted-foreground italic"}`}>

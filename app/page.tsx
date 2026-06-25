@@ -10,6 +10,7 @@ import useSWR from "swr"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts"
 import { toast } from "sonner"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useCurrentUser } from "@/app/hooks/useCurrentUser"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
@@ -32,6 +33,7 @@ const barColors = ["#34d399", "#22d3ee", "#a78bfa", "#fbbf24", "#fb7185"]
 
 export default function Dashboard() {
   const router = useRouter()
+  const { user } = useCurrentUser()
   const [periodo, setPeriodo] = useState<Periodo>("semanal")
 
   const { data: dashboardData, isLoading: loading } = useSWR(["dashboard", periodo], async ([_, p]) => {
@@ -45,7 +47,10 @@ export default function Dashboard() {
       case "mensual": startDate.setDate(hoy.getDate() - 30); break
     }
 
-    const startDateStr = startDate.toISOString().split("T")[0]
+    const year = startDate.getFullYear()
+    const month = String(startDate.getMonth() + 1).padStart(2, '0')
+    const day = String(startDate.getDate()).padStart(2, '0')
+    const startDateStr = `${year}-${month}-${day}`
 
     const [resVentas, resProductos, resTopProductos, resTopClientes] = await Promise.all([
       fetch("/api/ventas?startDate=" + startDateStr),
@@ -54,24 +59,31 @@ export default function Dashboard() {
       fetch("/api/stats/top-clientes?periodo=" + p),
     ])
 
-    const ventas = await resVentas.json()
-    const productos = await resProductos.json()
-    const topProductos = await resTopProductos.json()
-    const topClientes = await resTopClientes.json()
+    const ventas = resVentas.ok ? await resVentas.json() : []
+    const productos = resProductos.ok ? await resProductos.json() : []
+    const topProductos = resTopProductos.ok ? await resTopProductos.json() : []
+    const topClientes = resTopClientes.ok ? await resTopClientes.json() : []
 
-    const ventasPeriodoCount = ventas.length
-    const totalVentasPeriodo = ventas.reduce((sum: number, v: any) => sum + Number.parseFloat(v.total), 0)
+    const ventasPeriodoCount = Array.isArray(ventas) ? ventas.length : 0
+    const totalVentasPeriodo = Array.isArray(ventas)
+      ? ventas.reduce((sum: number, v: any) => sum + Number.parseFloat(v.total), 0)
+      : 0
 
     const productosBajoStock = Array.isArray(productos)
       ? productos.filter((p: any) => p.stockMinimo && p.stockActual <= p.stockMinimo)
       : []
 
     const salesByDate: Record<string, number> = {}
-    ventas.forEach((v: any) => {
-      const d = new Date(v.fecha).toISOString().split("T")[0]
-      if (!salesByDate[d]) salesByDate[d] = 0
-      salesByDate[d] += Number.parseFloat(v.total)
-    })
+    if (Array.isArray(ventas)) {
+      ventas.forEach((v: any) => {
+        // v.fecha is in UTC. Subtract 6 hours (Nicaragua offset) to get local date
+        const utcDate = new Date(v.fecha)
+        const localDate = new Date(utcDate.getTime() - 6 * 60 * 60 * 1000)
+        const d = localDate.toISOString().split("T")[0]
+        if (!salesByDate[d]) salesByDate[d] = 0
+        salesByDate[d] += Number.parseFloat(v.total)
+      })
+    }
 
     const formattedChartData = Object.keys(salesByDate).sort().map(date => {
       const [y, m, d] = date.split("-")
@@ -135,8 +147,12 @@ export default function Dashboard() {
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
-              <p className="text-muted-foreground mt-1">Bienvenido al sistema de gestión de farmacia</p>
+              <h1 className="text-3xl font-bold text-foreground">
+                ¡Bienvenido, {user?.nombreCompleto || "Usuario"}!
+              </h1>
+              <p className="text-muted-foreground mt-1">
+                Panel de control y estadísticas del sistema ({user?.rolNombre || "Cargando..."})
+              </p>
             </div>
             <div className="flex items-center gap-1 p-1 rounded-xl bg-muted/50 border border-border">
               {(["diario", "semanal", "quincenal", "mensual"] as Periodo[]).map((p) => (
@@ -262,7 +278,7 @@ export default function Dashboard() {
                         <div className="flex items-center justify-between mb-1">
                           <p className="text-sm font-medium text-foreground truncate">{producto.nombre}</p>
                           <span className="text-xs text-muted-foreground ml-2 whitespace-nowrap">
-                            {Number(producto.totalUnidades)} uds
+                            {Number(producto.totalUnidades)} und
                           </span>
                         </div>
                         <div className="w-full bg-muted/50 rounded-full h-2">

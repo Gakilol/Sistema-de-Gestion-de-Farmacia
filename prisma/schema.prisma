@@ -23,6 +23,7 @@ model Usuario {
   rol             Rol     @relation(fields: [idRol], references: [id])
   activo          Boolean @default(true)
   esDatoPrueba    Boolean @default(false)
+  eliminadoEn     DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -59,6 +60,7 @@ model Cliente {
   recetas         Receta[]
   datosClinicos   DatosClinicosPaciente?
   examenes        ExamenPaciente[]
+  descuentos      DescuentoCliente[]
 }
 
 
@@ -74,6 +76,7 @@ model CategoriaProducto {
   updatedAt       DateTime @updatedAt
 
   productos       Producto[]
+  descuentos      DescuentoCategoria[]
 }
 
 // ===== PRODUCTOS (CATÁLOGO) =====
@@ -101,11 +104,13 @@ model Producto {
   margenUtilidad  Decimal? @db.Decimal(10, 2)
   stockActual     Int     @default(0)  // Computed from Lote totals — read-only in UI
   stockMinimo     Int?
-  activo          Boolean @default(true)
-  esServicio      Boolean @default(false)
-  esDatoPrueba    Boolean @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  activo              Boolean @default(true)
+  esServicio          Boolean @default(false)
+  esDatoPrueba        Boolean @default(false)
+  idFormaFarmaceutica Int?
+  formaFarmaceutica   FormaFarmaceutica? @relation(fields: [idFormaFarmaceutica], references: [id])
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   detallesCompra  DetalleCompra[]
   detallesVenta   DetalleVenta[]
@@ -114,6 +119,7 @@ model Producto {
   movimientos     MovimientoInventario[]
   devoluciones    DevolucionProveedor[]
   detallesReceta  DetalleReceta[]
+  descuentos      DescuentoProducto[]
 }
 
 // ===== PROVEEDORES =====
@@ -275,15 +281,19 @@ model DetalleVenta {
 
 // ===== AUDITORÍA =====
 model AuditoriaLog {
-  id          Int      @id @default(autoincrement())
-  accion      String   // ej. "CREAR_PRODUCTO", "ACTUALIZAR_STOCK", "NUEVA_VENTA"
-  entidad     String   // ej. "Producto", "Venta"
-  entidadId   Int?     // ID del registro modificado
-  detalles    String?  // JSON con detalles
+  id              Int      @id @default(autoincrement())
+  accion          String   // ej. "CREAR_PRODUCTO", "ACTUALIZAR_STOCK", "NUEVA_VENTA"
+  entidad         String   // ej. "Producto", "Venta"
+  entidadId       Int?     // ID del registro modificado
+  detalles        String?  // JSON con detalles
   modulo      String   @default("FARMACIA")
   idUsuario   Int?
   usuario     Usuario? @relation(fields: [idUsuario], references: [id])
-  createdAt   DateTime @default(now())
+  datosAnteriores Json?
+  datosNuevos     Json?
+  ip              String?
+  motivo          String?
+  createdAt       DateTime @default(now())
 }
 
 // ===== RECUPERACIÓN DE CONTRASEÑA =====
@@ -459,6 +469,7 @@ model DatosClinicosPaciente {
   id                   Int      @id @default(autoincrement())
   idCliente            Int      @unique
   cliente              Cliente  @relation(fields: [idCliente], references: [id], onDelete: Cascade)
+  tipoSangre           String?  @db.VarChar(10)
   antecedentes         String?  @db.Text
   alergias             String?  @db.Text
   observacionesClinicas String? @db.Text
@@ -474,32 +485,45 @@ model ServicioPodologia {
   descripcion  String?              @db.Text
   precio       Decimal              @db.Decimal(10, 2)
   duracion     Int?                 // en minutos
-  activo       Boolean              @default(true)
-  esDatoPrueba Boolean              @default(false)
-  createdAt    DateTime             @default(now())
-  updatedAt    DateTime             @updatedAt
+  activo          Boolean              @default(true)
+  esDatoPrueba    Boolean              @default(false)
+  observaciones   String?              @db.Text
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
 
   atenciones   AtencionPodologica[]
 }
 
 // ===== SISTEMA DE DESCUENTOS =====
 model Descuento {
-  id           Int        @id @default(autoincrement())
-  tipo         String     // "PORCENTAJE", "MONTO"
-  valor        Decimal    @db.Decimal(10, 2)
-  motivo       String
-  fechaInicio  DateTime?
-  fechaFin     DateTime?
-  montoMinimo  Decimal?   @db.Decimal(10, 2)
-  maxDescuento Decimal?   @db.Decimal(10, 2)
-  esAcumulable Boolean    @default(false)
-  estado       String     @default("ACTIVO") // "ACTIVO", "INACTIVO"
-  idUsuario    Int
-  usuario      Usuario    @relation(fields: [idUsuario], references: [id])
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id                Int                  @id @default(autoincrement())
+  nombre            String               @default("Descuento")
+  descripcion       String?
+  tipoAplicacion    String               @default("VENTA_GENERAL") // "PRODUCTO", "CATEGORIA", "CLIENTE", "VENTA_GENERAL"
+  tipoValor         String               @default("PORCENTAJE") // "PORCENTAJE", "MONTO_FIJO"
+  tipo              String?              // legacy compatibility
+  valor             Decimal              @db.Decimal(10, 2)
+  motivo            String
+  fechaInicio       DateTime?
+  fechaFin          DateTime?
+  montoMinimoCompra Decimal?             @db.Decimal(10, 2)
+  montoMinimo       Decimal?             @db.Decimal(10, 2) // legacy compatibility
+  maxDescuento      Decimal?             @db.Decimal(10, 2)
+  cantidadMinima    Int                  @default(0)
+  limiteUso         Int?
+  usosActuales      Int                  @default(0)
+  esAcumulable      Boolean              @default(false)
+  activo            Boolean              @default(true)
+  estado            String               @default("ACTIVO") // legacy compatibility
+  idUsuario         Int
+  usuario           Usuario              @relation(fields: [idUsuario], references: [id])
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
 
-  ventas       Venta[]
+  ventas            Venta[]
+  productos         DescuentoProducto[]
+  categorias        DescuentoCategoria[]
+  clientes          DescuentoCliente[]
 }
 
 // ===== EXÁMENES DE PACIENTES =====
@@ -528,4 +552,53 @@ model ExamenPaciente {
   @@index([fechaExamen])
   @@index([tipo])
 }
+model FormaFarmaceutica {
+  id          Int        @id @default(autoincrement())
+  nombre      String     @unique
+  descripcion String?
+  activo      Boolean    @default(true)
+  orden       Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
+  productos   Producto[]
+}
+
+model DescuentoProducto {
+  id          Int       @id @default(autoincrement())
+  idDescuento Int
+  descuento   Descuento @relation(fields: [idDescuento], references: [id], onDelete: Cascade)
+  idProducto  Int
+  producto    Producto  @relation(fields: [idProducto], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@unique([idDescuento, idProducto])
+  @@index([idDescuento])
+  @@index([idProducto])
+}
+
+model DescuentoCategoria {
+  id          Int               @id @default(autoincrement())
+  idDescuento Int
+  descuento   Descuento         @relation(fields: [idDescuento], references: [id], onDelete: Cascade)
+  idCategoria Int
+  categoria   CategoriaProducto @relation(fields: [idCategoria], references: [id], onDelete: Cascade)
+  createdAt   DateTime          @default(now())
+
+  @@unique([idDescuento, idCategoria])
+  @@index([idDescuento])
+  @@index([idCategoria])
+}
+
+model DescuentoCliente {
+  id          Int       @id @default(autoincrement())
+  idDescuento Int
+  descuento   Descuento @relation(fields: [idDescuento], references: [id], onDelete: Cascade)
+  idCliente   Int
+  cliente     Cliente   @relation(fields: [idCliente], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@unique([idDescuento, idCliente])
+  @@index([idDescuento])
+  @@index([idCliente])
+}
