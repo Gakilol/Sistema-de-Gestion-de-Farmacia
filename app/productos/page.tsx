@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Sidebar } from "@/components/sidebar"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -82,6 +82,8 @@ export default function ProductosPage() {
   const [scannerOpen, setScannerOpen] = useState(false)
   const [detailsLoading, setDetailsLoading] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<any | null>(null)
+  // Guard against double-invocation of handleOpenDetails (e.g. barcode scanner + Enter key)
+  const openingDetailsRef = useRef(false)
 
   // Ajuste de stock modal
   const [showAjusteModal, setShowAjusteModal] = useState(false)
@@ -287,6 +289,9 @@ export default function ProductosPage() {
   }
 
   const handleOpenDetails = async (producto: Producto) => {
+    // Prevenir doble apertura por disparo simultáneo del escáner físico + tecla Enter
+    if (openingDetailsRef.current || showDetailsModal) return
+    openingDetailsRef.current = true
     setDetailsLoading(true)
     setSelectedProduct(null)
     setShowDetailsModal(true)
@@ -305,6 +310,7 @@ export default function ProductosPage() {
       setShowDetailsModal(false)
     } finally {
       setDetailsLoading(false)
+      openingDetailsRef.current = false
     }
   }
 
@@ -1280,7 +1286,7 @@ export default function ProductosPage() {
                     if (e.key === "Enter") {
                       e.preventDefault()
                       const searchTrimmed = search.trim()
-                      if (searchTrimmed) {
+                      if (searchTrimmed && !showDetailsModal && !openingDetailsRef.current) {
                         const match = productos.find(p => p.codigoBarras && p.codigoBarras.trim() === searchTrimmed)
                         if (match) {
                           handleOpenDetails(match)

@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
       const desc = await prisma.descuento.findUnique({
         where: { id: idDescuento }
       })
-      if (!desc || desc.estado !== "ACTIVO") {
+      if (!desc || !desc.activo || desc.estado === "INACTIVO") {
         return NextResponse.json({ error: "El descuento seleccionado no está activo" }, { status: 400 })
       }
       const nowDb = new Date()
@@ -108,6 +108,12 @@ export async function POST(request: NextRequest) {
       if (desc.fechaFin && desc.fechaFin < nowDb) {
         return NextResponse.json({ error: "El descuento ha expirado" }, { status: 400 })
       }
+      // Validar límite de uso
+      if (desc.limiteUso != null && desc.usosActuales >= desc.limiteUso) {
+        return NextResponse.json({ error: `El descuento ha alcanzado su límite de uso (${desc.limiteUso} usos)` }, { status: 400 })
+      }
+      // Guardar el objeto para validar monto mínimo después de calcular el total bruto
+      // La validación de montoMinimoCompra se hace más abajo, luego de calcular el total bruto
     }
 
     // ── Pre-validación: cargar todos los productos de una sola consulta ──
@@ -207,15 +213,32 @@ export async function POST(request: NextRequest) {
     }
 
     // Calcular total de forma segura con descuentos
-    let total = 0
+    let totalBruto = 0
     for (const detalle of detalles) {
       const lineSubtotal = detalle.precioUnitario * Number.parseInt(detalle.cantidad)
       const lineDiscount = Number(detalle.descuentoLinea || 0)
       const lineTotal = lineSubtotal - lineDiscount
-      total += lineTotal
+      totalBruto += lineTotal
     }
+
+    // Validar monto mínimo del descuento (sobre el subtotal bruto, antes del descuento global)
+    if (idDescuento) {
+      const descParaMinimo = await prisma.descuento.findUnique({
+        where: { id: idDescuento },
+        select: { montoMinimoCompra: true, montoMinimo: true, nombre: true }
+      })
+      if (descParaMinimo) {
+        const minimo = Number(descParaMinimo.montoMinimoCompra || descParaMinimo.montoMinimo || 0)
+        if (minimo > 0 && totalBruto < minimo) {
+          return NextResponse.json({
+            error: `El descuento requiere un subtotal mínimo de C$${minimo.toFixed(2)}. Tu subtotal es C$${totalBruto.toFixed(2)}.`
+          }, { status: 400 })
+        }
+      }
+    }
+
     const saleDiscount = Number(descuentoTotal || 0)
-    total = Math.max(0, total - saleDiscount)
+    let total = Math.max(0, totalBruto - saleDiscount)
 
     // ── Idempotencia: Evitar ventas duplicadas por doble click en menos de 15 segundos ──
     const quinceSegundosAtras = new Date(Date.now() - 15 * 1000)
@@ -373,6 +396,14 @@ export async function POST(request: NextRequest) {
               usuario: { include: { rol: true } },
             },
           })
+
+          // 4b. Incrementar usosActuales del descuento si se aplicó uno
+          if (idDescuento && saleDiscount > 0) {
+            await tx.descuento.update({
+              where: { id: idDescuento },
+              data: { usosActuales: { increment: 1 } },
+            })
+          }
 
           // 5. Deducción por lote siguiendo FEFO (Vencimiento asc nulls last, luego creado asc) (SOLO físicos)
           const ahoraTransaction = new Date()

@@ -337,19 +337,48 @@ export default function NuevaVentaPage() {
   const total = lineas.reduce((sum, l) => sum + l.subtotal, 0)
 
   // Find selected discount object
-  const descObj = descuentos.find((d: any) => String(d.id) === selectedDescuento)
-  
+  const now = new Date()
+
+  // Filter discounts valid for today + meeting minimum purchase condition
+  const descuentosValidos = descuentos.filter((d: any) => {
+    if (!d.activo || d.estado === "INACTIVO") return false
+    if (d.fechaInicio && new Date(d.fechaInicio) > now) return false
+    if (d.fechaFin && new Date(d.fechaFin) < now) return false
+    if (d.limiteUso != null && d.usosActuales >= d.limiteUso) return false
+    return true
+  })
+
+  const descObj = descuentosValidos.find((d: any) => String(d.id) === selectedDescuento)
+
+  // Auto-clear discount if minimum amount condition is no longer met
+  useEffect(() => {
+    if (!selectedDescuento) return
+    const d = descuentosValidos.find((x: any) => String(x.id) === selectedDescuento)
+    if (!d) return
+    const minimo = Number(d.montoMinimoCompra || d.montoMinimo || 0)
+    if (minimo > 0 && total < minimo) {
+      setSelectedDescuento("")
+      toast.warning(`Descuento eliminado: el subtotal (C$${total.toFixed(2)}) está por debajo del mínimo requerido (C$${minimo.toFixed(2)})`)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [total, selectedDescuento])
+
   let discountTotal = 0
   if (descObj) {
-    if (descObj.tipo === "PORCENTAJE") {
-      discountTotal = total * (Number(descObj.valor) / 100)
-      if (descObj.maxDescuento) {
-        discountTotal = Math.min(discountTotal, Number(descObj.maxDescuento))
+    const minimo = Number(descObj.montoMinimoCompra || descObj.montoMinimo || 0)
+    // Only apply if total meets minimum
+    if (minimo <= 0 || total >= minimo) {
+      const tipoValor = descObj.tipoValor || descObj.tipo // support both field names
+      if (tipoValor === "PORCENTAJE") {
+        discountTotal = total * (Number(descObj.valor) / 100)
+        if (descObj.maxDescuento) {
+          discountTotal = Math.min(discountTotal, Number(descObj.maxDescuento))
+        }
+      } else if (tipoValor === "MONTO" || tipoValor === "MONTO_FIJO") {
+        discountTotal = Number(descObj.valor)
       }
-    } else if (descObj.tipo === "MONTO") {
-      discountTotal = Number(descObj.valor)
+      discountTotal = Math.min(discountTotal, total)
     }
-    discountTotal = Math.min(discountTotal, total)
   }
 
   const totalNeto = total - discountTotal
@@ -914,15 +943,36 @@ export default function NuevaVentaPage() {
                       <label className="block text-xs font-medium text-foreground mb-1">Descuento General</label>
                       <select
                         value={selectedDescuento}
-                        onChange={(e) => setSelectedDescuento(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          if (val) {
+                            const d = descuentosValidos.find((x: any) => String(x.id) === val)
+                            if (d) {
+                              const minimo = Number(d.montoMinimoCompra || d.montoMinimo || 0)
+                              if (minimo > 0 && total < minimo) {
+                                toast.error(`Este descuento requiere un mínimo de C$${minimo.toFixed(2)}. Tu subtotal es C$${total.toFixed(2)}.`)
+                                return
+                              }
+                            }
+                          }
+                          setSelectedDescuento(val)
+                        }}
                         className={selectClass}
                       >
                         <option value="">Ningún descuento</option>
-                        {descuentos.map((d: any) => (
-                          <option key={d.id} value={d.id}>
-                            {d.motivo} ({d.tipo === "PORCENTAJE" ? `${Number(d.valor).toFixed(0)}%` : `C$${Number(d.valor).toFixed(2)}`})
-                          </option>
-                        ))}
+                        {descuentosValidos.map((d: any) => {
+                          const minimo = Number(d.montoMinimoCompra || d.montoMinimo || 0)
+                          const esCondicionada = minimo > 0 && total < minimo
+                          const valorLabel = (d.tipoValor || d.tipo) === "PORCENTAJE"
+                            ? `${Number(d.valor).toFixed(0)}%`
+                            : `C$${Number(d.valor).toFixed(2)}`
+                          const minimoLabel = minimo > 0 ? ` — Mín. C$${minimo.toFixed(2)}` : ""
+                          return (
+                            <option key={d.id} value={d.id} disabled={esCondicionada}>
+                              {d.nombre || d.motivo} ({valorLabel}){minimoLabel}{esCondicionada ? " ⛔" : ""}
+                            </option>
+                          )
+                        })}
                       </select>
                     </div>
 
