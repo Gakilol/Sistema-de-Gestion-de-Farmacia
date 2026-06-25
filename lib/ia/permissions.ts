@@ -27,6 +27,25 @@ const PERMISOS_POR_ROL: Record<UserRole, Set<IAToolName>> = {
     "createPurchaseDraft",
     "createInventoryAdjustmentDraft",
     "getSuggestedPurchaseOrder",
+    // Clínicas
+    "searchPatients",
+    "getPatientClinicalHistory",
+    "getMostCommonClinicalConditions",
+  ]),
+  DOCTOR: new Set<IAToolName>([
+    "getDashboardSummary",
+    "getLowStockProducts",
+    "getExpiredProducts",
+    "getProductsNearExpiration",
+    "searchProducts",
+    "getProductDetails",
+    "getProductLots",
+    "getTopSellingProducts",
+    // Clínicas (acceso completo para DOCTOR)
+    "searchPatients",
+    "getPatientClinicalHistory",
+    "getMostCommonClinicalConditions",
+    // Nota: getSalesSummary, getInventoryMovements, getAuditAlerts, createPurchaseDraft DENEGADOS para DOCTOR
   ]),
   EMPLEADO: new Set<IAToolName>([
     "getDashboardSummary",
@@ -40,6 +59,7 @@ const PERMISOS_POR_ROL: Record<UserRole, Set<IAToolName>> = {
     "getTopSellingProducts",
     // getSalesSummary, getInventoryMovements, getAuditAlerts: DENEGADOS para EMPLEADO
     // createPurchaseDraft, createInventoryAdjustmentDraft, getSuggestedPurchaseOrder: DENEGADOS
+    // Herramientas clínicas: DENEGADAS para EMPLEADO
   ]),
   UNKNOWN: new Set<IAToolName>([]),
 }
@@ -100,6 +120,7 @@ export function resolveRoleFromId(idRol: number): UserRole {
   const ROLE_MAP: Record<number, UserRole> = {
     1: "ADMIN",
     2: "EMPLEADO",
+    3: "DOCTOR",
   }
   return ROLE_MAP[idRol] ?? "UNKNOWN"
 }

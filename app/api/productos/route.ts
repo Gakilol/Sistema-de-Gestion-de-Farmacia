@@ -9,6 +9,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const estado = searchParams.get("estado") ?? "activos" // por defecto solo activos
+    const esServicioParam = searchParams.get("esServicio")
 
     let where: any = {}
 
@@ -18,6 +19,12 @@ export async function GET(request: NextRequest) {
       where.activo = false
     } else if (estado === "todos") {
       // no filtramos por activo
+    }
+
+    if (esServicioParam === "true") {
+      where.esServicio = true
+    } else if (esServicioParam === "false") {
+      where.esServicio = false
     }
 
     const productos = await prisma.producto.findMany({

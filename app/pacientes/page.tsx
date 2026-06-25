@@ -1368,6 +1368,27 @@ export default function PacientesPage() {
                                     <p className="text-foreground whitespace-pre-wrap">{at.plan}</p>
                                   </div>
                                 </div>
+
+                                {/* Diagnósticos, Tratamientos e Insumos */}
+                                {(at.diagnosticos?.length > 0 || at.tratamientos?.length > 0 || at.insumos?.length > 0) && (
+                                  <div className="flex flex-wrap gap-1.5 pt-2.5 border-t border-border/30 text-[10px] items-center">
+                                    {at.diagnosticos?.map((d: any) => (
+                                      <span key={d.idDiagnostico} className="px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                                        {d.diagnostico.codigo ? `[${d.diagnostico.codigo}] ` : ""}{d.diagnostico.nombre}
+                                      </span>
+                                    ))}
+                                    {at.tratamientos?.map((t: any) => (
+                                      <span key={t.idTratamiento} className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-500 border border-blue-500/20 font-medium">
+                                        {t.tratamiento.nombre}
+                                      </span>
+                                    ))}
+                                    {at.insumos?.map((i: any) => (
+                                      <span key={i.id} className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 font-medium">
+                                        Insumo: {i.producto.nombre} (x{i.cantidad})
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
                               </Card>
                             ))}
                           </div>

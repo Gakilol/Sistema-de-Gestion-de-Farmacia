@@ -217,6 +217,40 @@ const GEMINI_TOOLS = [
           required: ["items"],
         },
       },
+      // ═══ HERRAMIENTAS CLÍNICAS (ADMIN y DOCTOR) ═══
+      {
+        name: "searchPatients",
+        description: "Busca pacientes por nombre completo, cédula o número de teléfono en el sistema. Retorna ID del paciente, número de consultas y última consulta. SOLO para ADMIN y DOCTOR.",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "Nombre, cédula o teléfono del paciente (mín. 2 caracteres)." },
+          },
+          required: ["query"],
+        },
+      },
+      {
+        name: "getPatientClinicalHistory",
+        description: "Retorna el historial clínico completo de un paciente: datos personales, alergias, antecedentes, últimas 10 consultas SOAP con diagnósticos y tratamientos. SOLO para ADMIN y DOCTOR. Usa el ID obtenido con searchPatients.",
+        parameters: {
+          type: "object",
+          properties: {
+            pacienteId: { type: "number", description: "ID numérico del paciente." },
+          },
+          required: ["pacienteId"],
+        },
+      },
+      {
+        name: "getMostCommonClinicalConditions",
+        description: "Retorna estadísticas de los diagnósticos más frecuentes en la clínica de podología en los últimos N días. Útil para identificar tendencias epidemiológicas. SOLO para ADMIN y DOCTOR.",
+        parameters: {
+          type: "object",
+          properties: {
+            dias: { type: "number", description: "Número de días hacia atrás a analizar (1-365). Por defecto 90." },
+            limit: { type: "number", description: "Máximo de diagnósticos a retornar (1-20). Por defecto 10." },
+          },
+        },
+      },
     ],
   },
 ]
@@ -227,14 +261,19 @@ const GEMINI_TOOLS = [
 
 function buildSystemPrompt(rolNombre: string, nombreUsuario: string): string {
   const esAdmin = rolNombre === "ADMIN"
-  return `Eres "FarmaPos IA", el asistente virtual inteligente y experto en gestión de farmacias integrado al sistema FarmaPos en Nicaragua. Tu objetivo es ayudar al personal a tomar decisiones operativas informadas.
+  const esDoctor = rolNombre === "DOCTOR"
+  const esClinico = esAdmin || esDoctor
+
+  return `Eres "FarmaPos IA", el asistente virtual inteligente y experto en gestión de farmacias y clínica podológica integrado al sistema FarmaPos en Nicaragua. Tu objetivo es ayudar al personal a tomar decisiones operativas informadas.
 
 USUARIO ACTIVO: ${nombreUsuario} — Rol: ${rolNombre}
 
 ACCESO A DATOS:
 ${esAdmin
-    ? "✅ Tienes acceso completo: inventario, ventas, costos, reportes financieros, auditoría y generación de borradores de compra."
-    : "📦 Tienes acceso a: productos, stock, lotes y vencimientos. NO tienes acceso a datos financieros, costos, reportes de ventas globales ni auditoría."}
+    ? "✅ Tienes acceso completo: inventario, ventas, costos, reportes financieros, auditoría, generación de borradores de compra y datos clínicos de pacientes."
+    : esDoctor
+    ? "🩺 Tienes acceso a: inventario para consulta, historial clínico de pacientes, diagnósticos, tratamientos y estadísticas de la clínica. NO tienes acceso a datos financieros ni auditoría administrativa."
+    : "📦 Tienes acceso a: productos, stock, lotes y vencimientos. NO tienes acceso a datos financieros, costos, reportes de ventas globales ni datos clínicos."}
 
 REGLAS OBLIGATORIAS:
 1. Responde SIEMPRE en español profesional. Usa córdobas (C$) como moneda.
@@ -244,7 +283,13 @@ REGLAS OBLIGATORIAS:
 5. Para borradores de compra o ajuste, explica claramente que es una PROPUESTA y que el administrador debe confirmarla en pantalla antes de que se aplique.
 6. Si una herramienta retorna acceso denegado, explica amablemente que ese dato requiere permisos de administrador.
 7. Estructura tus respuestas en Markdown con negritas, tablas y listas para mejor legibilidad.
-8. Límite de contexto: no repitas más de los últimos 10 mensajes del historial.`
+8. Límite de contexto: no repitas más de los últimos 10 mensajes del historial.
+${esClinico ? `
+⚠️ CONFIDENCIALIDAD MÉDICA — OBLIGATORIO:
+9. Los datos clínicos de pacientes son CONFIDENCIALES. Nunca los compartas fuera de la sesión actual.
+10. Si presentas historia clínica, incluye siempre: "⚕️ Esta información es de uso exclusivo del profesional de salud. FarmaPos IA NO emite diagnósticos ni sustituye el criterio médico profesional."
+11. Tus respuestas clínicas son de naturaleza informativa. El juicio clínico final siempre corresponde al profesional de salud.
+12. Usa searchPatients primero para obtener el ID del paciente antes de llamar a getPatientClinicalHistory.` : ""}`
 }
 
 // ---------------------------------------------------------------------------
@@ -311,6 +356,10 @@ const TOOL_AUDIT_MAP: Partial<Record<string, IAAuditAction>> = {
   getSuggestedPurchaseOrder:       "IA_TOOL_CREATE_PURCHASE_DRAFT",
   createPurchaseDraft:             "IA_TOOL_CREATE_PURCHASE_DRAFT",
   createInventoryAdjustmentDraft:  "IA_TOOL_CREATE_ADJUSTMENT_DRAFT",
+  // Clínicas
+  searchPatients:                  "IA_TOOL_SEARCH_PATIENTS",
+  getPatientClinicalHistory:       "IA_TOOL_GET_CLINICAL_HISTORY",
+  getMostCommonClinicalConditions: "IA_TOOL_GET_COMMON_CONDITIONS",
 }
 
 // ---------------------------------------------------------------------------

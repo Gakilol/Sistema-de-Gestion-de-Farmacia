@@ -15,7 +15,7 @@ export interface IAUserContext {
 }
 
 // Roles conocidos en la base de datos (ver seed.ts)
-export type UserRole = "ADMIN" | "EMPLEADO" | "UNKNOWN"
+export type UserRole = "ADMIN" | "DOCTOR" | "EMPLEADO" | "UNKNOWN"
 
 // ---------------------------------------------------------------------------
 // Resultados de herramientas de solo lectura (Fase 1)
@@ -210,6 +210,10 @@ export type IAToolName =
   | "createPurchaseDraft"
   | "createInventoryAdjustmentDraft"
   | "getSuggestedPurchaseOrder"
+  // Herramientas clínicas (solo ADMIN y DOCTOR)
+  | "searchPatients"
+  | "getPatientClinicalHistory"
+  | "getMostCommonClinicalConditions"
 
 export type IAAuditAction =
   | "IA_CHAT_CONSULTA"
@@ -229,3 +233,53 @@ export type IAAuditAction =
   | "IA_ACCESS_DENIED"
   | "IA_GEMINI_ERROR"
   | "IA_OCR_FACTURA"
+  // Clínica
+  | "IA_TOOL_SEARCH_PATIENTS"
+  | "IA_TOOL_GET_CLINICAL_HISTORY"
+  | "IA_TOOL_GET_COMMON_CONDITIONS"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tipos de resultados para herramientas clínicas
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface PacienteResumen {
+  id: number
+  nombreCompleto: string
+  cedula: string | null
+  telefono: string | null
+  totalConsultas: number
+  ultimaConsulta: string | null
+}
+
+export interface HistorialClinicopaciente {
+  paciente: {
+    id: number
+    nombreCompleto: string
+    cedula: string | null
+    fechaNacimiento: string | null
+    sexo: string | null
+    tipoSangre: string | null
+    alergias: string | null
+    antecedentes: string | null
+  }
+  consultas: Array<{
+    id: number
+    fecha: string
+    doctor: string
+    subjetivo: string
+    objetivo: string
+    analisis: string
+    plan: string
+    diagnosticos: string[]
+    tratamientos: string[]
+    tieneReceta: boolean
+  }>
+  totalConsultas: number
+  diagnosticosMasFrecuentes: string[]
+}
+
+export interface CondicionClinicaResumen {
+  nombre: string
+  codigo: string | null
+  frecuencia: number
+}

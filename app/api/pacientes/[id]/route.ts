@@ -37,6 +37,9 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
           include: {
             usuario: { select: { id: true, nombreCompleto: true } },
             servicio: true,
+            diagnosticos: { include: { diagnostico: true } },
+            tratamientos: { include: { tratamiento: true } },
+            insumos: { include: { producto: true } },
             receta: {
               include: {
                 detalles: {

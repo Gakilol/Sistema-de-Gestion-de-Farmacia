@@ -120,6 +120,7 @@ model Producto {
   devoluciones    DevolucionProveedor[]
   detallesReceta  DetalleReceta[]
   descuentos      DescuentoProducto[]
+  insumos         InsumoAtencion[]
 }
 
 // ===== PROVEEDORES =====
@@ -412,6 +413,9 @@ model AtencionPodologica {
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
   receta        Receta?
+  diagnosticos  DiagnosticoAtencion[]
+  tratamientos  TratamientoAtencion[]
+  insumos       InsumoAtencion[]
 }
 
 // ===== RECETA CLÍNICA =====
@@ -492,6 +496,67 @@ model ServicioPodologia {
   updatedAt       DateTime             @updatedAt
 
   atenciones   AtencionPodologica[]
+}
+
+// ===== CATÁLOGO CLÍNICO: DIAGNÓSTICOS =====
+model Diagnostico {
+  id           Int                   @id @default(autoincrement())
+  codigo       String?               @unique // Opcional: código CIE-10 (ej: B35.1)
+  nombre       String                @unique
+  descripcion  String?               @db.Text
+  activo       Boolean               @default(true)
+  esDatoPrueba Boolean               @default(false)
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  atenciones   DiagnosticoAtencion[]
+}
+
+model DiagnosticoAtencion {
+  idAtencion    Int
+  atencion      AtencionPodologica @relation(fields: [idAtencion], references: [id], onDelete: Cascade)
+  idDiagnostico Int
+  diagnostico   Diagnostico        @relation(fields: [idDiagnostico], references: [id], onDelete: Cascade)
+
+  @@id([idAtencion, idDiagnostico])
+  @@index([idAtencion])
+  @@index([idDiagnostico])
+}
+
+// ===== CATÁLOGO CLÍNICO: TRATAMIENTOS =====
+model Tratamiento {
+  id           Int                   @id @default(autoincrement())
+  nombre       String                @unique
+  descripcion  String?               @db.Text
+  activo       Boolean               @default(true)
+  esDatoPrueba Boolean               @default(false)
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  atenciones   TratamientoAtencion[]
+}
+
+model TratamientoAtencion {
+  idAtencion    Int
+  atencion      AtencionPodologica @relation(fields: [idAtencion], references: [id], onDelete: Cascade)
+  idTratamiento Int
+  tratamiento   Tratamiento        @relation(fields: [idTratamiento], references: [id], onDelete: Cascade)
+
+  @@id([idAtencion, idTratamiento])
+  @@index([idAtencion])
+  @@index([idTratamiento])
+}
+
+// ===== INSUMOS CONSUMIDOS EN ATENCIÓN =====
+model InsumoAtencion {
+  id         Int                @id @default(autoincrement())
+  idAtencion Int
+  atencion   AtencionPodologica @relation(fields: [idAtencion], references: [id], onDelete: Cascade)
+  idProducto Int
+  producto   Producto           @relation(fields: [idProducto], references: [id], onDelete: Cascade)
+  cantidad   Int
+  createdAt  DateTime           @default(now())
+
+  @@index([idAtencion])
+  @@index([idProducto])
 }
 
 // ===== SISTEMA DE DESCUENTOS =====

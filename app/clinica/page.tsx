@@ -65,6 +65,96 @@ export default function ClinicaPage() {
   // Master Data
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [productos, setProductos] = useState<Producto[]>([])
+  const [diagnosticosList, setDiagnosticosList] = useState<any[]>([])
+  const [tratamientosList, setTratamientosList] = useState<any[]>([])
+  const [selectedDiagnosticos, setSelectedDiagnosticos] = useState<number[]>([])
+  const [selectedTratamientos, setSelectedTratamientos] = useState<number[]>([])
+  const [selectedInsumos, setSelectedInsumos] = useState<any[]>([])
+  const [selectedInsumoId, setSelectedInsumoId] = useState("")
+  const [insumoCantidad, setInsumoCantidad] = useState("1")
+
+  // Quick Create Diagnóstico/Tratamiento
+  const [quickDxNombre, setQuickDxNombre] = useState("")
+  const [quickDxCodigo, setQuickDxCodigo] = useState("")
+  const [quickDxDesc, setQuickDxDesc] = useState("")
+  const [showQuickDx, setShowQuickDx] = useState(false)
+  const [dxLoading, setDxLoading] = useState(false)
+
+  const [quickTxNombre, setQuickTxNombre] = useState("")
+  const [quickTxDesc, setQuickTxDesc] = useState("")
+  const [showQuickTx, setShowQuickTx] = useState(false)
+  const [txLoading, setTxLoading] = useState(false)
+
+  const handleCreateQuickDx = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!quickDxNombre.trim()) {
+      toast.error("El nombre del diagnóstico es obligatorio")
+      return
+    }
+    setDxLoading(true)
+    try {
+      const res = await fetch("/api/clinica/diagnosticos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nombre: quickDxNombre.trim(),
+          codigo: quickDxCodigo.trim() || null,
+          descripcion: quickDxDesc.trim() || null
+        })
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || "Error al crear diagnóstico")
+        return
+      }
+      toast.success("Diagnóstico creado e incorporado")
+      setDiagnosticosList([...diagnosticosList, data])
+      setSelectedDiagnosticos([...selectedDiagnosticos, data.id])
+      setQuickDxNombre("")
+      setQuickDxCodigo("")
+      setQuickDxDesc("")
+      setShowQuickDx(false)
+    } catch {
+      toast.error("Error de red al crear diagnóstico")
+    } finally {
+      setDxLoading(false)
+    }
+  }
+
+  const handleCreateQuickTx = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!quickTxNombre.trim()) {
+      toast.error("El nombre del tratamiento es obligatorio")
+      return
+    }
+    setTxLoading(true)
+    try {
+      const res = await fetch("/api/clinica/tratamientos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nombre: quickTxNombre.trim(),
+          descripcion: quickTxDesc.trim() || null
+        })
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || "Error al crear tratamiento")
+        return
+      }
+      toast.success("Tratamiento creado e incorporado")
+      setTratamientosList([...tratamientosList, data])
+      setSelectedTratamientos([...selectedTratamientos, data.id])
+      setQuickTxNombre("")
+      setQuickTxDesc("")
+      setShowQuickTx(false)
+    } catch {
+      toast.error("Error de red al crear tratamiento")
+    } finally {
+      setTxLoading(false)
+    }
+  }
+
 
   // Appointments (Citas) State
   const [citas, setCitas] = useState<Cita[]>([])
@@ -115,19 +205,26 @@ export default function ClinicaPage() {
 
   const fetchMasterData = async () => {
     try {
-      const [cRes, pRes] = await Promise.all([
+      const [cRes, pRes, dxRes, txRes] = await Promise.all([
         fetch("/api/clientes?estado=activos"),
-        fetch("/api/productos?estado=activos")
+        fetch("/api/productos?estado=activos"),
+        fetch("/api/clinica/diagnosticos?soloActivos=true"),
+        fetch("/api/clinica/tratamientos?soloActivos=true")
       ])
       const cData = await cRes.json()
       const pData = await pRes.json()
+      const dxData = await dxRes.json()
+      const txData = await txRes.json()
       setClientes(cData || [])
       setProductos(pData || [])
+      setDiagnosticosList(dxData || [])
+      setTratamientosList(txData || [])
     } catch (e) {
       console.error("Error al cargar datos maestros:", e)
       toast.error("Error al inicializar datos del panel clínico")
     }
   }
+
 
   const fetchData = async () => {
     setLoading(true)
@@ -200,6 +297,11 @@ export default function ClinicaPage() {
     setEmitReceta(false)
     setRecetaForm({ fechaVencimiento: "", observaciones: "" })
     setRecetaDetalles([])
+    setSelectedDiagnosticos([])
+    setSelectedTratamientos([])
+    setSelectedInsumos([])
+    setSelectedInsumoId("")
+    setInsumoCantidad("1")
     setShowSOAPForm(true)
   }
 
@@ -210,8 +312,14 @@ export default function ClinicaPage() {
     setEmitReceta(false)
     setRecetaForm({ fechaVencimiento: "", observaciones: "" })
     setRecetaDetalles([])
+    setSelectedDiagnosticos([])
+    setSelectedTratamientos([])
+    setSelectedInsumos([])
+    setSelectedInsumoId("")
+    setInsumoCantidad("1")
     setShowSOAPForm(true)
   }
+
 
   // Add Item to Receta list
   const addRecetaItem = () => {
@@ -279,9 +387,13 @@ export default function ClinicaPage() {
           subjetivo: soapForm.subjetivo,
           objetivo: soapForm.objetivo,
           analisis: soapForm.analisis,
-          plan: soapForm.plan
+          plan: soapForm.plan,
+          diagnosticos: selectedDiagnosticos,
+          tratamientos: selectedTratamientos,
+          insumos: selectedInsumos.map(i => ({ idProducto: i.idProducto, cantidad: i.cantidad }))
         })
       })
+
 
       const atData = await atRes.json()
       if (!atRes.ok) {
@@ -671,8 +783,323 @@ export default function ClinicaPage() {
                       </div>
                     </div>
 
+                    {/* Diagnósticos y Tratamientos Clínicos */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5 border-t border-border pt-4">
+                      {/* Diagnósticos */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                            Diagnósticos Asociados
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setShowQuickDx(!showQuickDx)}
+                            className="text-xs text-primary hover:underline"
+                          >
+                            {showQuickDx ? "Cerrar" : "+ Crear Diagnóstico Rápido"}
+                          </button>
+                        </div>
+
+                        {showQuickDx ? (
+                          <div className="p-3 border border-border bg-muted/10 rounded-lg space-y-2.5">
+                            <h4 className="text-xs font-bold text-foreground">Nuevo Diagnóstico</h4>
+                            <div className="grid grid-cols-2 gap-2">
+                              <Input
+                                placeholder="Nombre (ej: Onicomicosis)"
+                                value={quickDxNombre}
+                                onChange={(e) => setQuickDxNombre(e.target.value)}
+                                className="bg-background text-xs h-8"
+                              />
+                              <Input
+                                placeholder="Código CIE-10 (ej: B35.1)"
+                                value={quickDxCodigo}
+                                onChange={(e) => setQuickDxCodigo(e.target.value)}
+                                className="bg-background text-xs h-8"
+                              />
+                            </div>
+                            <Input
+                              placeholder="Descripción opcional..."
+                              value={quickDxDesc}
+                              onChange={(e) => setQuickDxDesc(e.target.value)}
+                              className="bg-background text-xs h-8"
+                            />
+                            <div className="flex justify-end gap-1.5">
+                              <Button
+                                size="sm"
+                                type="button"
+                                variant="ghost"
+                                onClick={() => setShowQuickDx(false)}
+                                className="text-xs h-7"
+                              >
+                                Cancelar
+                              </Button>
+                              <Button
+                                size="sm"
+                                type="button"
+                                disabled={dxLoading}
+                                onClick={handleCreateQuickDx}
+                                className="text-xs h-7 bg-primary text-primary-foreground"
+                              >
+                                {dxLoading ? "Creando..." : "Guardar"}
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            <select
+                              value=""
+                              onChange={(e) => {
+                                const id = parseInt(e.target.value)
+                                if (id && !selectedDiagnosticos.includes(id)) {
+                                  setSelectedDiagnosticos([...selectedDiagnosticos, id])
+                                }
+                              }}
+                              className="w-full rounded-lg border border-border px-3 py-2 text-xs bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                            >
+                              <option value="">Seleccionar diagnóstico...</option>
+                              {diagnosticosList.map(d => (
+                                <option key={d.id} value={d.id}>
+                                  {d.codigo ? `[${d.codigo}] ` : ""}{d.nombre}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {selectedDiagnosticos.length === 0 && (
+                            <span className="text-xs text-muted-foreground italic">Ningún diagnóstico seleccionado</span>
+                          )}
+                          {selectedDiagnosticos.map(id => {
+                            const dx = diagnosticosList.find(d => d.id === id)
+                            if (!dx) return null
+                            return (
+                              <span key={id} className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs bg-primary/10 text-primary border border-primary/20">
+                                {dx.codigo ? `[${dx.codigo}] ` : ""}{dx.nombre}
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedDiagnosticos(selectedDiagnosticos.filter(x => x !== id))}
+                                  className="text-primary hover:text-red-500 transition-colors"
+                                >
+                                  <XCircle className="w-3.5 h-3.5" />
+                                </button>
+                              </span>
+                            )
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Tratamientos */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                            Tratamientos Aplicados
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setShowQuickTx(!showQuickTx)}
+                            className="text-xs text-primary hover:underline"
+                          >
+                            {showQuickTx ? "Cerrar" : "+ Crear Tratamiento Rápido"}
+                          </button>
+                        </div>
+
+                        {showQuickTx ? (
+                          <div className="p-3 border border-border bg-muted/10 rounded-lg space-y-2.5">
+                            <h4 className="text-xs font-bold text-foreground">Nuevo Tratamiento</h4>
+                            <Input
+                              placeholder="Nombre (ej: Quiropodia Básica)"
+                              value={quickTxNombre}
+                              onChange={(e) => setQuickTxNombre(e.target.value)}
+                              className="bg-background text-xs h-8"
+                            />
+                            <Input
+                              placeholder="Descripción opcional..."
+                              value={quickTxDesc}
+                              onChange={(e) => setQuickTxDesc(e.target.value)}
+                              className="bg-background text-xs h-8"
+                            />
+                            <div className="flex justify-end gap-1.5">
+                              <Button
+                                size="sm"
+                                type="button"
+                                variant="ghost"
+                                onClick={() => setShowQuickTx(false)}
+                                className="text-xs h-7"
+                              >
+                                Cancelar
+                              </Button>
+                              <Button
+                                size="sm"
+                                type="button"
+                                disabled={txLoading}
+                                onClick={handleCreateQuickTx}
+                                className="text-xs h-7 bg-primary text-primary-foreground"
+                              >
+                                {txLoading ? "Creando..." : "Guardar"}
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            <select
+                              value=""
+                              onChange={(e) => {
+                                const id = parseInt(e.target.value)
+                                if (id && !selectedTratamientos.includes(id)) {
+                                  setSelectedTratamientos([...selectedTratamientos, id])
+                                }
+                              }}
+                              className="w-full rounded-lg border border-border px-3 py-2 text-xs bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                            >
+                              <option value="">Seleccionar tratamiento...</option>
+                              {tratamientosList.map(t => (
+                                <option key={t.id} value={t.id}>{t.nombre}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {selectedTratamientos.length === 0 && (
+                            <span className="text-xs text-muted-foreground italic">Ningún tratamiento seleccionado</span>
+                          )}
+                          {selectedTratamientos.map(id => {
+                            const tx = tratamientosList.find(t => t.id === id)
+                            if (!tx) return null
+                            return (
+                              <span key={id} className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs bg-blue-500/10 text-blue-500 border border-blue-500/20 font-medium">
+                                {tx.nombre}
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedTratamientos(selectedTratamientos.filter(x => x !== id))}
+                                  className="text-blue-500 hover:text-red-500 transition-colors"
+                                >
+                                  <XCircle className="w-3.5 h-3.5" />
+                                </button>
+                              </span>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Materiales / Insumos Consumidos (Inventario) */}
+                    <div className="border-t border-border pt-4 space-y-3">
+                      <div>
+                        <span className="text-sm font-bold text-foreground">Materiales / Insumos Consumidos</span>
+                        <p className="text-xs text-muted-foreground">Selecciona insumos físicos utilizados durante la sesión para descontar automáticamente de stock</p>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <select
+                          value={selectedInsumoId}
+                          onChange={(e) => setSelectedInsumoId(e.target.value)}
+                          className="rounded-lg border border-border px-3 py-2 text-xs bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                        >
+                          <option value="">Seleccionar producto físico...</option>
+                          {productos.filter(p => !p.esServicio).map(p => (
+                            <option key={p.id} value={p.id}>
+                              {p.nombre} (Stock: {p.stockTotal ?? 0})
+                            </option>
+                          ))}
+                        </select>
+
+                        <div className="flex gap-2">
+                          <Input
+                            type="number"
+                            min="1"
+                            value={insumoCantidad}
+                            onChange={(e) => setInsumoCantidad(e.target.value)}
+                            placeholder="Cantidad"
+                            className="bg-background border-border text-xs text-foreground h-9"
+                          />
+                          <Button
+                            type="button"
+                            onClick={() => {
+                              if (!selectedInsumoId) {
+                                toast.error("Selecciona un insumo")
+                                return
+                              }
+                              const prod = productos.find(p => p.id === parseInt(selectedInsumoId))
+                              if (!prod) return
+                              const qty = parseInt(insumoCantidad)
+                              if (isNaN(qty) || qty <= 0) {
+                                toast.error("Cantidad inválida")
+                                return
+                              }
+                              const stockVal = prod.stockTotal ?? 0
+                              if (stockVal < qty) {
+                                toast.error(`Stock insuficiente. Solo hay ${stockVal} disponibles.`)
+                                return
+                              }
+
+                              const existenteIndex = selectedInsumos.findIndex(i => i.idProducto === prod.id)
+                              if (existenteIndex > -1) {
+                                const nuevaCant = selectedInsumos[existenteIndex].cantidad + qty
+                                if (stockVal < nuevaCant) {
+                                  toast.error(`No puedes agregar más. El stock total es ${stockVal}.`)
+                                  return
+                                }
+                                const actualizados = [...selectedInsumos]
+                                actualizados[existenteIndex].cantidad = nuevaCant
+                                setSelectedInsumos(actualizados)
+                              } else {
+                                setSelectedInsumos([
+                                  ...selectedInsumos,
+                                  {
+                                    idProducto: prod.id,
+                                    nombreProducto: prod.nombre,
+                                    cantidad: qty,
+                                    stockActual: stockVal
+                                  }
+                                ])
+                              }
+                              setSelectedInsumoId("")
+                              setInsumoCantidad("1")
+                            }}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-9"
+                          >
+                            Agregar
+                          </Button>
+                        </div>
+                      </div>
+
+                      {selectedInsumos.length > 0 && (
+                        <div className="border border-border rounded-lg overflow-hidden bg-background max-w-xl">
+                          <table className="w-full text-xs">
+                            <thead className="bg-muted/40 border-b border-border">
+                              <tr>
+                                <th className="px-3 py-1.5 text-left text-xs font-bold text-muted-foreground uppercase">Material</th>
+                                <th className="px-3 py-1.5 text-center text-xs font-bold text-muted-foreground uppercase w-20">Cant.</th>
+                                <th className="px-3 py-1.5 text-center text-xs font-bold text-muted-foreground uppercase w-16">Acción</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border">
+                              {selectedInsumos.map(item => (
+                                <tr key={item.idProducto} className="hover:bg-muted/5">
+                                  <td className="px-3 py-2 font-medium text-foreground text-xs">{item.nombreProducto}</td>
+                                  <td className="px-3 py-2 text-center text-foreground font-semibold text-xs">{item.cantidad}</td>
+                                  <td className="px-3 py-2 text-center">
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedInsumos(selectedInsumos.filter(i => i.idProducto !== item.idProducto))}
+                                      className="text-red-400 hover:text-red-300"
+                                    >
+                                      <Trash className="w-3.5 h-3.5 mx-auto" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+
                     {/* Prescription Section Toggle */}
                     <div className="border-t border-border pt-4">
+
                       <label className="flex items-center gap-3 cursor-pointer">
                         <input
                           type="checkbox"
@@ -935,7 +1362,29 @@ export default function ClinicaPage() {
                             <p className="text-foreground text-xs line-clamp-3">{at.plan}</p>
                           </div>
                         </div>
+
+                        {/* Diagnósticos, Tratamientos e Insumos en la lista */}
+                        {(at.diagnosticos?.length > 0 || at.tratamientos?.length > 0 || at.insumos?.length > 0) && (
+                          <div className="flex flex-wrap gap-1.5 pt-3 border-t border-border/50 text-[11px] items-center">
+                            {at.diagnosticos?.map((d: any) => (
+                              <span key={d.idDiagnostico} className="px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                                {d.diagnostico.codigo ? `[${d.diagnostico.codigo}] ` : ""}{d.diagnostico.nombre}
+                              </span>
+                            ))}
+                            {at.tratamientos?.map((t: any) => (
+                              <span key={t.idTratamiento} className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20">
+                                {t.tratamiento.nombre}
+                              </span>
+                            ))}
+                            {at.insumos?.map((i: any) => (
+                              <span key={i.id} className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 font-medium">
+                                Insumo: {i.producto.nombre} (x{i.cantidad})
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </Card>
+
                     ))
                   )}
                 </div>
@@ -1129,6 +1578,66 @@ export default function ClinicaPage() {
                   <p className="text-foreground text-xs whitespace-pre-line">{selectedConsulta.plan}</p>
                 </div>
               </div>
+
+              {/* Diagnósticos y Tratamientos en Vista Detalle */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="p-3 bg-muted/10 border border-border/50 rounded-lg">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Diagnósticos de esta Consulta</span>
+                  {selectedConsulta.diagnosticos?.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      {selectedConsulta.diagnosticos.map((d: any) => (
+                        <span key={d.idDiagnostico} className="px-2 py-0.5 rounded bg-primary/10 text-primary text-xs border border-primary/20 font-medium">
+                          {d.diagnostico.codigo ? `[${d.diagnostico.codigo}] ` : ""}{d.diagnostico.nombre}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic">Ningún diagnóstico asociado</p>
+                  )}
+                </div>
+
+                <div className="p-3 bg-muted/10 border border-border/50 rounded-lg">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Tratamientos Aplicados</span>
+                  {selectedConsulta.tratamientos?.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      {selectedConsulta.tratamientos.map((t: any) => (
+                        <span key={t.idTratamiento} className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-500 text-xs border border-blue-500/20 font-medium">
+                          {t.tratamiento.nombre}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic">Ningún tratamiento asociado</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Insumos Consumidos en Vista Detalle */}
+              {selectedConsulta.insumos?.length > 0 && (
+                <div className="border border-border rounded-xl p-4 bg-muted/5">
+                  <div className="border-b border-border/60 pb-2 mb-3">
+                    <span className="text-xs font-bold text-foreground">Insumos y Materiales Consumidos de Farmacia</span>
+                  </div>
+                  <table className="w-full text-xs text-left">
+                    <thead>
+                      <tr className="text-muted-foreground border-b border-border/60">
+                        <th className="pb-1.5 font-bold uppercase">Material</th>
+                        <th className="pb-1.5 font-bold uppercase text-center w-20">Cant. Consumida</th>
+                        <th className="pb-1.5 font-bold uppercase">Unidad</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedConsulta.insumos.map((i: any) => (
+                        <tr key={i.id} className="border-b border-border/40 text-foreground">
+                          <td className="py-2">{i.producto.nombre}</td>
+                          <td className="py-2 text-center font-bold">{i.cantidad}</td>
+                          <td className="py-2 text-muted-foreground">{i.producto.unidadMedida || "unidad"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
               {selectedConsulta.receta && (
                 <div className="mt-4 border border-border rounded-xl p-4 bg-muted/5">

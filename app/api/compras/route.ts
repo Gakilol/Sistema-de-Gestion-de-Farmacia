@@ -63,6 +63,28 @@ export async function POST(request: NextRequest) {
 
     const { idProveedor, numeroFactura, fechaCompra, detalles } = validation.data
 
+    // Validar que no haya servicios en los detalles de la compra
+    const productIds = detalles.map((d) => d.idProducto)
+    const dbProductos = await prisma.producto.findMany({
+      where: {
+        id: { in: productIds },
+      },
+      select: {
+        id: true,
+        nombre: true,
+        esServicio: true,
+      },
+    })
+
+    const servicios = dbProductos.filter((p) => p.esServicio)
+    if (servicios.length > 0) {
+      const nombresServicios = servicios.map((s) => s.nombre).join(", ")
+      return NextResponse.json(
+        { error: `Los servicios no pueden registrarse en compras porque no manejan inventario ni proveedores. Servicios detectados: ${nombresServicios}` },
+        { status: 400 }
+      )
+    }
+
     // 1. Detección de lote duplicado en misma compra: Agrupar detalles por idProducto + lote
     const detallesAgrupados: any[] = []
     for (const d of detalles) {

@@ -21,6 +21,8 @@
     "db:verify:test": "ts-node --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/verify-test-data.ts",
     "test:audit": "ts-node --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/run-complete-audit-tests.ts",
     "test:concurrency": "ts-node --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/test-concurrency.ts",
+    "test:fase1": "ts-node --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/test-fase1.ts",
+    "test:clinica": "ts-node --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/test-modulo-clinico.ts",
     "test": "ts-node --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\" scripts/test-ia.ts"
   },
   "dependencies": {

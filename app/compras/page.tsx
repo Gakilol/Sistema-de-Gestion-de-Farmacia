@@ -40,7 +40,7 @@ export default function ComprasPage() {
 
   const fetchCompras = async () => { try { setCompras(await (await fetch("/api/compras")).json()) } catch (e) { console.error(e) } finally { setLoading(false) } }
   const fetchProveedores = async () => { try { setProveedores(await (await fetch("/api/proveedores")).json()) } catch (e) { console.error(e) } }
-  const fetchProductos = async () => { try { setProductos(await (await fetch("/api/productos")).json()) } catch (e) { console.error(e) } }
+  const fetchProductos = async () => { try { setProductos(await (await fetch("/api/productos?esServicio=false")).json()) } catch (e) { console.error(e) } }
 
   const fetchStockBajo = async () => {
     setLoadingReabastecimiento(true)
@@ -49,7 +49,7 @@ export default function ComprasPage() {
       if (!res.ok) return
       const data = await res.json()
       // Calcular cantidad óptima: (stockMinimo * 2) - stockActual
-      const todos = await (await fetch("/api/productos")).json() as Producto[]
+      const todos = await (await fetch("/api/productos?esServicio=false")).json() as Producto[]
       const prodMap = new Map(todos.map((p: Producto) => [p.id, p]))
       const items: ProductoStockBajo[] = data.map((item: any) => ({
         id: item.id,

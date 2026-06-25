@@ -43,6 +43,9 @@ import type {
   BorradorAjusteInventario,
   UserRole,
   ItemBorradorCompra,
+  PacienteResumen,
+  HistorialClinicopaciente,
+  CondicionClinicaResumen,
 } from "./types"
 
 // ---------------------------------------------------------------------------
@@ -934,7 +937,236 @@ export async function executeTool(
     case "getSuggestedPurchaseOrder":   return getSuggestedPurchaseOrder(args, rol)
     case "createPurchaseDraft":         return createPurchaseDraft(args, rol)
     case "createInventoryAdjustmentDraft": return createInventoryAdjustmentDraft(args, rol)
+    // Clínicas
+    case "searchPatients":              return searchPatients(args, rol)
+    case "getPatientClinicalHistory":   return getPatientClinicalHistory(args, rol)
+    case "getMostCommonClinicalConditions": return getMostCommonClinicalConditions(args, rol)
     default:
       return { ok: false, error: `Herramienta desconocida: "${toolName}".`, code: "INTERNAL_ERROR" }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 15. searchPatients — Busca pacientes por nombre, cédula o teléfono
+// Acceso: ADMIN y DOCTOR
+// ---------------------------------------------------------------------------
+
+export async function searchPatients(
+  args: unknown,
+  rol: UserRole
+): Promise<ToolResult<PacienteResumen[]>> {
+  if (rol !== "ADMIN" && rol !== "DOCTOR") {
+    return { ok: false, error: "Acceso denegado: Solo médicos o administradores pueden consultar datos de pacientes.", code: "ACCESS_DENIED" }
+  }
+
+  const rawArgs = args as Record<string, unknown>
+  const query = typeof rawArgs?.query === "string" ? rawArgs.query.trim() : ""
+
+  if (!query || query.length < 2) {
+    return { ok: false, error: "El término de búsqueda debe tener al menos 2 caracteres.", code: "INVALID_PARAMS" }
+  }
+
+  try {
+    const pacientes = await prisma.cliente.findMany({
+      where: {
+        activo: true,
+        OR: [
+          { nombreCompleto: { contains: query, mode: "insensitive" } },
+          { cedula: { contains: query, mode: "insensitive" } },
+          { telefono: { contains: query, mode: "insensitive" } },
+        ],
+      },
+      select: {
+        id: true,
+        nombreCompleto: true,
+        cedula: true,
+        telefono: true,
+        atenciones: {
+          select: { id: true, fecha: true },
+          orderBy: { fecha: "desc" },
+          take: 1,
+        },
+        _count: { select: { atenciones: true } },
+      },
+      take: 10,
+    })
+
+    const result: PacienteResumen[] = pacientes.map((p) => ({
+      id: p.id,
+      nombreCompleto: p.nombreCompleto,
+      cedula: p.cedula,
+      telefono: p.telefono,
+      totalConsultas: p._count.atenciones,
+      ultimaConsulta: p.atenciones[0]?.fecha.toISOString().split("T")[0] ?? null,
+    }))
+
+    return {
+      ok: true,
+      data: result,
+      meta: {
+        total: result.length,
+        fuenteDatos: `Búsqueda de pacientes por: "${query}". Datos sólo accesibles para ADMIN y DOCTOR.`,
+      },
+    }
+  } catch {
+    return safeError("Error al buscar pacientes.")
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 16. getPatientClinicalHistory — Historial clínico completo del paciente
+// Acceso: ADMIN y DOCTOR
+// ---------------------------------------------------------------------------
+
+export async function getPatientClinicalHistory(
+  args: unknown,
+  rol: UserRole
+): Promise<ToolResult<HistorialClinicopaciente>> {
+  if (rol !== "ADMIN" && rol !== "DOCTOR") {
+    return { ok: false, error: "Acceso denegado: Solo médicos o administradores pueden consultar historiales clínicos.", code: "ACCESS_DENIED" }
+  }
+
+  const rawArgs = args as Record<string, unknown>
+  const pacienteId = typeof rawArgs?.pacienteId === "number" ? rawArgs.pacienteId : null
+
+  if (!pacienteId || pacienteId <= 0) {
+    return { ok: false, error: "Se requiere el ID numérico del paciente.", code: "INVALID_PARAMS" }
+  }
+
+  try {
+    const paciente = await prisma.cliente.findUnique({
+      where: { id: pacienteId, activo: true },
+      select: {
+        id: true,
+        nombreCompleto: true,
+        cedula: true,
+        fechaNacimiento: true,
+        sexo: true,
+        datosClinicos: {
+          select: { tipoSangre: true, alergias: true, antecedentes: true },
+        },
+        atenciones: {
+          orderBy: { fecha: "desc" },
+          take: 10,
+          include: {
+            usuario: { select: { nombreCompleto: true } },
+            diagnosticos: { include: { diagnostico: { select: { nombre: true, codigo: true } } } },
+            tratamientos: { include: { tratamiento: { select: { nombre: true } } } },
+            receta: { select: { id: true } },
+          },
+        },
+      },
+    })
+
+    if (!paciente) {
+      return { ok: false, error: `No se encontró un paciente activo con ID ${pacienteId}.`, code: "NOT_FOUND" }
+    }
+
+    // Contar frecuencia de diagnósticos
+    const freqMap = new Map<string, number>()
+    paciente.atenciones.forEach((a) => {
+      a.diagnosticos.forEach((d) => {
+        const key = d.diagnostico.nombre
+        freqMap.set(key, (freqMap.get(key) ?? 0) + 1)
+      })
+    })
+    const top3 = Array.from(freqMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([nombre]) => nombre)
+
+    const result: HistorialClinicopaciente = {
+      paciente: {
+        id: paciente.id,
+        nombreCompleto: paciente.nombreCompleto,
+        cedula: paciente.cedula,
+        fechaNacimiento: paciente.fechaNacimiento?.toISOString().split("T")[0] ?? null,
+        sexo: paciente.sexo,
+        tipoSangre: paciente.datosClinicos?.tipoSangre ?? null,
+        alergias: paciente.datosClinicos?.alergias ?? null,
+        antecedentes: paciente.datosClinicos?.antecedentes ?? null,
+      },
+      consultas: paciente.atenciones.map((a) => ({
+        id: a.id,
+        fecha: a.fecha.toISOString().split("T")[0],
+        doctor: a.usuario.nombreCompleto,
+        subjetivo: a.subjetivo,
+        objetivo: a.objetivo,
+        analisis: a.analisis,
+        plan: a.plan,
+        diagnosticos: a.diagnosticos.map((d) =>
+          d.diagnostico.codigo
+            ? `${d.diagnostico.codigo} - ${d.diagnostico.nombre}`
+            : d.diagnostico.nombre
+        ),
+        tratamientos: a.tratamientos.map((t) => t.tratamiento.nombre),
+        tieneReceta: !!a.receta,
+      })),
+      totalConsultas: paciente.atenciones.length,
+      diagnosticosMasFrecuentes: top3,
+    }
+
+    return {
+      ok: true,
+      data: result,
+      meta: {
+        fuenteDatos: `Historia clínica de "${paciente.nombreCompleto}" (ID ${pacienteId}). ⚠️ Datos médicos confidenciales.`,
+      },
+    }
+  } catch {
+    return safeError("Error al obtener la historia clínica del paciente.")
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 17. getMostCommonClinicalConditions — Estadísticas de condiciones clínicas
+// Acceso: ADMIN y DOCTOR
+// ---------------------------------------------------------------------------
+
+export async function getMostCommonClinicalConditions(
+  args: unknown,
+  rol: UserRole
+): Promise<ToolResult<CondicionClinicaResumen[]>> {
+  if (rol !== "ADMIN" && rol !== "DOCTOR") {
+    return { ok: false, error: "Acceso denegado: Solo médicos o administradores pueden ver estadísticas clínicas.", code: "ACCESS_DENIED" }
+  }
+
+  const rawArgs = args as Record<string, unknown>
+  const limit = typeof rawArgs?.limit === "number" ? Math.min(rawArgs.limit, 20) : 10
+  const diasStr = typeof rawArgs?.dias === "number" ? rawArgs.dias : 90
+  const desde = new Date(); desde.setDate(desde.getDate() - diasStr)
+
+  try {
+    const topDx = await prisma.diagnosticoAtencion.groupBy({
+      by: ["idDiagnostico"],
+      where: { atencion: { fecha: { gte: desde } } },
+      _count: { idDiagnostico: true },
+      orderBy: { _count: { idDiagnostico: "desc" } },
+      take: limit,
+    })
+
+    const ids = topDx.map((d) => d.idDiagnostico)
+    const diagnosticos = await prisma.diagnostico.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, nombre: true, codigo: true },
+    })
+    const dxMap = new Map(diagnosticos.map((d) => [d.id, d]))
+
+    const result: CondicionClinicaResumen[] = topDx.map((d) => ({
+      nombre: dxMap.get(d.idDiagnostico)?.nombre ?? `ID ${d.idDiagnostico}`,
+      codigo: dxMap.get(d.idDiagnostico)?.codigo ?? null,
+      frecuencia: d._count.idDiagnostico,
+    }))
+
+    return {
+      ok: true,
+      data: result,
+      meta: {
+        total: result.length,
+        fuenteDatos: `Diagnósticos más frecuentes en los últimos ${diasStr} días.`,
+      },
+    }
+  } catch {
+    return safeError("Error al obtener estadísticas clínicas.")
   }
 }

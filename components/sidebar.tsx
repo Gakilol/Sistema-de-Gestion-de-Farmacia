@@ -26,6 +26,7 @@ import {
   Trash2,
   RefreshCw,
   Tag,
+  Stethoscope,
 } from "lucide-react"
 
 import { useCurrentUser } from "../app/hooks/useCurrentUser"
@@ -193,6 +194,7 @@ export function Sidebar() {
                 Podología Clínica
               </p>
               <div className="space-y-0.5">
+                <NavLink item={{ href: "/clinica/dashboard", label: "Dashboard Clínico", icon: Stethoscope }} />
                 <NavLink item={{ href: "/clinica", label: "Clínica", icon: ClipboardList }} />
                 <NavLink item={{ href: "/pacientes", label: "Pacientes", icon: Users }} />
                 <NavLink item={{ href: "/clinica/servicios", label: "Servicios", icon: Activity }} />

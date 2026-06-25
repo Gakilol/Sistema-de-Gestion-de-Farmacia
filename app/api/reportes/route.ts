@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
 
       // Count low stock items
       const prods = await prisma.producto.findMany({
-        where: { activo: true },
+        where: { activo: true, esServicio: false },
         select: { stockActual: true, stockMinimo: true }
       })
       const stockBajo = prods.filter(p => p.stockActual <= (p.stockMinimo ?? 10)).length
@@ -243,7 +243,7 @@ export async function GET(request: NextRequest) {
     // 5. STOCK BAJO DETALLADO
     if (type === "stock-bajo") {
       const todosProductos = await prisma.producto.findMany({
-        where: { activo: true },
+        where: { activo: true, esServicio: false },
         include: { categoria: true },
         orderBy: { stockActual: "asc" }
       })
@@ -309,6 +309,7 @@ export async function GET(request: NextRequest) {
           activo: true,
           stockActual: { gt: 0 },
           fechaVencimiento: { lte: ahora, not: null },
+          producto: { esServicio: false },
         },
         include: { producto: { include: { categoria: true } } },
         orderBy: { fechaVencimiento: "asc" },
@@ -320,6 +321,7 @@ export async function GET(request: NextRequest) {
           activo: true,
           stockActual: { gt: 0 },
           fechaVencimiento: { gt: ahora, lte: noventaDias },
+          producto: { esServicio: false },
         },
         include: { producto: { include: { categoria: true } } },
         orderBy: { fechaVencimiento: "asc" },
