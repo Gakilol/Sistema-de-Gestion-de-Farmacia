@@ -185,28 +185,30 @@ export const ReporteUtilidadBrutaDocument = ({ data, start, end }: { data: any, 
         <Text style={styles.sectionTitle}>Listado de Facturas y Ventas</Text>
         <View style={styles.table}>
           <View style={[styles.tableRow, styles.tableHeader]}>
-            <Text style={[styles.tableColHeader, { width: '6%' }]}>ID Venta</Text>
-            <Text style={[styles.tableColHeader, { width: '11%' }]}>Fecha</Text>
-            <Text style={[styles.tableColHeader, { width: '17%' }]}>Cliente</Text>
-            <Text style={[styles.tableColHeader, { width: '11%', textAlign: 'right' }]}>Total Bruto</Text>
-            <Text style={[styles.tableColHeader, { width: '9%', textAlign: 'right' }]}>Desc. Línea</Text>
-            <Text style={[styles.tableColHeader, { width: '9%', textAlign: 'right' }]}>Desc. Gral</Text>
-            <Text style={[styles.tableColHeader, { width: '12%', textAlign: 'right' }]}>Total Neto</Text>
-            <Text style={[styles.tableColHeader, { width: '12%', textAlign: 'right' }]}>COGS (Costo)</Text>
-            <Text style={[styles.tableColHeader, { width: '13%', textAlign: 'right' }]}>Utilidad Bruta</Text>
+            <Text style={[styles.tableColHeader, { width: '5%' }]}>ID</Text>
+            <Text style={[styles.tableColHeader, { width: '9%' }]}>Fecha</Text>
+            <Text style={[styles.tableColHeader, { width: '14%' }]}>Cliente</Text>
+            <Text style={[styles.tableColHeader, { width: '14%' }]}>Descuento Aplicado</Text>
+            <Text style={[styles.tableColHeader, { width: '10%', textAlign: 'right' }]}>Total Bruto</Text>
+            <Text style={[styles.tableColHeader, { width: '8%', textAlign: 'right' }]}>Desc. Línea</Text>
+            <Text style={[styles.tableColHeader, { width: '8%', textAlign: 'right' }]}>Desc. Gral</Text>
+            <Text style={[styles.tableColHeader, { width: '11%', textAlign: 'right' }]}>Total Neto</Text>
+            <Text style={[styles.tableColHeader, { width: '11%', textAlign: 'right' }]}>COGS (Costo)</Text>
+            <Text style={[styles.tableColHeader, { width: '10%', textAlign: 'right' }]}>Utilidad</Text>
           </View>
 
           {ventas.map((v: any) => (
             <View style={styles.tableRow} key={v.id}>
-              <Text style={[styles.tableCol, { width: '6%' }]}>#{v.id}</Text>
-              <Text style={[styles.tableCol, { width: '11%' }]}>{new Date(v.fecha).toLocaleDateString('es-NI')}</Text>
-              <Text style={[styles.tableCol, { width: '17%' }]}>{v.cliente}</Text>
-              <Text style={[styles.tableCol, { width: '11%', textAlign: 'right' }]}>{formatCordobas(v.totalBruto)}</Text>
-              <Text style={[styles.tableCol, { width: '9%', textAlign: 'right' }]}>{formatCordobas(v.descuentoLineas)}</Text>
-              <Text style={[styles.tableCol, { width: '9%', textAlign: 'right' }]}>{formatCordobas(v.descuentoGeneral)}</Text>
-              <Text style={[styles.tableCol, { width: '12%', textAlign: 'right' }]}>{formatCordobas(v.total)}</Text>
-              <Text style={[styles.tableCol, { width: '12%', textAlign: 'right' }]}>{formatCordobas(v.cogs)}</Text>
-              <Text style={[styles.tableCol, { width: '13%', textAlign: 'right', fontFamily: 'Helvetica-Bold' }]}>{formatCordobas(v.utilidad)}</Text>
+              <Text style={[styles.tableCol, { width: '5%' }]}>#{v.id}</Text>
+              <Text style={[styles.tableCol, { width: '9%' }]}>{new Date(v.fecha).toLocaleDateString('es-NI')}</Text>
+              <Text style={[styles.tableCol, { width: '14%' }]}>{v.cliente}</Text>
+              <Text style={[styles.tableCol, { width: '14%', color: v.descuentoNombre ? '#7c3aed' : '#94a3b8', fontFamily: v.descuentoNombre ? 'Helvetica-Bold' : 'Helvetica' }]}>{v.descuentoNombre || '—'}</Text>
+              <Text style={[styles.tableCol, { width: '10%', textAlign: 'right' }]}>{formatCordobas(v.totalBruto)}</Text>
+              <Text style={[styles.tableCol, { width: '8%', textAlign: 'right' }]}>{formatCordobas(v.descuentoLineas)}</Text>
+              <Text style={[styles.tableCol, { width: '8%', textAlign: 'right' }]}>{formatCordobas(v.descuentoGeneral)}</Text>
+              <Text style={[styles.tableCol, { width: '11%', textAlign: 'right' }]}>{formatCordobas(v.total)}</Text>
+              <Text style={[styles.tableCol, { width: '11%', textAlign: 'right' }]}>{formatCordobas(v.cogs)}</Text>
+              <Text style={[styles.tableCol, { width: '10%', textAlign: 'right', fontFamily: 'Helvetica-Bold' }]}>{formatCordobas(v.utilidad)}</Text>
             </View>
           ))}
         </View>
@@ -219,6 +221,7 @@ export const ReporteUtilidadBrutaDocument = ({ data, start, end }: { data: any, 
     </Document>
   );
 };
+
 
 // Utilidad por Producto Report Document (Landscape)
 export const ReporteUtilidadProductoDocument = ({ data, start, end }: { data: any[], start: string, end: string }) => {

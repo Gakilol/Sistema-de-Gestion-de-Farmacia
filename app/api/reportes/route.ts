@@ -358,7 +358,8 @@ export async function GET(request: NextRequest) {
               }
             }
           },
-          cliente: true
+          cliente: true,
+          descuento: true
         },
         orderBy: { fecha: "asc" }
       })
@@ -381,6 +382,7 @@ export async function GET(request: NextRequest) {
           id: s.id,
           fecha: s.fecha,
           cliente: s.cliente?.nombreCompleto || "Público General",
+          descuentoNombre: s.descuento?.nombre || (totalDescuento > 0 ? "Desc. manual" : null),
           totalBruto,
           descuentoLineas,
           descuentoGeneral,

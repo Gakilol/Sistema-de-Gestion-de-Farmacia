@@ -57,7 +57,6 @@ export default function DescuentosPage() {
   const [fechaFin, setFechaFin] = useState("")
   const [montoMinimoCompra, setMontoMinimoCompra] = useState("")
   const [cantidadMinima, setCantidadMinima] = useState("0")
-  const [limiteUso, setLimiteUso] = useState("")
   const [esAcumulable, setEsAcumulable] = useState(false)
   const [activo, setActivo] = useState(true)
 
@@ -81,7 +80,6 @@ export default function DescuentosPage() {
     setFechaFin("")
     setMontoMinimoCompra("")
     setCantidadMinima("0")
-    setLimiteUso("")
     setEsAcumulable(false)
     setActivo(true)
     setSelectedProductos([])
@@ -108,7 +106,6 @@ export default function DescuentosPage() {
     setFechaFin(d.fechaFin ? new Date(d.fechaFin).toISOString().split("T")[0] : "")
     setMontoMinimoCompra(d.montoMinimoCompra ? String(d.montoMinimoCompra) : "")
     setCantidadMinima(String(d.cantidadMinima))
-    setLimiteUso(d.limiteUso ? String(d.limiteUso) : "")
     setEsAcumulable(d.esAcumulable)
     setActivo(d.activo)
 
@@ -163,7 +160,7 @@ export default function DescuentosPage() {
       fechaFin: fechaFin || null,
       montoMinimoCompra: montoMinimoCompra ? parseFloat(montoMinimoCompra) : null,
       cantidadMinima: parseInt(cantidadMinima, 10) || 0,
-      limiteUso: limiteUso ? parseInt(limiteUso, 10) : null,
+      limiteUso: null,
       esAcumulable,
       activo,
       productosIds: tipoAplicacion === "PRODUCTO" ? selectedProductos : [],
@@ -371,10 +368,6 @@ export default function DescuentosPage() {
                     <Input type="number" min="0" value={cantidadMinima} onChange={(e) => setCantidadMinima(e.target.value)} placeholder="Ej: 3 (Opcional)" className="bg-background" />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-foreground/80 mb-1">Límite Total de Usos</label>
-                    <Input type="number" min="1" value={limiteUso} onChange={(e) => setLimiteUso(e.target.value)} placeholder="Ej: 100 cupones (Opcional)" className="bg-background" />
-                  </div>
-                  <div>
                     <label className="block text-sm font-semibold text-foreground/80 mb-1">Fecha de Inicio</label>
                     <Input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} className="bg-background" />
                   </div>
@@ -535,7 +528,7 @@ export default function DescuentosPage() {
                               )}
                             </td>
                             <td className="px-6 py-4 text-sm text-muted-foreground">
-                              {d.usosActuales} / {d.limiteUso || "∞"}
+                              {d.usosActuales} uso{d.usosActuales !== 1 ? 's' : ''}
                             </td>
                             <td className="px-6 py-4 text-sm">
                               <span className={`px-3 py-1 rounded-full text-xs font-medium ${d.activo ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20" : "bg-muted text-muted-foreground border border-border"}`}>
