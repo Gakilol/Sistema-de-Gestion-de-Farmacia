@@ -114,6 +114,7 @@ export async function PUT(
     }
 
     const { nombre, tipo, fechaExamen, resultado, interpretacion, observaciones } = validation.data
+    const autorizadoPortal = Boolean(body.autorizadoPortal)
 
     const examenActualizado = await prisma.examenPaciente.update({
       where: { id: idExamen },
@@ -124,6 +125,7 @@ export async function PUT(
         resultado,
         interpretacion,
         observaciones,
+        autorizadoPortal,
       },
       include: {
         registrador: {
@@ -142,7 +144,7 @@ export async function PUT(
       entidadId: examenActualizado.id,
       idUsuario: user.id,
       modulo: "CLINICA",
-      detalles: { nombre, tipo, fechaExamen, idPaciente: examenActualizado.idPaciente },
+      detalles: { nombre, tipo, fechaExamen, idPaciente: examenActualizado.idPaciente, autorizadoPortal },
     })
 
     return NextResponse.json(examenActualizado)

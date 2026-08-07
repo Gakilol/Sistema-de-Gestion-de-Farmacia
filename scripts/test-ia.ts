@@ -9,6 +9,7 @@
 
 import { checkToolPermission, resolveRoleFromId, canViewFinancialData } from "../lib/ia/permissions"
 import { safeParseToolArgs, SearchProductsSchema, GetSalesSummarySchema, GetProductsNearExpirationSchema } from "../lib/ia/schemas"
+import { detectLocalIntent, getLocalCapabilities } from "../lib/ia/local-assistant"
 import type { IAToolName } from "../lib/ia/types"
 
 // ---------------------------------------------------------------------------
@@ -392,6 +393,46 @@ async function suiteFEFO() {
   })
 }
 
+async function suiteMotorLocal() {
+  console.log("\n🧭 Motor local y degradación segura")
+
+  await test("Detecta una consulta de stock bajo", () => {
+    const intent = detectLocalIntent("¿Qué productos tienen stock bajo?")
+    expect(intent.toolName).toBe("getLowStockProducts")
+  })
+
+  await test("Limita el horizonte de vencimiento a 180 días", () => {
+    const intent = detectLocalIntent("Productos por vencer en 900 días")
+    expect(intent.args?.dias).toBe(180)
+  })
+
+  await test("Extrae término de búsqueda de producto", () => {
+    const intent = detectLocalIntent("Busca Paracetamol en el inventario")
+    expect(intent.toolName).toBe("searchProducts")
+    expect(intent.args?.query).toBe("Paracetamol")
+  })
+
+  await test("Rechaza diagnóstico y dosificación en modo local", () => {
+    const intent = detectLocalIntent("¿Qué dosis debo tomar para este diagnóstico?")
+    expect(intent.medicalDisclaimer).toBeTruthy()
+    expect(intent.toolName).toBe(undefined)
+  })
+
+  await test("Extrae fechas ISO para un resumen de ventas", () => {
+    const intent = detectLocalIntent("Reporte de ventas entre 2026-07-01 y 2026-07-31")
+    expect(intent.args?.fechaInicio).toBe("2026-07-01")
+    expect(intent.args?.fechaFin).toBe("2026-07-31")
+  })
+
+  await test("Las capacidades de administrador incluyen auditoría", () => {
+    expect(getLocalCapabilities("ADMIN")).toContain("auditoría")
+  })
+
+  await test("Las capacidades de empleado no ofrecen auditoría", () => {
+    expect(getLocalCapabilities("EMPLEADO").includes("auditoría")).toBeFalsy()
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Runner principal
 // ---------------------------------------------------------------------------
@@ -407,6 +448,7 @@ async function main() {
   await suitePromptInjection()
   await suiteToolCallLimit()
   await suiteFEFO()
+  await suiteMotorLocal()
 
   console.log("\n" + "=".repeat(50))
   console.log(`\n📊 RESULTADOS FINALES:`)

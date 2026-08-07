@@ -30,6 +30,7 @@ function getManaguaToday() {
 export default function HistorialVentasPage() {
   const [ventas, setVentas] = useState<Venta[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [selectedVenta, setSelectedVenta] = useState<Venta | null>(null)
   
   // Date filter states
@@ -44,6 +45,7 @@ export default function HistorialVentasPage() {
 
   const fetchVentas = async (start?: string, end?: string) => {
     setLoading(true)
+    setLoadError(null)
     try {
       let url = "/api/ventas"
       const params = new URLSearchParams()
@@ -53,10 +55,23 @@ export default function HistorialVentasPage() {
         url += `?${params.toString()}`
       }
       const res = await fetch(url)
-      setVentas(await res.json())
-    } catch (e) { 
-      console.error(e) 
-      toast.error("Error al cargar el historial de ventas")
+      const payload: unknown = await res.json().catch(() => null)
+      if (!res.ok) {
+        const apiMessage = payload && typeof payload === "object" && "error" in payload
+          ? String(payload.error)
+          : "No fue posible consultar las ventas"
+        throw new Error(apiMessage)
+      }
+      if (!Array.isArray(payload)) {
+        throw new Error("La respuesta del historial no tiene el formato esperado")
+      }
+      setVentas(payload as Venta[])
+    } catch (error) {
+      console.error(error)
+      setVentas([])
+      const message = error instanceof Error ? error.message : "Error al cargar el historial de ventas"
+      setLoadError(message)
+      toast.error(message)
     } finally { 
       setLoading(false) 
     }
@@ -210,6 +225,25 @@ export default function HistorialVentasPage() {
           <Card className="glass-card overflow-hidden mb-6">
             {loading ? (
               <div className="p-8 space-y-4">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
+            ) : loadError ? (
+              <div className="flex flex-col items-center justify-center gap-3 px-6 py-12 text-center" role="alert">
+                <div className="rounded-full border border-red-500/30 bg-red-500/10 p-3 text-red-400">
+                  <RefreshCw className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="font-semibold text-foreground">No se pudo cargar el historial</p>
+                  <p className="mt-1 max-w-lg text-sm text-muted-foreground">{loadError}</p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fetchVentas(startDate || undefined, endDate || undefined)}
+                  className="gap-2"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Reintentar
+                </Button>
+              </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full">

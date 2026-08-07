@@ -9,205 +9,208 @@ datasource db {
 
 // ===== ROLES Y USUARIOS =====
 model Rol {
-  id    Int     @id @default(autoincrement())
-  nombre String  @unique
+  id       Int       @id @default(autoincrement())
+  nombre   String    @unique
   usuarios Usuario[]
 }
 
 model Usuario {
-  id              Int     @id @default(autoincrement())
-  nombreCompleto  String
-  correo          String  @unique
-  passwordHash    String
-  idRol           Int
-  rol             Rol     @relation(fields: [idRol], references: [id])
-  activo          Boolean @default(true)
-  esDatoPrueba    Boolean @default(false)
-  eliminadoEn     DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             Int       @id @default(autoincrement())
+  nombreCompleto String
+  correo         String    @unique
+  passwordHash   String
+  idRol          Int
+  rol            Rol       @relation(fields: [idRol], references: [id])
+  activo         Boolean   @default(true)
+  esDatoPrueba   Boolean   @default(false)
+  eliminadoEn    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  compras         Compra[]
-  ventas          Venta[]
-  auditoriaLogs   AuditoriaLog[]
-  movimientos     MovimientoInventario[]
-  devoluciones    DevolucionProveedor[]
-  atenciones      AtencionPodologica[]
-  recetas         Receta[]
-  descuentos      Descuento[]
-  examenes        ExamenPaciente[]
+  compras                Compra[]
+  ventas                 Venta[]
+  auditoriaLogs          AuditoriaLog[]
+  movimientos            MovimientoInventario[]
+  devoluciones           DevolucionProveedor[]
+  atenciones             AtencionPodologica[]
+  recetas                Receta[]
+  descuentos             Descuento[]
+  examenes               ExamenPaciente[]
+  cajas                  CajaSesion[]
+  movimientosCaja        CajaMovimiento[]
+  accesosPacienteCreados AccesoPaciente[]
 }
 
 model Cliente {
-  id              Int      @id @default(autoincrement())
+  id              Int       @id @default(autoincrement())
   nombreCompleto  String
-  telefono        String?  @unique
-  correo          String?  @unique
-  cedula          String?  @unique
-  ruc             String?  @unique
+  telefono        String?   @unique
+  correo          String?   @unique
+  cedula          String?   @unique
+  ruc             String?   @unique
   direccion       String?
-  activo          Boolean  @default(true)
-  esDatoPrueba    Boolean  @default(false)
+  activo          Boolean   @default(true)
+  esDatoPrueba    Boolean   @default(false)
   fechaNacimiento DateTime?
   sexo            String?
-  tipoPerfil      String   @default("FARMACIA")
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  tipoPerfil      String    @default("FARMACIA")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  ventas          Venta[]
-  citas           Cita[]
-  atenciones      AtencionPodologica[]
-  recetas         Receta[]
-  datosClinicos   DatosClinicosPaciente?
-  examenes        ExamenPaciente[]
-  descuentos      DescuentoCliente[]
+  ventas        Venta[]
+  citas         Cita[]
+  atenciones    AtencionPodologica[]
+  recetas       Receta[]
+  datosClinicos DatosClinicosPaciente?
+  examenes      ExamenPaciente[]
+  descuentos    DescuentoCliente[]
+  accesosPortal AccesoPaciente[]
 }
-
 
 // ===== CATEGORÍA DE PRODUCTOS =====
 model CategoriaProducto {
-  id              Int     @id @default(autoincrement())
-  nombre          String  @unique
-  descripcion     String?
-  activo          Boolean @default(true)
-  createdBy       Int?
-  esDatoPrueba    Boolean @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id           Int      @id @default(autoincrement())
+  nombre       String   @unique
+  descripcion  String?
+  activo       Boolean  @default(true)
+  createdBy    Int?
+  esDatoPrueba Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  productos       Producto[]
-  descuentos      DescuentoCategoria[]
+  productos  Producto[]
+  descuentos DescuentoCategoria[]
 }
 
 // ===== PRODUCTOS (CATÁLOGO) =====
 model Producto {
-  id              Int     @id @default(autoincrement())
-  nombre          String  @unique
-  codigoBarras    String? @unique
-  descripcion     String?
-  fechaVencimiento DateTime?  // Legacy field — now tracked per batch (Lote)
-  idCategoria     Int
-  categoria       CategoriaProducto @relation(fields: [idCategoria], references: [id])
-  idLaboratorio   Int?
-  laboratorioRef  Laboratorio? @relation(fields: [idLaboratorio], references: [id])
-  laboratorio     String?     // Keep for legacy compatibility
-  concentracion   String?
-  formaPresentacion String?
-  unidadMedida    String?  // "mg", "ml", "g", "unidad"
-  precioCompra    Decimal @db.Decimal(10, 2)  // Average cost — auto-calculated from purchases
-  precioVenta     Decimal @db.Decimal(10, 2)
-  precioBlister   Decimal? @db.Decimal(10, 2)
-  precioCaja      Decimal? @db.Decimal(10, 2)
-  unidadesPorBlister Int?
-  unidadesPorCaja Int?
-  blísteresPorCaja Int?
-  margenUtilidad  Decimal? @db.Decimal(10, 2)
-  stockActual     Int     @default(0)  // Computed from Lote totals — read-only in UI
-  stockMinimo     Int?
-  activo              Boolean @default(true)
-  esServicio          Boolean @default(false)
-  esDatoPrueba        Boolean @default(false)
+  id                  Int                @id @default(autoincrement())
+  nombre              String             @unique
+  codigoBarras        String?            @unique
+  descripcion         String?
+  fechaVencimiento    DateTime? // Legacy field — now tracked per batch (Lote)
+  idCategoria         Int
+  categoria           CategoriaProducto  @relation(fields: [idCategoria], references: [id])
+  idLaboratorio       Int?
+  laboratorioRef      Laboratorio?       @relation(fields: [idLaboratorio], references: [id])
+  laboratorio         String? // Keep for legacy compatibility
+  concentracion       String?
+  formaPresentacion   String?
+  unidadMedida        String? // "mg", "ml", "g", "unidad"
+  precioCompra        Decimal            @db.Decimal(10, 2) // Average cost — auto-calculated from purchases
+  precioVenta         Decimal            @db.Decimal(10, 2)
+  precioBlister       Decimal?           @db.Decimal(10, 2)
+  precioCaja          Decimal?           @db.Decimal(10, 2)
+  unidadesPorBlister  Int?
+  unidadesPorCaja     Int?
+  blísteresPorCaja   Int?
+  margenUtilidad      Decimal?           @db.Decimal(10, 2)
+  stockActual         Int                @default(0) // Computed from Lote totals — read-only in UI
+  stockMinimo         Int?
+  activo              Boolean            @default(true)
+  esServicio          Boolean            @default(false)
+  esDatoPrueba        Boolean            @default(false)
   idFormaFarmaceutica Int?
   formaFarmaceutica   FormaFarmaceutica? @relation(fields: [idFormaFarmaceutica], references: [id])
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
 
-  detallesCompra  DetalleCompra[]
-  detallesVenta   DetalleVenta[]
-  proveedores     ProveedorProducto[]
-  lotes           Lote[]
-  movimientos     MovimientoInventario[]
-  devoluciones    DevolucionProveedor[]
-  detallesReceta  DetalleReceta[]
-  descuentos      DescuentoProducto[]
-  insumos         InsumoAtencion[]
+  detallesCompra DetalleCompra[]
+  detallesVenta  DetalleVenta[]
+  proveedores    ProveedorProducto[]
+  lotes          Lote[]
+  movimientos    MovimientoInventario[]
+  devoluciones   DevolucionProveedor[]
+  detallesReceta DetalleReceta[]
+  descuentos     DescuentoProducto[]
+  insumos        InsumoAtencion[]
 }
 
 // ===== PROVEEDORES =====
 model Proveedor {
-  id              Int     @id @default(autoincrement())
-  nombre          String  @unique 
-  telefono        String?
-  correo          String?
-  direccion       String?
-  ruc             String? @unique
-  contacto        String?
-  activo          Boolean @default(true)
-  esDatoPrueba    Boolean @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id           Int      @id @default(autoincrement())
+  nombre       String   @unique
+  telefono     String?
+  correo       String?
+  direccion    String?
+  ruc          String?  @unique
+  contacto     String?
+  activo       Boolean  @default(true)
+  esDatoPrueba Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  compras         Compra[]
-  productos       ProveedorProducto[]
-  devoluciones    DevolucionProveedor[]
+  compras      Compra[]
+  productos    ProveedorProducto[]
+  devoluciones DevolucionProveedor[]
 }
 
 // ===== CATÁLOGO PROVEEDOR-PRODUCTO =====
 model ProveedorProducto {
-  id              Int       @id @default(autoincrement())
-  idProveedor     Int
-  proveedor       Proveedor @relation(fields: [idProveedor], references: [id], onDelete: Cascade)
-  idProducto      Int
-  producto        Producto  @relation(fields: [idProducto], references: [id], onDelete: Cascade)
-  precioCompra    Decimal?  @db.Decimal(10, 2)
-  createdAt       DateTime  @default(now())
+  id           Int       @id @default(autoincrement())
+  idProveedor  Int
+  proveedor    Proveedor @relation(fields: [idProveedor], references: [id], onDelete: Cascade)
+  idProducto   Int
+  producto     Producto  @relation(fields: [idProducto], references: [id], onDelete: Cascade)
+  precioCompra Decimal?  @db.Decimal(10, 2)
+  createdAt    DateTime  @default(now())
 
   @@unique([idProveedor, idProducto])
 }
 
 // ===== COMPRAS A PROVEEDORES =====
 model Compra {
-  id              Int     @id @default(autoincrement())
-  fecha           DateTime @default(now())
-  fechaCompra     DateTime?  // Actual invoice date (may differ from registration date)
-  numeroFactura   String?
-  idProveedor     Int
-  proveedor       Proveedor @relation(fields: [idProveedor], references: [id])
-  total           Decimal @db.Decimal(10, 2)
-  idUsuario       Int
-  usuario         Usuario @relation(fields: [idUsuario], references: [id])
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id            Int       @id @default(autoincrement())
+  fecha         DateTime  @default(now())
+  fechaCompra   DateTime? // Actual invoice date (may differ from registration date)
+  numeroFactura String?
+  idProveedor   Int
+  proveedor     Proveedor @relation(fields: [idProveedor], references: [id])
+  total         Decimal   @db.Decimal(10, 2)
+  idUsuario     Int
+  usuario       Usuario   @relation(fields: [idUsuario], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  detalles        DetalleCompra[]
+  detalles DetalleCompra[]
 }
 
 model DetalleCompra {
-  id              Int     @id @default(autoincrement())
-  idCompra        Int
-  compra          Compra  @relation(fields: [idCompra], references: [id], onDelete: Cascade)
-  idProducto      Int
-  producto        Producto @relation(fields: [idProducto], references: [id])
-  cantidad        Int
-  precioUnitario  Decimal @db.Decimal(10, 2)
-  subtotal        Decimal @db.Decimal(10, 2)
-  lote            String?   // Batch code from invoice
-  fechaVencimiento DateTime?  // Expiration date of this batch
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id               Int       @id @default(autoincrement())
+  idCompra         Int
+  compra           Compra    @relation(fields: [idCompra], references: [id], onDelete: Cascade)
+  idProducto       Int
+  producto         Producto  @relation(fields: [idProducto], references: [id])
+  cantidad         Int
+  precioUnitario   Decimal   @db.Decimal(10, 2)
+  subtotal         Decimal   @db.Decimal(10, 2)
+  lote             String? // Batch code from invoice
+  fechaVencimiento DateTime? // Expiration date of this batch
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  lotes           Lote[]
+  lotes Lote[]
 }
 
 // ===== LOTES (BATCH TRACKING) =====
 model Lote {
-  id                Int       @id @default(autoincrement())
-  idProducto        Int
-  producto          Producto  @relation(fields: [idProducto], references: [id], onDelete: Cascade)
-  codigoLote        String
-  fechaVencimiento  DateTime?
-  stockInicial      Int       @default(0)
-  stockActual       Int       @default(0)
-  costoCompra       Decimal   @db.Decimal(10, 2) @default(0)
-  idDetalleCompra   Int?
-  detalleCompra     DetalleCompra? @relation(fields: [idDetalleCompra], references: [id], onDelete: SetNull)
-  activo            Boolean   @default(true)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id               Int            @id @default(autoincrement())
+  idProducto       Int
+  producto         Producto       @relation(fields: [idProducto], references: [id], onDelete: Cascade)
+  codigoLote       String
+  fechaVencimiento DateTime?
+  stockInicial     Int            @default(0)
+  stockActual      Int            @default(0)
+  costoCompra      Decimal        @default(0) @db.Decimal(10, 2)
+  idDetalleCompra  Int?
+  detalleCompra    DetalleCompra? @relation(fields: [idDetalleCompra], references: [id], onDelete: SetNull)
+  activo           Boolean        @default(true)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 
-  movimientos       MovimientoInventario[]
-  detallesVenta     DetalleVentaLote[]
-  devoluciones      DevolucionProveedor[]
+  movimientos   MovimientoInventario[]
+  detallesVenta DetalleVentaLote[]
+  devoluciones  DevolucionProveedor[]
 
   @@unique([idProducto, codigoLote])
   @@index([idProducto])
@@ -216,22 +219,22 @@ model Lote {
 
 // ===== MOVIMIENTOS DE INVENTARIO (KARDEX) =====
 model MovimientoInventario {
-  id              Int       @id @default(autoincrement())
+  id              Int      @id @default(autoincrement())
   idProducto      Int
-  producto        Producto  @relation(fields: [idProducto], references: [id], onDelete: Cascade)
+  producto        Producto @relation(fields: [idProducto], references: [id], onDelete: Cascade)
   idLote          Int?
-  lote            Lote?     @relation(fields: [idLote], references: [id], onDelete: SetNull)
-  tipo            String    // 'ENTRADA_COMPRA', 'SALIDA_VENTA', 'AJUSTE_POSITIVO', 'AJUSTE_NEGATIVO', 'DEVOLUCION', 'ELIMINACION'
+  lote            Lote?    @relation(fields: [idLote], references: [id], onDelete: SetNull)
+  tipo            String // 'ENTRADA_COMPRA', 'SALIDA_VENTA', 'AJUSTE_POSITIVO', 'AJUSTE_NEGATIVO', 'DEVOLUCION', 'ELIMINACION'
   cantidad        Int
-  stockResultante Int       @default(0)
-  costoUnitario   Decimal?  @db.Decimal(10, 2)
-  referencia      String?   // e.g. 'Compra #12', 'Venta #45', 'Ajuste: Inventario Físico'
-  observacion     String?   // Motivo detallado del movimiento
+  stockResultante Int      @default(0)
+  costoUnitario   Decimal? @db.Decimal(10, 2)
+  referencia      String? // e.g. 'Compra #12', 'Venta #45', 'Ajuste: Inventario Físico'
+  observacion     String? // Motivo detallado del movimiento
   idUsuario       Int?
-  usuario         Usuario?  @relation(fields: [idUsuario], references: [id], onDelete: SetNull)
-  createdAt       DateTime  @default(now())
+  usuario         Usuario? @relation(fields: [idUsuario], references: [id], onDelete: SetNull)
+  createdAt       DateTime @default(now())
 
-  devoluciones    DevolucionProveedor[]
+  devoluciones DevolucionProveedor[]
 
   @@index([idProducto])
   @@index([createdAt])
@@ -239,57 +242,65 @@ model MovimientoInventario {
 
 // ===== VENTAS DE FARMACIA =====
 model Venta {
-  id              Int     @id @default(autoincrement())
-  fecha           DateTime @default(now())
+  id              Int         @id @default(autoincrement())
+  fecha           DateTime    @default(now())
   idCliente       Int?
-  cliente         Cliente? @relation(fields: [idCliente], references: [id])
-  total           Decimal @db.Decimal(10, 2)
-  metodoPago      String  // "EFECTIVO", "TARJETA", "TRANSFERENCIA"
+  cliente         Cliente?    @relation(fields: [idCliente], references: [id])
+  total           Decimal     @db.Decimal(10, 2)
+  metodoPago      String // "EFECTIVO", "TARJETA", "TRANSFERENCIA"
   nombrePodologo  String?
   numeroReceta    String?
   idUsuario       Int
-  usuario         Usuario @relation(fields: [idUsuario], references: [id])
-  tipoComprobante String  @default("RECIBO")
-  estado          String  @default("COMPLETADA")
-  montoRecibido   Decimal? @db.Decimal(10, 2)
-  cambio          Decimal? @db.Decimal(10, 2)
+  usuario         Usuario     @relation(fields: [idUsuario], references: [id])
+  tipoComprobante String      @default("RECIBO")
+  estado          String      @default("COMPLETADA")
+  montoRecibido   Decimal?    @db.Decimal(10, 2)
+  cambio          Decimal?    @db.Decimal(10, 2)
   rucCliente      String?
   idDescuento     Int?
-  descuento       Descuento? @relation(fields: [idDescuento], references: [id])
-  descuentoTotal  Decimal? @db.Decimal(10, 2) @default(0)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  descuento       Descuento?  @relation(fields: [idDescuento], references: [id])
+  descuentoTotal  Decimal?    @default(0) @db.Decimal(10, 2)
+  idReceta        Int?
+  receta          Receta?     @relation(fields: [idReceta], references: [id], onDelete: SetNull)
+  idCaja          Int?
+  caja            CajaSesion? @relation(fields: [idCaja], references: [id], onDelete: SetNull)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
-  detalles        DetalleVenta[]
+  detalles DetalleVenta[]
+
+  @@index([idReceta])
+  @@index([idCaja])
+  @@index([fecha, estado])
 }
 
 model DetalleVenta {
-  id              Int     @id @default(autoincrement())
-  idVenta         Int
-  venta           Venta   @relation(fields: [idVenta], references: [id], onDelete: Cascade)
-  idProducto      Int
-  producto        Producto @relation(fields: [idProducto], references: [id])
-  cantidad        Int
-  precioUnitario  Decimal @db.Decimal(10, 2)
-  subtotal        Decimal @db.Decimal(10, 2)
-  descuentoLinea  Decimal? @db.Decimal(10, 2) @default(0)
-  tipoUnidad      String  @default("UNIDAD")
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             Int      @id @default(autoincrement())
+  idVenta        Int
+  venta          Venta    @relation(fields: [idVenta], references: [id], onDelete: Cascade)
+  idProducto     Int
+  producto       Producto @relation(fields: [idProducto], references: [id])
+  cantidad       Int
+  precioUnitario Decimal  @db.Decimal(10, 2)
+  subtotal       Decimal  @db.Decimal(10, 2)
+  descuentoLinea Decimal? @default(0) @db.Decimal(10, 2)
+  tipoUnidad     String   @default("UNIDAD")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  lotes           DetalleVentaLote[]
+  lotes DetalleVentaLote[]
 }
 
 // ===== AUDITORÍA =====
 model AuditoriaLog {
   id              Int      @id @default(autoincrement())
-  accion          String   // ej. "CREAR_PRODUCTO", "ACTUALIZAR_STOCK", "NUEVA_VENTA"
-  entidad         String   // ej. "Producto", "Venta"
-  entidadId       Int?     // ID del registro modificado
-  detalles        String?  // JSON con detalles
-  modulo      String   @default("FARMACIA")
-  idUsuario   Int?
-  usuario     Usuario? @relation(fields: [idUsuario], references: [id])
+  accion          String // ej. "CREAR_PRODUCTO", "ACTUALIZAR_STOCK", "NUEVA_VENTA"
+  entidad         String // ej. "Producto", "Venta"
+  entidadId       Int? // ID del registro modificado
+  detalles        String? // JSON con detalles
+  modulo          String   @default("FARMACIA")
+  idUsuario       Int?
+  usuario         Usuario? @relation(fields: [idUsuario], references: [id])
   datosAnteriores Json?
   datosNuevos     Json?
   ip              String?
@@ -301,11 +312,11 @@ model AuditoriaLog {
 model PasswordResetToken {
   id               Int      @id @default(autoincrement())
   correo           String
-  tokenHash        String   @unique   // SHA-256 hash del código de 6 dígitos
+  tokenHash        String   @unique // SHA-256 hash del código de 6 dígitos
   expiracion       DateTime
   usado            Boolean  @default(false)
-  intentosFallidos Int      @default(0)  // Anti brute-force: max 5 intentos
-  ipOrigen         String?  // IP desde la cual se solicitó
+  intentosFallidos Int      @default(0) // Anti brute-force: max 5 intentos
+  ipOrigen         String? // IP desde la cual se solicitó
   createdAt        DateTime @default(now())
 
   @@index([correo])
@@ -341,13 +352,13 @@ model Auditoria {
 
 // ===== DETALLE VENTA LOTE =====
 model DetalleVentaLote {
-  id              Int          @id @default(autoincrement())
-  idDetalleVenta  Int
-  detalleVenta    DetalleVenta @relation(fields: [idDetalleVenta], references: [id], onDelete: Cascade)
-  idLote          Int
-  lote            Lote         @relation(fields: [idLote], references: [id], onDelete: Cascade)
-  cantidad        Int
-  createdAt       DateTime     @default(now())
+  id             Int          @id @default(autoincrement())
+  idDetalleVenta Int
+  detalleVenta   DetalleVenta @relation(fields: [idDetalleVenta], references: [id], onDelete: Cascade)
+  idLote         Int
+  lote           Lote         @relation(fields: [idLote], references: [id], onDelete: Cascade)
+  cantidad       Int
+  createdAt      DateTime     @default(now())
 
   @@unique([idDetalleVenta, idLote])
   @@index([idDetalleVenta])
@@ -356,146 +367,150 @@ model DetalleVentaLote {
 
 // ===== DEVOLUCIÓN A PROVEEDOR =====
 model DevolucionProveedor {
-  id                      Int                   @id @default(autoincrement())
-  idempotencyKey          String                @unique
-  idProducto              Int
-  producto                Producto              @relation(fields: [idProducto], references: [id], onDelete: Cascade)
-  idLote                  Int
-  lote                    Lote                  @relation(fields: [idLote], references: [id], onDelete: Cascade)
-  idProveedor             Int?
-  proveedor               Proveedor?            @relation(fields: [idProveedor], references: [id], onDelete: SetNull)
-  cantidad                Int
-  motivo                  String // VENCIDO, PRÓXIMO_A_VENCER, DAÑADO, DEFECTUOSO, RETIRO_DE_LABORATORIO, ERROR_DE_COMPRA, OTRO
-  observacion             String?
-  estado                  String                @default("COMPLETADA") // COMPLETADA, ANULADA
-  idMovimientoInventario  Int?
-  movimientoInventario    MovimientoInventario? @relation(fields: [idMovimientoInventario], references: [id], onDelete: SetNull)
-  idUsuario               Int
-  usuario                 Usuario               @relation(fields: [idUsuario], references: [id])
-  fecha                   DateTime              @default(now())
-  motivoAnulacion         String?
-  esDatoPrueba            Boolean               @default(false)
-  createdAt               DateTime              @default(now())
-  updatedAt               DateTime              @updatedAt
+  id                     Int                   @id @default(autoincrement())
+  idempotencyKey         String                @unique
+  idProducto             Int
+  producto               Producto              @relation(fields: [idProducto], references: [id], onDelete: Cascade)
+  idLote                 Int
+  lote                   Lote                  @relation(fields: [idLote], references: [id], onDelete: Cascade)
+  idProveedor            Int?
+  proveedor              Proveedor?            @relation(fields: [idProveedor], references: [id], onDelete: SetNull)
+  cantidad               Int
+  motivo                 String // VENCIDO, PRÓXIMO_A_VENCER, DAÑADO, DEFECTUOSO, RETIRO_DE_LABORATORIO, ERROR_DE_COMPRA, OTRO
+  observacion            String?
+  estado                 String                @default("COMPLETADA") // COMPLETADA, ANULADA
+  idMovimientoInventario Int?
+  movimientoInventario   MovimientoInventario? @relation(fields: [idMovimientoInventario], references: [id], onDelete: SetNull)
+  idUsuario              Int
+  usuario                Usuario               @relation(fields: [idUsuario], references: [id])
+  fecha                  DateTime              @default(now())
+  motivoAnulacion        String?
+  esDatoPrueba           Boolean               @default(false)
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
 }
 
 // ===== CITA CLÍNICA =====
 model Cita {
-  id              Int                 @id @default(autoincrement())
-  idCliente       Int
-  cliente         Cliente             @relation(fields: [idCliente], references: [id], onDelete: Cascade)
-  fecha           DateTime
-  motivo          String?
-  estado          String              @default("PENDIENTE") // PENDIENTE, COMPLETADA, CANCELADA
-  esDatoPrueba    Boolean             @default(false)
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  atencion        AtencionPodologica?
+  id           Int                 @id @default(autoincrement())
+  idCliente    Int
+  cliente      Cliente             @relation(fields: [idCliente], references: [id], onDelete: Cascade)
+  fecha        DateTime
+  motivo       String?
+  estado       String              @default("PENDIENTE") // PENDIENTE, COMPLETADA, CANCELADA
+  esDatoPrueba Boolean             @default(false)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  atencion     AtencionPodologica?
 }
 
 // ===== ATENCIÓN PODOLÓGICA (SOAP) =====
 model AtencionPodologica {
-  id            Int                @id @default(autoincrement())
-  idCita        Int?               @unique
-  cita          Cita?              @relation(fields: [idCita], references: [id], onDelete: SetNull)
-  idCliente     Int
-  cliente       Cliente            @relation(fields: [idCliente], references: [id], onDelete: Cascade)
-  idUsuario     Int
-  usuario       Usuario            @relation(fields: [idUsuario], references: [id])
-  idServicio    Int?
-  servicio      ServicioPodologia? @relation(fields: [idServicio], references: [id], onDelete: SetNull)
-  fecha         DateTime           @default(now())
-  subjetivo     String             @db.Text
-  objetivo      String             @db.Text
-  analisis      String             @db.Text
-  plan          String             @db.Text
-  esDatoPrueba  Boolean            @default(false)
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
-  receta        Receta?
-  diagnosticos  DiagnosticoAtencion[]
-  tratamientos  TratamientoAtencion[]
-  insumos       InsumoAtencion[]
+  id           Int                   @id @default(autoincrement())
+  idCita       Int?                  @unique
+  cita         Cita?                 @relation(fields: [idCita], references: [id], onDelete: SetNull)
+  idCliente    Int
+  cliente      Cliente               @relation(fields: [idCliente], references: [id], onDelete: Cascade)
+  idUsuario    Int
+  usuario      Usuario               @relation(fields: [idUsuario], references: [id])
+  idServicio   Int?
+  servicio     ServicioPodologia?    @relation(fields: [idServicio], references: [id], onDelete: SetNull)
+  fecha        DateTime              @default(now())
+  subjetivo    String                @db.Text
+  objetivo     String                @db.Text
+  analisis     String                @db.Text
+  plan         String                @db.Text
+  esDatoPrueba Boolean               @default(false)
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  receta       Receta?
+  diagnosticos DiagnosticoAtencion[]
+  tratamientos TratamientoAtencion[]
+  insumos      InsumoAtencion[]
 }
 
 // ===== RECETA CLÍNICA =====
 model Receta {
-  id                Int                 @id @default(autoincrement())
-  codigoReceta      String              @unique
-  idAtencion        Int                 @unique
-  atencion          AtencionPodologica  @relation(fields: [idAtencion], references: [id], onDelete: Cascade)
-  idCliente         Int
-  cliente           Cliente             @relation(fields: [idCliente], references: [id], onDelete: Cascade)
-  idUsuario         Int
-  usuario           Usuario             @relation(fields: [idUsuario], references: [id])
-  estado            String              @default("EMITIDA") // BORRADOR, EMITIDA, USADA_PARCIALMENTE, USADA_COMPLETAMENTE, ANULADA, VENCIDA
-  fechaVencimiento  DateTime?
-  observaciones     String?             @db.Text
-  esDatoPrueba      Boolean             @default(false)
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  detalles          DetalleReceta[]
+  id               Int                @id @default(autoincrement())
+  codigoReceta     String             @unique
+  idAtencion       Int                @unique
+  atencion         AtencionPodologica @relation(fields: [idAtencion], references: [id], onDelete: Cascade)
+  idCliente        Int
+  cliente          Cliente            @relation(fields: [idCliente], references: [id], onDelete: Cascade)
+  idUsuario        Int
+  usuario          Usuario            @relation(fields: [idUsuario], references: [id])
+  estado           String             @default("EMITIDA") // BORRADOR, EMITIDA, USADA_PARCIALMENTE, USADA_COMPLETAMENTE, ANULADA, VENCIDA
+  fechaVencimiento DateTime?
+  observaciones    String?            @db.Text
+  esDatoPrueba     Boolean            @default(false)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  detalles         DetalleReceta[]
+  ventas           Venta[]
+
+  @@index([estado, fechaVencimiento])
+  @@index([idCliente, createdAt])
 }
 
 // ===== DETALLE DE RECETA =====
 model DetalleReceta {
-  id                  Int      @id @default(autoincrement())
-  idReceta            Int
-  receta              Receta   @relation(fields: [idReceta], references: [id], onDelete: Cascade)
-  idProducto          Int
-  producto            Producto @relation(fields: [idProducto], references: [id])
-  cantidad            Int
-  cantidadFacturada   Int      @default(0)
-  indicaciones        String?  @db.Text
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                Int      @id @default(autoincrement())
+  idReceta          Int
+  receta            Receta   @relation(fields: [idReceta], references: [id], onDelete: Cascade)
+  idProducto        Int
+  producto          Producto @relation(fields: [idProducto], references: [id])
+  cantidad          Int
+  cantidadFacturada Int      @default(0)
+  indicaciones      String?  @db.Text
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 // ===== LABORATORIOS =====
 model Laboratorio {
-  id            Int        @id @default(autoincrement())
-  nombre        String     @unique
+  id            Int      @id @default(autoincrement())
+  nombre        String   @unique
   pais          String?
   direccion     String?
   telefono      String?
   correo        String?
   contacto      String?
-  activo        Boolean    @default(true)
+  activo        Boolean  @default(true)
   observaciones String?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  productos     Producto[]
+  productos Producto[]
 }
 
 // ===== DATOS CLÍNICOS DEL PACIENTE =====
 model DatosClinicosPaciente {
-  id                   Int      @id @default(autoincrement())
-  idCliente            Int      @unique
-  cliente              Cliente  @relation(fields: [idCliente], references: [id], onDelete: Cascade)
-  tipoSangre           String?  @db.VarChar(10)
-  antecedentes         String?  @db.Text
-  alergias             String?  @db.Text
-  observacionesClinicas String? @db.Text
-  diagnosticoGeneral   String?  @db.Text
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  id                    Int      @id @default(autoincrement())
+  idCliente             Int      @unique
+  cliente               Cliente  @relation(fields: [idCliente], references: [id], onDelete: Cascade)
+  tipoSangre            String?  @db.VarChar(10)
+  antecedentes          String?  @db.Text
+  alergias              String?  @db.Text
+  observacionesClinicas String?  @db.Text
+  diagnosticoGeneral    String?  @db.Text
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }
 
 // ===== SERVICIOS DE PODOLOGÍA =====
 model ServicioPodologia {
-  id           Int                  @id @default(autoincrement())
-  nombre       String               @unique
-  descripcion  String?              @db.Text
-  precio       Decimal              @db.Decimal(10, 2)
-  duracion     Int?                 // en minutos
-  activo          Boolean              @default(true)
-  esDatoPrueba    Boolean              @default(false)
-  observaciones   String?              @db.Text
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
+  id            Int      @id @default(autoincrement())
+  nombre        String   @unique
+  descripcion   String?  @db.Text
+  precio        Decimal  @db.Decimal(10, 2)
+  duracion      Int? // en minutos
+  activo        Boolean  @default(true)
+  esDatoPrueba  Boolean  @default(false)
+  observaciones String?  @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  atenciones   AtencionPodologica[]
+  atenciones AtencionPodologica[]
 }
 
 // ===== CATÁLOGO CLÍNICO: DIAGNÓSTICOS =====
@@ -561,72 +576,132 @@ model InsumoAtencion {
 
 // ===== SISTEMA DE DESCUENTOS =====
 model Descuento {
-  id                Int                  @id @default(autoincrement())
-  nombre            String               @default("Descuento")
+  id                Int       @id @default(autoincrement())
+  nombre            String    @default("Descuento")
   descripcion       String?
-  tipoAplicacion    String               @default("VENTA_GENERAL") // "PRODUCTO", "CATEGORIA", "CLIENTE", "VENTA_GENERAL"
-  tipoValor         String               @default("PORCENTAJE") // "PORCENTAJE", "MONTO_FIJO"
-  tipo              String?              // legacy compatibility
-  valor             Decimal              @db.Decimal(10, 2)
+  tipoAplicacion    String    @default("VENTA_GENERAL") // "PRODUCTO", "CATEGORIA", "CLIENTE", "VENTA_GENERAL"
+  tipoValor         String    @default("PORCENTAJE") // "PORCENTAJE", "MONTO_FIJO"
+  tipo              String? // legacy compatibility
+  valor             Decimal   @db.Decimal(10, 2)
   motivo            String
   fechaInicio       DateTime?
   fechaFin          DateTime?
-  montoMinimoCompra Decimal?             @db.Decimal(10, 2)
-  montoMinimo       Decimal?             @db.Decimal(10, 2) // legacy compatibility
-  maxDescuento      Decimal?             @db.Decimal(10, 2)
-  cantidadMinima    Int                  @default(0)
+  montoMinimoCompra Decimal?  @db.Decimal(10, 2)
+  montoMinimo       Decimal?  @db.Decimal(10, 2) // legacy compatibility
+  maxDescuento      Decimal?  @db.Decimal(10, 2)
+  cantidadMinima    Int       @default(0)
   limiteUso         Int?
-  usosActuales      Int                  @default(0)
-  esAcumulable      Boolean              @default(false)
-  activo            Boolean              @default(true)
-  estado            String               @default("ACTIVO") // legacy compatibility
+  usosActuales      Int       @default(0)
+  esAcumulable      Boolean   @default(false)
+  activo            Boolean   @default(true)
+  estado            String    @default("ACTIVO") // legacy compatibility
   idUsuario         Int
-  usuario           Usuario              @relation(fields: [idUsuario], references: [id])
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
+  usuario           Usuario   @relation(fields: [idUsuario], references: [id])
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  ventas            Venta[]
-  productos         DescuentoProducto[]
-  categorias        DescuentoCategoria[]
-  clientes          DescuentoCliente[]
+  ventas     Venta[]
+  productos  DescuentoProducto[]
+  categorias DescuentoCategoria[]
+  clientes   DescuentoCliente[]
 }
 
 // ===== EXÁMENES DE PACIENTES =====
 model ExamenPaciente {
-  id              Int       @id @default(autoincrement())
-  idPaciente      Int
-  paciente        Cliente   @relation(fields: [idPaciente], references: [id], onDelete: Cascade)
-  nombre          String
-  tipo            String    // LABORATORIO, IMAGEN, FUNCIONAL, BIOPSIA, OTRO
-  fechaExamen     DateTime
-  resultado       String?   @db.Text
-  interpretacion  String?   @db.Text
-  observaciones   String?   @db.Text
-  archivoUrl      String?
-  archivoNombre   String?
-  archivoTipo     String?   // MIME type
-  registradoPor   Int
-  registrador     Usuario   @relation(fields: [registradoPor], references: [id])
-  activo          Boolean   @default(true)
-  esDatoPrueba    Boolean   @default(false)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  deletedAt       DateTime?
+  id               Int       @id @default(autoincrement())
+  idPaciente       Int
+  paciente         Cliente   @relation(fields: [idPaciente], references: [id], onDelete: Cascade)
+  nombre           String
+  tipo             String // LABORATORIO, IMAGEN, FUNCIONAL, BIOPSIA, OTRO
+  fechaExamen      DateTime
+  resultado        String?   @db.Text
+  interpretacion   String?   @db.Text
+  observaciones    String?   @db.Text
+  archivoUrl       String?
+  archivoNombre    String?
+  archivoTipo      String? // MIME type
+  registradoPor    Int
+  registrador      Usuario   @relation(fields: [registradoPor], references: [id])
+  activo           Boolean   @default(true)
+  esDatoPrueba     Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+  autorizadoPortal Boolean   @default(false)
 
   @@index([idPaciente])
   @@index([fechaExamen])
   @@index([tipo])
 }
-model FormaFarmaceutica {
-  id          Int        @id @default(autoincrement())
-  nombre      String     @unique
-  descripcion String?
-  activo      Boolean    @default(true)
-  orden       Int        @default(0)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
 
-  productos   Producto[]
+// ===== CAJA =====
+model CajaSesion {
+  id                Int       @id @default(autoincrement())
+  idUsuario         Int
+  usuario           Usuario   @relation(fields: [idUsuario], references: [id])
+  estado            String    @default("ABIERTA") // ABIERTA, CERRADA, DIFERENCIA_RESUELTA
+  abiertaEn         DateTime  @default(now())
+  cerradaEn         DateTime?
+  montoInicial      Decimal   @db.Decimal(10, 2)
+  montoFinalContado Decimal?  @db.Decimal(10, 2)
+  montoEsperado     Decimal?  @db.Decimal(10, 2)
+  diferencia        Decimal?  @db.Decimal(10, 2)
+  observacionCierre String?
+  resueltaPor       Int?
+  resueltaEn        DateTime?
+  resolucion        String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  ventas      Venta[]
+  movimientos CajaMovimiento[]
+
+  @@index([idUsuario, estado])
+  @@index([abiertaEn])
+}
+
+model CajaMovimiento {
+  id        Int        @id @default(autoincrement())
+  idCaja    Int
+  caja      CajaSesion @relation(fields: [idCaja], references: [id], onDelete: Cascade)
+  tipo      String // RETIRO, GASTO, INGRESO
+  monto     Decimal    @db.Decimal(10, 2)
+  concepto  String
+  idUsuario Int
+  usuario   Usuario    @relation(fields: [idUsuario], references: [id])
+  createdAt DateTime   @default(now())
+
+  @@index([idCaja, createdAt])
+}
+
+// Token temporal con hash SHA-256. El token en claro nunca se almacena.
+model AccesoPaciente {
+  id                Int       @id @default(autoincrement())
+  tokenHash         String    @unique
+  idCliente         Int
+  cliente           Cliente   @relation(fields: [idCliente], references: [id], onDelete: Cascade)
+  creadoPor         Int
+  creador           Usuario   @relation(fields: [creadoPor], references: [id])
+  expiracion        DateTime
+  revocado          Boolean   @default(false)
+  incluirResultados Boolean   @default(false)
+  ultimoAcceso      DateTime?
+  createdAt         DateTime  @default(now())
+
+  @@index([idCliente, expiracion])
+  @@index([expiracion, revocado])
+}
+
+model FormaFarmaceutica {
+  id          Int      @id @default(autoincrement())
+  nombre      String   @unique
+  descripcion String?
+  activo      Boolean  @default(true)
+  orden       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  productos Producto[]
 }
 
 model DescuentoProducto {

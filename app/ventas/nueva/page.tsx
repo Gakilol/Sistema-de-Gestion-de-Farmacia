@@ -15,8 +15,19 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import useSWR from "swr"
+import { useCurrentUser } from "@/app/hooks/useCurrentUser"
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json())
+const fetcher = async (url: string) => {
+  const response = await fetch(url)
+  const payload = await response.json().catch(() => null)
+  if (!response.ok) {
+    const message = payload && typeof payload === "object" && "error" in payload
+      ? String(payload.error)
+      : "No fue posible cargar los datos"
+    throw new Error(message)
+  }
+  return payload
+}
 
 interface Lote {
   id: number
@@ -34,6 +45,7 @@ interface Producto {
   precioBlister?: string | null
   precioCaja?: string | null
   stockActual: number
+  esServicio?: boolean
   unidadesPorBlister?: number | null
   unidadesPorCaja?: number | null
   lotes?: Lote[]
@@ -58,6 +70,9 @@ interface LineaVenta {
   subtotal: number
   tipoUnidad: string
   alertaVencimiento?: string | null
+  idLotePreferido?: number | null
+  motivoCambioLote?: string | null
+  loteCodigo?: string | null
 }
 
 // Modal ligero para crear un cliente rápido desde ventas
@@ -159,6 +174,7 @@ function QuickClientModal({
 
 export default function NuevaVentaPage() {
   const router = useRouter()
+  const { user } = useCurrentUser()
   const [productos, setProductos] = useState<Producto[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [lineas, setLineas] = useState<LineaVenta[]>([])
@@ -175,8 +191,13 @@ export default function NuevaVentaPage() {
   const [rucCliente, setRucCliente] = useState("")
   const [montoRecibido, setMontoRecibido] = useState("")
   const [selectedDescuento, setSelectedDescuento] = useState("")
+  const [selectedLoteId, setSelectedLoteId] = useState<number | null>(null)
+  const [motivoCambioLote, setMotivoCambioLote] = useState("")
+  const [alergiasPendientes, setAlergiasPendientes] = useState<string | null>(null)
+  const [confirmarAlergias, setConfirmarAlergias] = useState(false)
 
-  const { data: descuentos = [] } = useSWR<any[]>("/api/descuentos?estado=ACTIVO", fetcher)
+  const { data: descuentosData } = useSWR<any[]>("/api/descuentos?estado=ACTIVO", fetcher)
+  const descuentos = Array.isArray(descuentosData) ? descuentosData : []
 
   // Scanner states
   const [scannerOpen, setScannerOpen] = useState(false)
@@ -197,6 +218,11 @@ export default function NuevaVentaPage() {
 
   useEffect(() => { fetchData() }, [])
 
+  useEffect(() => {
+    setSelectedLoteId(null)
+    setMotivoCambioLote("")
+  }, [selectedProducto?.id])
+
   // Close dropdowns on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -211,10 +237,12 @@ export default function NuevaVentaPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [])
 
-  const filteredProductos = productos.filter(p =>
-    p.nombre.toLowerCase().includes(productoSearch.toLowerCase()) ||
-    (p.codigoBarras && p.codigoBarras.toLowerCase().includes(productoSearch.toLowerCase()))
-  )
+  const filteredProductos = productos
+    .filter(p =>
+      p.nombre.toLowerCase().includes(productoSearch.toLowerCase()) ||
+      (p.codigoBarras && p.codigoBarras.toLowerCase().includes(productoSearch.toLowerCase()))
+    )
+    .slice(0, 50)
 
   const filteredClientes = clientes.filter(c =>
     c.nombreCompleto.toLowerCase().includes(clienteSearch.toLowerCase()) ||
@@ -223,9 +251,25 @@ export default function NuevaVentaPage() {
 
   const fetchData = async () => {
     try {
-      const [resP, resC] = await Promise.all([fetch("/api/productos"), fetch("/api/clientes")])
-      setProductos(await resP.json()); setClientes(await resC.json())
-    } catch (e) { console.error(e) } finally { setLoading(false) }
+      const [resP, resC] = await Promise.all([fetch("/api/productos?soloLotesVigentes=true"), fetch("/api/clientes")])
+      const [productosPayload, clientesPayload] = await Promise.all([
+        resP.json().catch(() => null),
+        resC.json().catch(() => null),
+      ])
+      if (!resP.ok || !Array.isArray(productosPayload)) {
+        throw new Error("No fue posible cargar el catálogo de productos")
+      }
+      if (!resC.ok || !Array.isArray(clientesPayload)) {
+        throw new Error("No fue posible cargar los clientes")
+      }
+      setProductos(productosPayload)
+      setClientes(clientesPayload)
+    } catch (error) {
+      console.error(error)
+      toast.error(error instanceof Error ? error.message : "Error al cargar los datos de venta")
+    } finally {
+      setLoading(false)
+    }
   }
 
   // ─── Scanner handler ─────────────────────────────────────────────────────────
@@ -330,8 +374,15 @@ export default function NuevaVentaPage() {
     const precioUnitario = getPrecioUnitario()
     if (precioUnitario <= 0) { toast.error("El precio del producto es inválido (debe ser mayor a 0)"); return }
 
-    setLineas([...lineas, { idProducto: selectedProducto.id, nombre: selectedProducto.nombre, cantidad: cant, precioUnitario, subtotal: precioUnitario * cant, tipoUnidad }])
-    setSelectedProducto(null); setCantidad(""); setTipoUnidad("UNIDAD")
+    const ahora = Date.now()
+    const lotesVigentes = (selectedProducto.lotes || []).filter((l) => l.stockActual > 0 && (!l.fechaVencimiento || new Date(l.fechaVencimiento).getTime() > ahora))
+    const loteFEFO = lotesVigentes[0]
+    const loteElegido = lotesVigentes.find((l) => l.id === selectedLoteId) || loteFEFO
+    const excepcion = Boolean(loteElegido && loteFEFO && loteElegido.id !== loteFEFO.id)
+    if (excepcion && user?.rolNombre !== "ADMIN") { toast.error("Solo administración puede cambiar el lote FEFO"); return }
+    if (excepcion && motivoCambioLote.trim().length < 5) { toast.error("Explique el motivo del cambio de lote"); return }
+    setLineas([...lineas, { idProducto: selectedProducto.id, nombre: selectedProducto.nombre, cantidad: cant, precioUnitario, subtotal: precioUnitario * cant, tipoUnidad, idLotePreferido: excepcion ? loteElegido?.id : null, motivoCambioLote: excepcion ? motivoCambioLote.trim() : null, loteCodigo: loteElegido?.codigoLote || null }])
+    setSelectedProducto(null); setCantidad(""); setTipoUnidad("UNIDAD"); setSelectedLoteId(null); setMotivoCambioLote("")
   }
 
   const total = lineas.reduce((sum, l) => sum + l.subtotal, 0)
@@ -399,7 +450,7 @@ export default function NuevaVentaPage() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           idCliente: selectedCliente ? Number.parseInt(selectedCliente) : null,
-          detalles: lineas.map((l) => ({ idProducto: l.idProducto, cantidad: l.cantidad, precioUnitario: l.precioUnitario, tipoUnidad: l.tipoUnidad })),
+          detalles: lineas.map((l) => ({ idProducto: l.idProducto, cantidad: l.cantidad, precioUnitario: l.precioUnitario, tipoUnidad: l.tipoUnidad, idLotePreferido: l.idLotePreferido, motivoCambioLote: l.motivoCambioLote })),
           metodoPago,
           nombrePodologo: nombrePodologo || null,
           numeroReceta: numeroReceta || null,
@@ -409,6 +460,7 @@ export default function NuevaVentaPage() {
           rucCliente: tipoComprobante === "FACTURA" ? rucCliente : null,
           idDescuento: selectedDescuento ? Number.parseInt(selectedDescuento) : null,
           descuentoTotal: discountTotal,
+          confirmarAlergias,
         }),
       })
       const data = await res.json()
@@ -417,7 +469,11 @@ export default function NuevaVentaPage() {
         router.push("/ventas/historial")
       } else {
         // Mostrar alerta especial para lotes vencidos
-        if (data.codigoError === "LOTE_VENCIDO") {
+        if (data.codigoError === "ALERGIAS_PENDIENTES") {
+          setAlergiasPendientes(data.alergias || "Alergias registradas")
+          setConfirmarAlergias(false)
+          toast.warning("Revise las alergias del paciente antes de confirmar")
+        } else if (data.codigoError === "LOTE_VENCIDO") {
           setAlertaLoteVencido({
             nombre: data.productoNombre || "Producto",
             lote: data.loteInfo?.codigoLote || "—",
@@ -492,16 +548,16 @@ export default function NuevaVentaPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(360px,1fr)]">
             {/* Panel izquierdo */}
-            <div className="lg:col-span-2 space-y-6">
+            <div className="min-w-0 space-y-6">
               <Card className="glass-card p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold text-foreground">Agregar Productos</h2>
                 </div>
                 <div className="space-y-4">
                   <div ref={productoDropdownRef} className="relative">
-                    <label className="block text-sm font-medium text-foreground mb-1">
+                    <label htmlFor="producto-search" className="block text-sm font-medium text-foreground mb-1">
                       Producto
                       {buscandoScanner && <span className="ml-2 text-xs text-primary animate-pulse">Procesando escáner...</span>}
                     </label>
@@ -523,6 +579,7 @@ export default function NuevaVentaPage() {
                       <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <input
+                          id="producto-search"
                           type="text"
                           value={productoSearch}
                           onChange={(e) => { setProductoSearch(e.target.value); setShowProductoDropdown(true) }}
@@ -530,6 +587,10 @@ export default function NuevaVentaPage() {
                           placeholder="Buscar por nombre o escanear código de barras..."
                           className={`${selectClass} pl-10`}
                           autoComplete="off"
+                          role="combobox"
+                          aria-autocomplete="list"
+                          aria-controls="producto-results"
+                          aria-expanded={showProductoDropdown}
                           onKeyDown={(e) => {
                             if (e.key === "Enter") {
                               e.preventDefault()
@@ -553,13 +614,20 @@ export default function NuevaVentaPage() {
                                   setShowProductoDropdown(false)
                                 }
                               }
+                            } else if (e.key === "Escape") {
+                              setShowProductoDropdown(false)
                             }
                           }}
                         />
                       </div>
                     )}
                     {showProductoDropdown && !selectedProducto && (
-                      <div className="absolute z-30 mt-1 w-full bg-card border border-border rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                      <div
+                        id="producto-results"
+                        role="listbox"
+                        aria-label="Resultados de productos"
+                        className="relative z-10 mt-2 max-h-64 w-full overflow-y-auto overscroll-contain rounded-xl border border-border bg-popover text-popover-foreground shadow-2xl shadow-black/30"
+                      >
                         {filteredProductos.length === 0 ? (
                           <div className="px-4 py-3 text-sm text-muted-foreground text-center">No se encontraron productos</div>
                         ) : (
@@ -576,10 +644,14 @@ export default function NuevaVentaPage() {
                               stockDisplay += ` (${parts.join(" / ")})`
                             }
                             const isLowStock = p.stockActual <= 10
+                            const isUnavailable = !p.esServicio && p.stockActual <= 0
                             return (
                               <button
                                 key={p.id}
                                 type="button"
+                                role="option"
+                                aria-selected="false"
+                                disabled={isUnavailable}
                                 onClick={() => {
                                   setSelectedProducto(p)
                                   const defaultUnit = p.precioVenta && Number(p.precioVenta) > 0 ? "UNIDAD" : (p.precioBlister && Number(p.precioBlister) > 0 ? "BLISTER" : "CAJA")
@@ -587,15 +659,17 @@ export default function NuevaVentaPage() {
                                   setShowProductoDropdown(false)
                                   setProductoSearch("")
                                 }}
-                                className="w-full text-left px-4 py-2.5 hover:bg-muted/40 transition-colors flex items-center justify-between gap-2 border-b border-border/30 last:border-b-0"
+                                className="flex w-full items-center justify-between gap-2 border-b border-border/50 px-4 py-2.5 text-left transition-colors last:border-b-0 hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-transparent"
                               >
                                 <span className="text-sm font-medium text-foreground truncate">{p.nombre}</span>
-                                <span className={`text-xs font-semibold shrink-0 px-2 py-0.5 rounded-full ${
-                                  isLowStock
+                                <span className={`text-xs font-semibold shrink-0 px-2 py-0.5 rounded-full border ${
+                                  isUnavailable
+                                    ? "bg-muted text-muted-foreground border-border"
+                                    : isLowStock
                                     ? "bg-red-500/10 text-red-500 border border-red-500/20"
                                     : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
                                 }`}>
-                                  {stockDisplay}
+                                  {isUnavailable ? "Sin stock" : stockDisplay}
                                 </span>
                               </button>
                             )
@@ -618,7 +692,7 @@ export default function NuevaVentaPage() {
 
                   {selectedProducto && selectedProducto.lotes && selectedProducto.lotes.length > 0 && (
                     <div className="p-3 bg-muted/40 border border-border rounded-lg space-y-2">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Lotes disponibles (Despacho FIFO):</p>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Lotes disponibles (FEFO: primero en vencer, primero en salir)</p>
                       <div className="max-h-24 overflow-y-auto space-y-1.5 pr-1">
                         {selectedProducto.lotes.map((lote) => {
                           const dateStr = lote.fechaVencimiento ? new Date(lote.fechaVencimiento).toLocaleDateString("es-NI") : "Sin vencimiento"
@@ -631,17 +705,28 @@ export default function NuevaVentaPage() {
                           )
                         })}
                       </div>
+                      {user?.rolNombre === "ADMIN" && (() => {
+                        const vigentes = selectedProducto.lotes!.filter((l) => !l.fechaVencimiento || new Date(l.fechaVencimiento) > new Date())
+                        if (vigentes.length < 2) return null
+                        return <div className="space-y-2 pt-2 border-t border-border">
+                          <label className="text-xs font-medium text-foreground">Cambio administrativo de lote</label>
+                          <select value={selectedLoteId || vigentes[0]?.id || ""} onChange={(e) => setSelectedLoteId(Number(e.target.value))} className={selectClass}>
+                            {vigentes.map((l, index) => <option key={l.id} value={l.id}>{index === 0 ? "Sugerido FEFO: " : "Alternativo: "}{l.codigoLote}</option>)}
+                          </select>
+                          {selectedLoteId && selectedLoteId !== vigentes[0]?.id && <Input value={motivoCambioLote} onChange={(e) => setMotivoCambioLote(e.target.value)} placeholder="Motivo obligatorio del cambio" />}
+                        </div>
+                      })()}
                     </div>
                   )}
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-1">Cantidad</label>
-                      <Input type="number" min="1" value={cantidad} onChange={(e) => setCantidad(e.target.value)} placeholder="0" className="bg-muted/30 border-border" />
+                      <Input id="cantidad-venta" type="number" min="1" value={cantidad} onChange={(e) => setCantidad(e.target.value)} placeholder="0" className="bg-muted/30 border-border" />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-foreground mb-1">Precio Unitario</label>
-                      <Input type="text" disabled value={selectedProducto ? `C$${getPrecioUnitario().toFixed(2)}` : "—"} className="bg-muted/30 border-border" />
+                      <Input id="precio-unitario" type="text" disabled value={selectedProducto ? `C$${getPrecioUnitario().toFixed(2)}` : "—"} className="bg-muted/30 border-border" />
                     </div>
                   </div>
 
@@ -687,14 +772,14 @@ export default function NuevaVentaPage() {
             </div>
 
             {/* Panel derecho */}
-            <div className="lg:col-span-1">
-              <Card className="glass-card p-6 sticky top-8">
+            <div className="min-w-0">
+              <Card className="glass-card p-6 xl:sticky xl:top-8">
                 <h2 className="text-lg font-semibold text-foreground mb-4">Información de Venta</h2>
                 <div className="space-y-4">
                   {/* Cliente selector con soporte de cédula */}
                   <div ref={clienteDropdownRef} className="relative">
                     <div className="flex items-center justify-between mb-1">
-                      <label className="block text-sm font-medium text-foreground">Cliente (Opcional)</label>
+                      <label htmlFor="cliente-search" className="block text-sm font-medium text-foreground">Cliente (Opcional)</label>
                       <button
                         type="button"
                         onClick={() => { setCedulaParaCliente(""); setQuickClientOpen(true) }}
@@ -749,6 +834,7 @@ export default function NuevaVentaPage() {
                       <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <input
+                          id="cliente-search"
                           type="text"
                           value={clienteSearch}
                           onChange={(e) => { setClienteSearch(e.target.value); setShowClienteDropdown(true) }}
@@ -756,6 +842,10 @@ export default function NuevaVentaPage() {
                           placeholder="Buscar por nombre o cédula..."
                           className={`${selectClass} pl-10`}
                           autoComplete="off"
+                          role="combobox"
+                          aria-autocomplete="list"
+                          aria-controls="cliente-results"
+                          aria-expanded={showClienteDropdown}
                           onKeyDown={async (e) => {
                             if (e.key === "Enter") {
                               e.preventDefault()
@@ -776,13 +866,20 @@ export default function NuevaVentaPage() {
                                   setShowClienteDropdown(false)
                                 }
                               }
+                            } else if (e.key === "Escape") {
+                              setShowClienteDropdown(false)
                             }
                           }}
                         />
                       </div>
                     )}
                     {showClienteDropdown && !selectedCliente && (
-                      <div className="absolute z-30 mt-1 w-full bg-card border border-border rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                      <div
+                        id="cliente-results"
+                        role="listbox"
+                        aria-label="Resultados de clientes"
+                        className="relative z-10 mt-2 max-h-52 w-full overflow-y-auto overscroll-contain rounded-xl border border-border bg-popover text-popover-foreground shadow-2xl shadow-black/30"
+                      >
                         <button
                           type="button"
                           onClick={() => { setSelectedCliente(""); setShowClienteDropdown(false); setClienteSearch("") }}
@@ -902,6 +999,10 @@ export default function NuevaVentaPage() {
                             if (receta.usuario?.nombreCompleto) {
                               setNombrePodologo(receta.usuario.nombreCompleto)
                             }
+                            const alergias = receta.cliente?.datosClinicos?.alergias?.trim()
+                            setAlergiasPendientes(alergias || null)
+                            setConfirmarAlergias(!alergias)
+                            if (alergias) toast.warning("Paciente con alergias registradas: revíselas antes de vender", { duration: 8000 })
 
                             // Cargar líneas de venta correspondientes
                             const lineasReceta: LineaVenta[] = []
@@ -998,10 +1099,21 @@ export default function NuevaVentaPage() {
                     </div>
                   </div>
 
+                  {alergiasPendientes && (
+                    <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm space-y-2">
+                      <p className="font-bold text-red-500 flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> Alerta de alergias</p>
+                      <p className="text-foreground">{alergiasPendientes}</p>
+                      <label className="flex items-start gap-2 text-xs text-foreground cursor-pointer">
+                        <input type="checkbox" checked={confirmarAlergias} onChange={(e) => setConfirmarAlergias(e.target.checked)} className="mt-0.5" />
+                        Confirmo que revisé esta información antes de surtir la receta.
+                      </label>
+                    </div>
+                  )}
+
                   <Button
                     id="btn-registrar-venta"
                     onClick={handleRegistrarVenta}
-                    disabled={procesando || lineas.length === 0}
+                    disabled={procesando || lineas.length === 0 || Boolean(alergiasPendientes && !confirmarAlergias)}
                     className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-medium shadow-lg shadow-emerald-500/20"
                   >
                     {procesando ? "Procesando..." : "Registrar Venta"}

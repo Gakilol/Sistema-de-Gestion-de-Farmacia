@@ -36,6 +36,7 @@ import { useCurrentUser } from "@/app/hooks/useCurrentUser"
 import { useRouter } from "next/navigation"
 
 interface DatosClinicos {
+  tipoSangre: string | null
   antecedentes: string | null
   alergias: string | null
   observacionesClinicas: string | null

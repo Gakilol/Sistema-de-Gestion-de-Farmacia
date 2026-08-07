@@ -6,6 +6,23 @@ import { registrarLog } from "@/lib/audit"
 import fs from "fs"
 import path from "path"
 
+const UPLOAD_ROOT = path.resolve(process.cwd(), "uploads")
+
+function resolveStoredUpload(storedPath: string) {
+  const normalized = storedPath.replace(/\\/g, "/")
+  const relativePath = normalized.startsWith("uploads/")
+    ? normalized.slice("uploads/".length)
+    : normalized
+  const resolvedPath = path.resolve(/*turbopackIgnore: true*/ UPLOAD_ROOT, relativePath)
+  const rootPrefix = `${UPLOAD_ROOT}${path.sep}`
+
+  if (resolvedPath !== UPLOAD_ROOT && !resolvedPath.startsWith(rootPrefix)) {
+    throw new Error("Ruta de archivo fuera del directorio permitido")
+  }
+
+  return resolvedPath
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -71,9 +88,9 @@ export async function POST(
     }
 
     // Crear directorio para guardar el archivo
-    const uploadDir = path.join(process.cwd(), "uploads", "examenes", String(examen.idPaciente))
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true })
+    const uploadDir = path.join(UPLOAD_ROOT, "examenes", String(examen.idPaciente))
+    if (!fs.existsSync(/* turbopackIgnore: true */ uploadDir)) {
+      fs.mkdirSync(/* turbopackIgnore: true */ uploadDir, { recursive: true })
     }
 
     // Generar nombre de archivo único
@@ -84,12 +101,12 @@ export async function POST(
 
     // Guardar archivo
     const buffer = Buffer.from(await file.arrayBuffer())
-    fs.writeFileSync(filePath, buffer)
+    fs.writeFileSync(/* turbopackIgnore: true */ filePath, buffer)
 
     // Conservar referencia al archivo antiguo si existía para borrarlo
     let oldFilePath: string | null = null
     if (examen.archivoUrl) {
-      oldFilePath = path.join(process.cwd(), examen.archivoUrl)
+      oldFilePath = resolveStoredUpload(examen.archivoUrl)
     }
 
     // Guardar ruta relativa en la base de datos
@@ -104,9 +121,9 @@ export async function POST(
     })
 
     // Eliminar archivo antiguo físico si existía
-    if (oldFilePath && fs.existsSync(oldFilePath)) {
+    if (oldFilePath && fs.existsSync(/* turbopackIgnore: true */ oldFilePath)) {
       try {
-        fs.unlinkSync(oldFilePath)
+        fs.unlinkSync(/* turbopackIgnore: true */ oldFilePath)
       } catch (err) {
         console.error("Error al eliminar el archivo antiguo:", err)
       }
@@ -170,13 +187,13 @@ export async function GET(
       return NextResponse.json({ error: "Archivo no encontrado" }, { status: 404 })
     }
 
-    const filePath = path.join(process.cwd(), examen.archivoUrl)
-    if (!fs.existsSync(filePath)) {
+    const filePath = resolveStoredUpload(examen.archivoUrl)
+    if (!fs.existsSync(/* turbopackIgnore: true */ filePath)) {
       return NextResponse.json({ error: "El archivo físico no existe en el servidor" }, { status: 404 })
     }
 
     // Leer el archivo y enviarlo por streaming
-    const fileBuffer = fs.readFileSync(filePath)
+    const fileBuffer = fs.readFileSync(/* turbopackIgnore: true */ filePath)
 
     // Registrar en auditoría
     registrarLog({
@@ -242,7 +259,7 @@ export async function DELETE(
       return NextResponse.json({ error: "El examen no tiene ningún archivo adjunto" }, { status: 404 })
     }
 
-    const filePath = path.join(process.cwd(), examen.archivoUrl)
+    const filePath = resolveStoredUpload(examen.archivoUrl)
 
     // Actualizar registro en la BD
     const examenActualizado = await prisma.examenPaciente.update({
@@ -255,8 +272,8 @@ export async function DELETE(
     })
 
     // Eliminar archivo físico
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath)
+    if (fs.existsSync(/* turbopackIgnore: true */ filePath)) {
+      fs.unlinkSync(/* turbopackIgnore: true */ filePath)
     }
 
     // Registrar en auditoría

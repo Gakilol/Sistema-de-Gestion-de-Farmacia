@@ -196,7 +196,7 @@ export async function getLowStockProducts(
     const mostrarCosto = canViewFinancialData(rol)
 
     const activeProducts = await prisma.producto.findMany({
-      where: { activo: true, stockMinimo: { not: null } },
+      where: { activo: true, esServicio: false, stockMinimo: { not: null } },
       select: { id: true, stockActual: true, stockMinimo: true },
     })
     const lowStockIds = activeProducts

@@ -482,12 +482,15 @@ export const ventaSchema = z.object({
   rucCliente: z.string().trim().optional().nullable(),
   idDescuento: z.number().int().positive().optional().nullable(),
   descuentoTotal: z.number().min(0).optional().nullable(),
+  confirmarAlergias: z.boolean().optional().default(false),
   detalles: z.array(z.object({
     idProducto: z.number().int().positive(),
     cantidad: z.number().int().positive("La cantidad debe ser mayor a 0"),
     precioUnitario: z.number().min(0.01, "El precio no puede ser cero ni negativo"),
     descuentoLinea: z.number().min(0).optional().nullable(),
-    tipoUnidad: z.enum(["UNIDAD", "BLISTER", "CAJA"]).default("UNIDAD")
+    tipoUnidad: z.enum(["UNIDAD", "BLISTER", "CAJA"]).default("UNIDAD"),
+    idLotePreferido: z.number().int().positive().optional().nullable(),
+    motivoCambioLote: z.string().trim().min(5, "Indique el motivo del cambio de lote").max(300).optional().nullable(),
   }))
     .min(1, "La venta debe tener al menos un producto")
     .refine((detalles) => {
@@ -548,6 +551,7 @@ export const atencionSchema = z.object({
 export const recetaSchema = z.object({
   idAtencion: z.number().int().positive("La atención podológica es requerida"),
   idCliente: z.number().int().positive("El cliente es requerido"),
+  estado: z.enum(["BORRADOR", "EMITIDA"]).optional().default("EMITIDA"),
   fechaVencimiento: z.string().optional().nullable().refine(val => !val || !isNaN(new Date(val).getTime()), "Fecha de vencimiento inválida"),
   observaciones: z.string().optional().nullable(),
   detalles: z.array(z.object({

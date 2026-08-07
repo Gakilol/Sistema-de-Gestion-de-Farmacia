@@ -20,7 +20,15 @@ interface KPIs {
   gananciaNeta: number
   transaccionesCount: number
   stockBajo: number
+  cogs: number
+  margenPct: number
+  ticketPromedio: number
+  ventasCount: number
+  totalVentasPrevias: number
+  variacionVentasPct: number
 }
+
+type ReportTab = "resumen" | "productos" | "utilidad-bruta" | "utilidad-por-producto" | "clientes" | "stock" | "movimientos"
 
 interface ProductoVencer {
   id: number
@@ -125,11 +133,13 @@ export default function ReportesPage() {
 
   // States
   const [loading, setLoading] = useState(true)
+  const [tabLoading, setTabLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
-  const [activeTab, setActiveTab] = useState<"resumen" | "productos" | "utilidad-bruta" | "utilidad-por-producto" | "clientes" | "stock" | "movimientos">("resumen")
+  const [activeTab, setActiveTab] = useState<ReportTab>("resumen")
 
   // Helper local para obtener fecha en Managua TZ
   function getManaguaToday() {
@@ -154,38 +164,52 @@ export default function ReportesPage() {
     fetchData(primerDia, ultimoDia)
   }, [])
 
+  const reportQuery = (start: string, end: string) => {
+    const params = new URLSearchParams()
+    if (start) params.set("startDate", start)
+    if (end) params.set("endDate", end)
+    return params.toString()
+  }
+
+  const fetchJson = async <T,>(url: string): Promise<T> => {
+    const response = await fetch(url)
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(data.error || "No se pudo cargar el reporte")
+    return data as T
+  }
+
+  const fetchTabData = async (tab: ReportTab, start: string, end: string) => {
+    const query = reportQuery(start, end)
+    if (tab === "productos") setMasVendidos(await fetchJson<ProductoMasVendido[]>(`/api/reportes?type=productos-mas-vendidos&${query}`))
+    if (tab === "clientes") setClientesFrecuentes(await fetchJson<ClienteFrecuente[]>(`/api/reportes?type=clientes-frecuentes&${query}`))
+    if (tab === "stock") setStockBajo(await fetchJson<StockBajoDetalle[]>(`/api/reportes?type=stock-bajo&${query}`))
+    if (tab === "movimientos") setMovimientos(await fetchJson<MovimientoDetalle[]>(`/api/reportes?type=movimientos&${query}`))
+    if (tab === "utilidad-bruta") setUtilidadBruta(await fetchJson<{ ventas: UtilidadBrutaVenta[]; resumen: UtilidadBrutaResumen }>(`/api/reportes?type=utilidad-bruta&${query}`))
+    if (tab === "utilidad-por-producto") setUtilidadPorProducto(await fetchJson<UtilidadPorProductoItem[]>(`/api/reportes?type=utilidad-por-producto&${query}`))
+  }
+
   const fetchData = async (start = startDate, end = endDate) => {
+    if (!start || !end || start > end) {
+      setError("Selecciona un rango de fechas válido.")
+      toast.error("La fecha inicial no puede ser posterior a la fecha final")
+      return false
+    }
     setLoading(true)
+    setError(null)
     try {
-      const queryParams = new URLSearchParams()
-      if (start) queryParams.append("startDate", start)
-      if (end) queryParams.append("endDate", end)
-
-      // Fetch endpoints parallelly
-      const [kpisRes, graficoRes, vencerRes, masVendidosRes, clientesRes, stockRes, movRes, utilBrutaRes, utilProdRes] = await Promise.all([
-        fetch(`/api/reportes?type=kpis&${queryParams.toString()}`),
-        fetch(`/api/reportes?type=ventas-grafico&${queryParams.toString()}`),
-        fetch(`/api/reportes?type=por-vencer&${queryParams.toString()}`),
-        fetch(`/api/reportes?type=productos-mas-vendidos&${queryParams.toString()}`),
-        fetch(`/api/reportes?type=clientes-frecuentes&${queryParams.toString()}`),
-        fetch(`/api/reportes?type=stock-bajo&${queryParams.toString()}`),
-        fetch(`/api/reportes?type=movimientos&${queryParams.toString()}`),
-        fetch(`/api/reportes?type=utilidad-bruta&${queryParams.toString()}`),
-        fetch(`/api/reportes?type=utilidad-por-producto&${queryParams.toString()}`)
-      ])
-
-      if (kpisRes.ok) setKpis(await kpisRes.json())
-      if (graficoRes.ok) setGrafico(await graficoRes.json())
-      if (vencerRes.ok) setVencer(await vencerRes.json())
-      if (masVendidosRes.ok) setMasVendidos(await masVendidosRes.json())
-      if (clientesRes.ok) setClientesFrecuentes(await clientesRes.json())
-      if (stockRes.ok) setStockBajo(await stockRes.json())
-      if (movRes.ok) setMovimientos(await movRes.json())
-      if (utilBrutaRes.ok) setUtilidadBruta(await utilBrutaRes.json())
-      if (utilProdRes.ok) setUtilidadPorProducto(await utilProdRes.json())
+      const summary = await fetchJson<{ kpis: KPIs; grafico: VentasGrafico[]; vencer: ProductoVencer[] }>(
+        `/api/reportes/resumen?${reportQuery(start, end)}`
+      )
+      setKpis(summary.kpis)
+      setGrafico(summary.grafico)
+      setVencer(summary.vencer)
+      if (activeTab !== "resumen") await fetchTabData(activeTab, start, end)
+      return true
     } catch (error) {
-      console.error("Error cargando reportes:", error)
-      toast.error("Error al conectar con la base de datos de reportes")
+      const message = error instanceof Error ? error.message : "Error al conectar con reportes"
+      setError(message)
+      toast.error(message)
+      return false
     } finally {
       setLoading(false)
     }
@@ -197,13 +221,38 @@ export default function ReportesPage() {
 
   const handleRefresh = async () => {
     setRefreshing(true)
-    await fetchData(startDate, endDate)
+    const ok = await fetchData(startDate, endDate)
     setRefreshing(false)
-    toast.success("Métricas actualizadas")
+    if (ok) toast.success("Métricas actualizadas")
   }
 
-  const handleExportExcel = () => {
+  const handleTabChange = async (tab: ReportTab) => {
+    setActiveTab(tab)
+    setSearchQuery("")
+    if (tab === "resumen") return
+    setTabLoading(true)
     try {
+      await fetchTabData(tab, startDate, endDate)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo cargar el reporte")
+    } finally {
+      setTabLoading(false)
+    }
+  }
+
+  const handleExportExcel = async () => {
+    setTabLoading(true)
+    try {
+      toast.info("Preparando todas las hojas del reporte...")
+      const query = reportQuery(startDate, endDate)
+      const [exportUtilidadBruta, exportUtilidadProducto, exportMasVendidos, exportClientes, exportStock, exportMovimientos] = await Promise.all([
+        fetchJson<{ ventas: UtilidadBrutaVenta[]; resumen: UtilidadBrutaResumen }>(`/api/reportes?type=utilidad-bruta&${query}`),
+        fetchJson<UtilidadPorProductoItem[]>(`/api/reportes?type=utilidad-por-producto&${query}`),
+        fetchJson<ProductoMasVendido[]>(`/api/reportes?type=productos-mas-vendidos&${query}`),
+        fetchJson<ClienteFrecuente[]>(`/api/reportes?type=clientes-frecuentes&${query}`),
+        fetchJson<StockBajoDetalle[]>(`/api/reportes?type=stock-bajo&${query}`),
+        fetchJson<MovimientoDetalle[]>(`/api/reportes?type=movimientos&${query}`),
+      ])
       const workbook = XLSX.utils.book_new()
 
       // Sheet 1: KPIs
@@ -212,6 +261,9 @@ export default function ReportesPage() {
           { Métrica: "Total Ventas", Valor: `C$${kpis.totalVentas.toFixed(2)}` },
           { Métrica: "Total Compras", Valor: `C$${kpis.totalCompras.toFixed(2)}` },
           { Métrica: "Utilidad Bruta (Real)", Valor: `C$${kpis.gananciaNeta.toFixed(2)}` },
+          { Métrica: "Margen Bruto", Valor: `${kpis.margenPct.toFixed(1)}%` },
+          { Métrica: "Ticket Promedio", Valor: `C$${kpis.ticketPromedio.toFixed(2)}` },
+          { Métrica: "Variación vs. período anterior", Valor: `${kpis.variacionVentasPct.toFixed(1)}%` },
           { Métrica: "Transacciones Totales", Valor: kpis.transaccionesCount },
           { Métrica: "Productos Stock Bajo", Valor: kpis.stockBajo }
         ]
@@ -220,8 +272,8 @@ export default function ReportesPage() {
       }
 
       // Sheet 2: Utilidad Bruta Detalle
-      if (utilidadBruta && utilidadBruta.ventas.length > 0) {
-        const wsUtilBruta = XLSX.utils.json_to_sheet(utilidadBruta.ventas.map((v: any) => ({
+      if (exportUtilidadBruta.ventas.length > 0) {
+        const wsUtilBruta = XLSX.utils.json_to_sheet(exportUtilidadBruta.ventas.map((v: any) => ({
           Venta_ID: v.id,
           Fecha: new Date(v.fecha).toLocaleDateString("es-NI"),
           Cliente: v.cliente,
@@ -238,8 +290,8 @@ export default function ReportesPage() {
       }
 
       // Sheet 3: Utilidad Por Producto Rentabilidad
-      if (utilidadPorProducto.length > 0) {
-        const wsUtilProd = XLSX.utils.json_to_sheet(utilidadPorProducto.map((p: any) => ({
+      if (exportUtilidadProducto.length > 0) {
+        const wsUtilProd = XLSX.utils.json_to_sheet(exportUtilidadProducto.map((p: any) => ({
           Producto: p.nombre,
           Laboratorio: p.laboratorio,
           Categoría: p.categoria,
@@ -256,8 +308,8 @@ export default function ReportesPage() {
       }
 
       // Sheet 4: Mas Vendidos
-      if (masVendidos.length > 0) {
-        const wsProd = XLSX.utils.json_to_sheet(masVendidos.map((p, idx) => ({
+      if (exportMasVendidos.length > 0) {
+        const wsProd = XLSX.utils.json_to_sheet(exportMasVendidos.map((p, idx) => ({
           Puesto: idx + 1,
           Producto: p.nombre,
           Laboratorio: p.laboratorio,
@@ -269,8 +321,8 @@ export default function ReportesPage() {
       }
 
       // Sheet 5: Clientes Frecuentes
-      if (clientesFrecuentes.length > 0) {
-        const wsCli = XLSX.utils.json_to_sheet(clientesFrecuentes.map((c, idx) => ({
+      if (exportClientes.length > 0) {
+        const wsCli = XLSX.utils.json_to_sheet(exportClientes.map((c, idx) => ({
           Puesto: idx + 1,
           Cliente: c.nombre,
           Cédula: c.cedula,
@@ -281,8 +333,8 @@ export default function ReportesPage() {
       }
 
       // Sheet 6: Stock Bajo
-      if (stockBajo.length > 0) {
-        const wsStock = XLSX.utils.json_to_sheet(stockBajo.map(s => ({
+      if (exportStock.length > 0) {
+        const wsStock = XLSX.utils.json_to_sheet(exportStock.map(s => ({
           Producto: s.nombre,
           Categoría: s.categoria,
           Stock_Actual: s.stockActual,
@@ -293,8 +345,8 @@ export default function ReportesPage() {
       }
 
       // Sheet 7: Movimientos
-      if (movimientos.length > 0) {
-        const wsMov = XLSX.utils.json_to_sheet(movimientos.map(m => ({
+      if (exportMovimientos.length > 0) {
+        const wsMov = XLSX.utils.json_to_sheet(exportMovimientos.map(m => ({
           ID: m.id,
           Tipo: m.tipo,
           Fecha: new Date(m.fecha).toLocaleString("es-NI"),
@@ -310,8 +362,9 @@ export default function ReportesPage() {
       XLSX.writeFile(workbook, `Reporte_Farmacia_Completo${startStr}${endStr}.xlsx`)
       toast.success("Excel exportado exitosamente con todas las hojas")
     } catch (e) {
-      console.error(e)
-      toast.error("Error al exportar Excel")
+      toast.error(e instanceof Error ? e.message : "Error al exportar Excel")
+    } finally {
+      setTabLoading(false)
     }
   }
 
@@ -561,10 +614,8 @@ export default function ReportesPage() {
               return (
                 <button
                   key={tab.id}
-                  onClick={() => {
-                    setActiveTab(tab.id as any)
-                    setSearchQuery("")
-                  }}
+                  onClick={() => handleTabChange(tab.id as ReportTab)}
+                  disabled={tabLoading}
                   className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-all whitespace-nowrap ${
                     active 
                       ? "border-primary text-primary" 
@@ -592,8 +643,18 @@ export default function ReportesPage() {
             </Card>
           )}
 
+          {error && (
+            <Card className="mb-6 border-red-500/30 bg-red-500/10 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <p className="font-semibold text-red-600 dark:text-red-400">No se pudo cargar el reporte</p>
+                <p className="text-sm text-muted-foreground">{error}</p>
+              </div>
+              <Button variant="outline" onClick={() => fetchData(startDate, endDate)}>Reintentar</Button>
+            </Card>
+          )}
+
           {/* Content Loading */}
-          {loading ? (
+          {loading || tabLoading ? (
             <div className="space-y-6">
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                 <Skeleton className="h-24 w-full" />
@@ -610,7 +671,7 @@ export default function ReportesPage() {
               {activeTab === "resumen" && (
                 <div className="space-y-8">
                   {/* KPIs Cards */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                     <Card className="glass-card p-6 border-l-4 border-l-blue-500 hover:scale-[1.01] transition-transform">
                       <div className="flex justify-between items-start">
                         <div>
@@ -641,7 +702,7 @@ export default function ReportesPage() {
                       <div className="flex justify-between items-start">
                         <div>
                           <p className="text-sm font-medium text-muted-foreground mb-1">Utilidad Bruta Real</p>
-                          <h3 className={`text-2xl font-bold ${kpis?.gananciaNeta && kpis.gananciaNeta >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                          <h3 className={`text-2xl font-bold ${kpis && kpis.gananciaNeta >= 0 ? "text-emerald-500" : "text-red-500"}`}>
                             C${kpis?.gananciaNeta.toFixed(2) || "0.00"}
                           </h3>
                           <p className="text-xs text-muted-foreground mt-2">Ventas - Costos de Adquisición (COGS)</p>
@@ -664,6 +725,20 @@ export default function ReportesPage() {
                         </div>
                       </div>
                     </Card>
+
+                    <Card className="glass-card p-6 border-l-4 border-l-cyan-500 hover:scale-[1.01] transition-transform">
+                      <p className="text-sm font-medium text-muted-foreground mb-1">Ticket Promedio</p>
+                      <h3 className="text-2xl font-bold text-foreground">C${kpis?.ticketPromedio.toFixed(2) || "0.00"}</h3>
+                      <p className="text-xs text-muted-foreground mt-2">Promedio por venta completada</p>
+                    </Card>
+
+                    <Card className="glass-card p-6 border-l-4 border-l-violet-500 hover:scale-[1.01] transition-transform">
+                      <p className="text-sm font-medium text-muted-foreground mb-1">Variación vs. período anterior</p>
+                      <h3 className={`text-2xl font-bold ${(kpis?.variacionVentasPct || 0) >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                        {(kpis?.variacionVentasPct || 0) >= 0 ? "+" : ""}{kpis?.variacionVentasPct.toFixed(1) || "0.0"}%
+                      </h3>
+                      <p className="text-xs text-muted-foreground mt-2">Margen bruto: {kpis?.margenPct.toFixed(1) || "0.0"}%</p>
+                    </Card>
                   </div>
 
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -674,10 +749,13 @@ export default function ReportesPage() {
                         {grafico.length > 0 ? (
                           <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={grafico}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                              <XAxis dataKey="fecha" stroke="#6b7280" fontSize={11} tickLine={false} axisLine={false} />
-                              <YAxis stroke="#6b7280" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(value) => `C$${value}`} />
-                              <RechartsTooltip formatter={(value: any) => [`C$${Number(value).toFixed(2)}`, "Ventas"]} />
+                              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                              <XAxis dataKey="fecha" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} />
+                              <YAxis stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(value) => `C$${value}`} />
+                              <RechartsTooltip
+                                formatter={(value: any) => [`C$${Number(value).toFixed(2)}`, "Ventas"]}
+                                contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, color: "var(--foreground)" }}
+                              />
                               <Line 
                                 type="monotone" 
                                 dataKey="total" 
@@ -945,9 +1023,9 @@ export default function ReportesPage() {
                                 <td className="px-6 py-4 text-sm text-muted-foreground">{s.categoria}</td>
                                 <td className="px-6 py-4 text-sm font-bold text-red-500">{s.stockActual} und</td>
                                 <td className="px-6 py-4 text-sm text-muted-foreground">{s.stockMinimo} und</td>
-                                <td className="px-6 py-4 text-sm font-bold text-amber-600">-{s.diferencia} und</td>
+                                <td className="px-6 py-4 text-sm font-bold text-amber-600 dark:text-amber-400">{s.diferencia} und</td>
                                 <td className="px-6 py-4 text-sm">
-                                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-600 animate-pulse">Reabastecer</span>
+                                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20">Reabastecer</span>
                                 </td>
                               </tr>
                             ))

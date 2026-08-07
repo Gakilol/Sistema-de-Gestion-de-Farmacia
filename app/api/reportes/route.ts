@@ -9,11 +9,32 @@ export async function GET(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+    if (user.rolNombre !== "ADMIN") {
+      return NextResponse.json({ error: "Solo administradores pueden consultar reportes financieros." }, { status: 403 })
+    }
 
     const { searchParams } = new URL(request.url)
     const type = searchParams.get("type")
     const startDateParam = searchParams.get("startDate")
     const endDateParam = searchParams.get("endDate")
+    const allowedTypes = new Set([
+      "kpis", "ventas-grafico", "productos-mas-vendidos", "clientes-frecuentes",
+      "stock-bajo", "movimientos", "por-vencer", "utilidad-bruta", "utilidad-por-producto",
+    ])
+    if (!type || !allowedTypes.has(type)) {
+      return NextResponse.json({ error: "Tipo de reporte no válido." }, { status: 400 })
+    }
+    const datePattern = /^\d{4}-\d{2}-\d{2}$/
+    if ((startDateParam && !datePattern.test(startDateParam)) || (endDateParam && !datePattern.test(endDateParam))) {
+      return NextResponse.json({ error: "Formato de fecha inválido." }, { status: 400 })
+    }
+    if (startDateParam && endDateParam) {
+      const startMs = Date.parse(`${startDateParam}T00:00:00Z`)
+      const endMs = Date.parse(`${endDateParam}T00:00:00Z`)
+      if (startMs > endMs || endMs - startMs > 366 * 86_400_000) {
+        return NextResponse.json({ error: "El rango debe ser válido y no superar 366 días." }, { status: 400 })
+      }
+    }
 
     let dateWhereVenta: any = {}
     let dateWhereCompra: any = {}

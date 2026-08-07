@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const estado = searchParams.get("estado") ?? "activos" // por defecto solo activos
     const esServicioParam = searchParams.get("esServicio")
+    const soloLotesVigentes = searchParams.get("soloLotesVigentes") === "true"
 
     let where: any = {}
 
@@ -45,7 +46,8 @@ export async function GET(request: NextRequest) {
 
     // Enriquecer la respuesta del GET con campos calculados profesionales
     const productosEnriquecidos = productos.map(producto => {
-      const lotesActivos = producto.lotes || []
+      const ahora = new Date()
+      const lotesActivos = (producto.lotes || []).filter((lote) => !soloLotesVigentes || !lote.fechaVencimiento || lote.fechaVencimiento > ahora)
       const stockTotal = lotesActivos.reduce((sum, l) => sum + l.stockActual, 0)
       const cantidadLotes = lotesActivos.length
 
@@ -74,6 +76,8 @@ export async function GET(request: NextRequest) {
 
       return {
         ...producto,
+        lotes: lotesActivos,
+        ...(soloLotesVigentes ? { stockActual: stockTotal } : {}),
         stockTotal,
         cantidadLotes,
         proximoVencimiento: proximoVencimiento ? proximoVencimiento.toISOString() : null,

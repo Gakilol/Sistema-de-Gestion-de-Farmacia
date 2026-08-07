@@ -53,10 +53,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Verificar si el lote más antiguo está vencido (FIFO)
-    const loteAntiguo = producto.lotes[0]
-    const loteVencido = loteAntiguo?.fechaVencimiento
-      ? new Date(loteAntiguo.fechaVencimiento) <= new Date()
-      : false
+    const ahora = new Date()
+    const lotesVigentes = producto.lotes.filter((lote) => !lote.fechaVencimiento || lote.fechaVencimiento > ahora)
+    const loteVencido = producto.lotes.find((lote) => lote.fechaVencimiento && lote.fechaVencimiento <= ahora)
+    const stockVigente = lotesVigentes.reduce((sum, lote) => sum + lote.stockActual, 0)
 
     return NextResponse.json({
       encontrado: true,
@@ -67,17 +67,17 @@ export async function GET(request: NextRequest) {
         precioVenta: producto.precioVenta,
         precioBlister: producto.precioBlister,
         precioCaja: producto.precioCaja,
-        stockActual: producto.stockActual,
+        stockActual: stockVigente,
         unidadesPorBlister: producto.unidadesPorBlister,
         unidadesPorCaja: producto.unidadesPorCaja,
         stockMinimo: producto.stockMinimo,
-        lotes: producto.lotes,
+        lotes: lotesVigentes,
       },
-      alertaVencimiento: loteVencido
+      alertaVencimiento: stockVigente === 0 && loteVencido
         ? {
-            loteId: loteAntiguo.id,
-            codigoLote: loteAntiguo.codigoLote,
-            fechaVencimiento: loteAntiguo.fechaVencimiento,
+            loteId: loteVencido.id,
+            codigoLote: loteVencido.codigoLote,
+            fechaVencimiento: loteVencido.fechaVencimiento,
             mensaje: 'Venta Bloqueada: El lote del medicamento está vencido',
           }
         : null,

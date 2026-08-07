@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
 import { recetaSchema } from "@/lib/validations"
+import { ESTADOS_RECETA, puedeTransicionarReceta } from "@/lib/domain/prescriptions"
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,21 +16,34 @@ export async function GET(request: NextRequest) {
     const codigoReceta = searchParams.get("codigoReceta")
     const estado = searchParams.get("estado")
 
+    if (user.rolNombre === "EMPLEADO" && !codigoReceta) {
+      return NextResponse.json({ error: "Farmacia solo puede consultar una receta por su código exacto" }, { status: 403 })
+    }
+    if (!["ADMIN", "DOCTOR", "EMPLEADO"].includes(user.rolNombre)) {
+      return NextResponse.json({ error: "Sin permiso" }, { status: 403 })
+    }
+
     const whereClause: any = {}
     if (idCliente) {
       whereClause.idCliente = Number.parseInt(idCliente)
     }
     if (codigoReceta) {
-      whereClause.codigoReceta = { contains: codigoReceta, mode: "insensitive" }
+      whereClause.codigoReceta = user.rolNombre === "EMPLEADO" ? codigoReceta : { contains: codigoReceta, mode: "insensitive" }
     }
     if (estado) {
       whereClause.estado = estado
     }
 
+    // Sin cron persistente: al consultar se materializa el estado vencido en una sola operación.
+    await prisma.receta.updateMany({
+      where: { fechaVencimiento: { lt: new Date() }, estado: { in: ["EMITIDA", "EN_PREPARACION", "LISTA", "USADA_PARCIALMENTE"] } },
+      data: { estado: "VENCIDA" },
+    })
+
     const recetas = await prisma.receta.findMany({
       where: whereClause,
       include: {
-        cliente: true,
+        cliente: { include: { datosClinicos: { select: { alergias: true } } } },
         usuario: { include: { rol: true } },
         atencion: true,
         detalles: {
@@ -81,7 +95,8 @@ export async function POST(request: NextRequest) {
       idCliente,
       fechaVencimiento,
       observaciones,
-      detalles
+      detalles,
+      estado,
     } = validation.data
 
     const receta = await prisma.$transaction(async (tx) => {
@@ -100,7 +115,7 @@ export async function POST(request: NextRequest) {
           idAtencion,
           idCliente,
           idUsuario: user.id,
-          estado: "EMITIDA",
+          estado,
           fechaVencimiento: fechaVencimiento ? new Date(fechaVencimiento) : null,
           observaciones,
           esDatoPrueba,
@@ -131,5 +146,28 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error("Error creating receta:", error)
     return NextResponse.json({ error: "Ocurrió un error inesperado al procesar la receta." }, { status: 500 })
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  try {
+    const user = await getCurrentUser()
+    if (!user || !["ADMIN", "DOCTOR"].includes(user.rolNombre)) return NextResponse.json({ error: "Sin permiso" }, { status: user ? 403 : 401 })
+    const body = await request.json()
+    const id = Number(body.id)
+    const destino = String(body.estado)
+    if (!id || !ESTADOS_RECETA.includes(destino as any)) return NextResponse.json({ error: "Solicitud inválida" }, { status: 400 })
+    const actual = await prisma.receta.findUnique({ where: { id }, select: { estado: true } })
+    if (!actual) return NextResponse.json({ error: "Receta no encontrada" }, { status: 404 })
+    if (!puedeTransicionarReceta(actual.estado, destino)) return NextResponse.json({ error: `No se permite cambiar de ${actual.estado} a ${destino}` }, { status: 409 })
+    const receta = await prisma.$transaction(async (tx) => {
+      const updated = await tx.receta.update({ where: { id }, data: { estado: destino } })
+      await tx.auditoriaLog.create({ data: { accion: "CAMBIO_ESTADO_RECETA", entidad: "Receta", entidadId: id, idUsuario: user.id, modulo: "CLINICA", datosAnteriores: { estado: actual.estado }, datosNuevos: { estado: destino }, motivo: body.motivo || null } })
+      return updated
+    })
+    return NextResponse.json(receta)
+  } catch (error) {
+    console.error("Error actualizando receta:", error)
+    return NextResponse.json({ error: "No fue posible actualizar la receta" }, { status: 500 })
   }
 }

@@ -1,0 +1,12 @@
+"use client"
+import { use } from "react"
+import useSWR from "swr"
+import { Card } from "@/components/ui/card"
+const fetcher = (url: string) => fetch(url).then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.error); return d })
+export default function ResumenPacientePage({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = use(params)
+  const { data, error, isLoading } = useSWR(`/api/paciente/resumen/${token}`, fetcher, { revalidateOnFocus: false })
+  if (isLoading) return <main className="p-8">Cargando resumen protegido…</main>
+  if (error) return <main className="p-8"><Card className="p-6 max-w-xl mx-auto"><h1 className="text-xl font-bold">Enlace no disponible</h1><p className="text-muted-foreground mt-2">{error.message}</p></Card></main>
+  return <main className="max-w-4xl mx-auto p-6 print:p-0"><div className="flex justify-between items-start mb-6"><div><p className="text-sm text-emerald-600 font-bold">FarmaPOS · Resumen protegido</p><h1 className="text-3xl font-bold">{data.paciente?.nombreCompleto}</h1><p className="text-xs text-muted-foreground">Disponible hasta {new Date(data.expiracion).toLocaleString("es-NI")}</p></div><button onClick={() => window.print()} className="rounded-md border px-3 py-2 text-sm print:hidden">Imprimir</button></div><section className="mb-6"><h2 className="text-xl font-bold mb-3">Próximas citas</h2>{data.citas.length ? data.citas.map((c: any) => <Card key={c.id} className="p-3 mb-2"><b>{new Date(c.fecha).toLocaleString("es-NI")}</b><p>{c.motivo || "Consulta programada"}</p></Card>) : <p className="text-muted-foreground">Sin citas próximas.</p>}</section><section className="mb-6"><h2 className="text-xl font-bold mb-3">Recetas</h2>{data.recetas.map((r: any) => <Card key={r.codigoReceta} className="p-4 mb-2"><div className="flex justify-between"><b>{r.codigoReceta}</b><span>{r.estado}</span></div>{r.detalles.map((d: any) => <p key={d.producto.nombre} className="text-sm mt-1">{d.producto.nombre}: {d.cantidadFacturada}/{d.cantidad} surtido · {d.indicaciones || "Sin indicación"}</p>)}</Card>)}</section>{data.examenes.length > 0 && <section><h2 className="text-xl font-bold mb-3">Resultados autorizados</h2>{data.examenes.map((e: any) => <Card key={`${e.nombre}-${e.fechaExamen}`} className="p-4 mb-2"><b>{e.nombre}</b><p className="text-sm">{e.resultado || "Resultado pendiente"}</p>{e.interpretacion && <p className="text-sm text-muted-foreground">{e.interpretacion}</p>}</Card>)}</section>}</main>
+}

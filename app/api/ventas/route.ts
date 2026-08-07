@@ -4,12 +4,16 @@ import { getCurrentUser } from "@/lib/auth"
 import { registrarLog } from "@/lib/audit"
 import { ventaSchema } from "@/lib/validations"
 import { toManaguaStartOfDay, toManaguaEndOfDay } from "@/lib/timezone"
+import { asignarLotesFEFO } from "@/lib/domain/fefo"
 
 export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser()
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+    if (!["ADMIN", "EMPLEADO"].includes(user.rolNombre)) {
+      return NextResponse.json({ error: "Sin permiso para registrar ventas" }, { status: 403 })
     }
 
     const searchParams = request.nextUrl.searchParams
@@ -90,8 +94,33 @@ export async function POST(request: NextRequest) {
       rucCliente,
       idDescuento,
       descuentoTotal
+      ,confirmarAlergias
     } = validation.data
     const detalles = validationDetalles as any[]
+
+    const excepcionesLote = detalles.filter((d) => d.idLotePreferido)
+    if (excepcionesLote.length > 0) {
+      if (user.rolNombre !== "ADMIN") {
+        return NextResponse.json({ error: "Solo un administrador puede cambiar el lote sugerido por FEFO" }, { status: 403 })
+      }
+      if (excepcionesLote.some((d) => !d.motivoCambioLote)) {
+        return NextResponse.json({ error: "Debe indicar el motivo para cambiar el lote sugerido" }, { status: 400 })
+      }
+    }
+
+    if (numeroReceta) {
+      const recetaSeguridad = await prisma.receta.findUnique({
+        where: { codigoReceta: numeroReceta },
+        select: { idCliente: true, cliente: { select: { datosClinicos: { select: { alergias: true } } } } },
+      })
+      const alergias = recetaSeguridad?.cliente.datosClinicos?.alergias?.trim()
+      if (alergias && !confirmarAlergias) {
+        return NextResponse.json({ error: "El paciente tiene alergias registradas. Revise y confirme antes de continuar.", codigoError: "ALERGIAS_PENDIENTES", alergias }, { status: 409 })
+      }
+      if (recetaSeguridad && idCliente && recetaSeguridad.idCliente !== Number(idCliente)) {
+        return NextResponse.json({ error: "La receta no pertenece al paciente seleccionado" }, { status: 400 })
+      }
+    }
 
     // ── Validar descuento general si se proporciona ──
     if (idDescuento) {
@@ -122,6 +151,10 @@ export async function POST(request: NextRequest) {
       where: { id: { in: productIds } },
     })
     const productoMap = new Map(productos.map(p => [p.id, p]))
+    const lotesPrevalidacion = await prisma.lote.findMany({
+      where: { idProducto: { in: productIds }, activo: true, stockActual: { gt: 0 } },
+      select: { id: true, idProducto: true, codigoLote: true, fechaVencimiento: true, stockActual: true, createdAt: true },
+    })
 
     // Calcular cantidades totales por producto (agrupa líneas del mismo ítem)
     const cantidadTotalPorProducto = new Map<number, number>()
@@ -145,45 +178,22 @@ export async function POST(request: NextRequest) {
     }
 
     // Validar stock suficiente usando totales agregados (SOLO para productos físicos)
+    const ahora = new Date()
     for (const [idProducto, cantidadTotal] of cantidadTotalPorProducto) {
       const producto = productoMap.get(idProducto)!
-      if (producto.esServicio) continue // Ignorar servicios
-      if (producto.stockActual < cantidadTotal) {
-        return NextResponse.json({ error: `Stock insuficiente para ${producto.nombre}` }, { status: 400 })
-      }
-    }
-
-    // ── BLOQUEO DE SEGURIDAD SANITARIA: verificar que no haya lotes vencidos activos (Ignorar servicios) ──
-    const ahora = new Date()
-    for (const detalle of detalles) {
-      const producto = productoMap.get(detalle.idProducto)!
-      if (producto.esServicio) continue // Ignorar servicios
-
-      const loteMasAntiguo = await prisma.lote.findFirst({
-        where: {
-          idProducto: detalle.idProducto,
-          activo: true,
-          stockActual: { gt: 0 },
-        },
-        orderBy: [
-          { fechaVencimiento: "asc" },
-          { createdAt: "asc" },
-        ],
-      })
-
-      if (loteMasAntiguo && loteMasAntiguo.fechaVencimiento) {
-        if (new Date(loteMasAntiguo.fechaVencimiento) <= ahora) {
-          return NextResponse.json({
-            error: `Venta Bloqueada: El lote del medicamento está vencido`,
-            detalle: `Producto: ${producto.nombre} | Lote: ${loteMasAntiguo.codigoLote} | Vencimiento: ${new Date(loteMasAntiguo.fechaVencimiento).toLocaleDateString('es-NI')}`,
-            codigoError: "LOTE_VENCIDO",
-            productoNombre: producto.nombre,
-            loteInfo: {
-              codigoLote: loteMasAntiguo.codigoLote,
-              fechaVencimiento: loteMasAntiguo.fechaVencimiento,
-            }
-          }, { status: 422 })
-        }
+      if (producto.esServicio) continue
+      const lotesProducto = lotesPrevalidacion.filter((l) => l.idProducto === idProducto)
+      const stockVigente = lotesProducto
+        .filter((l) => !l.fechaVencimiento || l.fechaVencimiento > ahora)
+        .reduce((sum, lote) => sum + lote.stockActual, 0)
+      if (stockVigente < cantidadTotal) {
+        const vencido = lotesProducto.find((l) => l.fechaVencimiento && l.fechaVencimiento <= ahora)
+        return NextResponse.json({
+          error: vencido ? "Venta bloqueada: el saldo restante pertenece a lotes vencidos" : `Stock vigente insuficiente para ${producto.nombre}`,
+          codigoError: vencido ? "LOTE_VENCIDO" : "STOCK_INSUFICIENTE",
+          productoNombre: producto.nombre,
+          loteInfo: vencido ? { codigoLote: vencido.codigoLote, fechaVencimiento: vencido.fechaVencimiento } : null,
+        }, { status: vencido ? 422 : 400 })
       }
     }
 
@@ -281,6 +291,7 @@ export async function POST(request: NextRequest) {
       try {
         // ── Transacción atómica: venta + detalles + FEFO batch deduction + receta + movimientos ──
         venta = await prisma.$transaction(async (tx: any) => {
+          let recetaId: number | null = null
           // 1. Bloqueo pesimista de productos y lotes en orden determinista para evitar Deadlocks (SOLO físicos)
           const physicalProductIds = productIds.filter((id: number) => !productoMap.get(id)!.esServicio)
           const sortedPhysicalProductIds = [...physicalProductIds].sort((a, b) => a - b)
@@ -325,7 +336,8 @@ export async function POST(request: NextRequest) {
               throw new Error(`Receta con código ${numeroReceta} no encontrada`)
             }
             const rObj = recetas[0]
-            if (rObj.estado !== "EMITIDA" && rObj.estado !== "USADA_PARCIALMENTE") {
+            recetaId = rObj.id
+            if (!["EMITIDA", "EN_PREPARACION", "LISTA", "USADA_PARCIALMENTE"].includes(rObj.estado)) {
               throw new Error(`La receta con código ${numeroReceta} no está activa o ya fue usada`)
             }
             if (rObj.fechaVencimiento && new Date(rObj.fechaVencimiento) < ahoraTransaction) {
@@ -335,6 +347,12 @@ export async function POST(request: NextRequest) {
             const recetaDetalles = await tx.detalleReceta.findMany({
               where: { idReceta: rObj.id },
             })
+
+            const productosRecetados = new Set(recetaDetalles.map((d: any) => d.idProducto))
+            const productoAjeno = detalles.find((d: any) => !productosRecetados.has(d.idProducto))
+            if (productoAjeno) {
+              throw new Error(`El producto ${productoMap.get(productoAjeno.idProducto)?.nombre || productoAjeno.idProducto} no pertenece a la receta`)
+            }
 
             for (const dDet of recetaDetalles) {
               const saleQty = cantidadTotalPorProducto.get(dDet.idProducto) || 0
@@ -363,6 +381,7 @@ export async function POST(request: NextRequest) {
           }
 
           // 4. Crear cabecera y detalles de la venta
+          const cajaAbierta = await tx.cajaSesion.findFirst({ where: { idUsuario: user.id, estado: "ABIERTA" }, select: { id: true } })
           const nuevaVenta = await tx.venta.create({
             data: {
               fecha: new Date(),
@@ -379,6 +398,8 @@ export async function POST(request: NextRequest) {
               rucCliente: rucCliente || null,
               idDescuento: idDescuento || null,
               descuentoTotal: descuentoTotal ? Number(descuentoTotal) : 0,
+              idReceta: recetaId,
+              idCaja: cajaAbierta?.id ?? null,
               detalles: {
                 create: detalles.map((d: any) => ({
                   idProducto: d.idProducto,
@@ -430,35 +451,16 @@ export async function POST(request: NextRequest) {
               throw new Error(`El stock resultante para ${prod.nombre} sería negativo (${nuevoStockProducto})`)
             }
 
-            // Cargar todos los lotes activos con stock del producto
+            // Cargar lotes y aplicar una única regla FEFO reutilizable.
             const lotes = await tx.lote.findMany({
               where: { idProducto: d.idProducto, activo: true, stockActual: { gt: 0 } },
             })
+            const asignaciones = asignarLotesFEFO(lotes, d.cantidadDeducir, ahoraTransaction, d.idLotePreferido)
 
-            // Ordenar por FEFO en memoria (fechaVencimiento asc nulls last, luego createdAt asc)
-            lotes.sort((a: any, b: any) => {
-              if (a.fechaVencimiento && b.fechaVencimiento) {
-                const timeA = new Date(a.fechaVencimiento).getTime()
-                const timeB = new Date(b.fechaVencimiento).getTime()
-                if (timeA !== timeB) return timeA - timeB
-              } else if (a.fechaVencimiento) {
-                return -1 // a va primero (tiene vencimiento)
-              } else if (b.fechaVencimiento) {
-                return 1 // b va primero (tiene vencimiento)
-              }
-              return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-            })
-
-            // Filtrar lotes vigentes (fechaVencimiento > ahoraTransaction o null)
-            const lotesVigentes = lotes.filter((l: any) => {
-              if (!l.fechaVencimiento) return true
-              return new Date(l.fechaVencimiento) > ahoraTransaction
-            })
-
-            for (const lote of lotesVigentes) {
+            for (const asignacion of asignaciones) {
               if (pendiente <= 0) break
-
-              const deducir = Math.min(pendiente, lote.stockActual)
+              const lote = lotes.find((l: any) => l.id === asignacion.idLote)!
+              const deducir = asignacion.cantidad
               const nuevoStockLote = lote.stockActual - deducir
 
               // Actualizar stock del lote
@@ -497,7 +499,9 @@ export async function POST(request: NextRequest) {
               lotesDeducidosAudit.push({
                 idProducto: d.idProducto,
                 lote: lote.codigoLote,
-                cantidad: deducir
+                cantidad: deducir,
+                excepcionFEFO: asignacion.esExcepcion,
+                motivo: asignacion.esExcepcion ? d.motivoCambioLote : null,
               })
 
               pendiente -= deducir
@@ -513,6 +517,10 @@ export async function POST(request: NextRequest) {
               where: { id: d.idProducto },
               data: { stockActual: { decrement: d.cantidadDeducir } },
             })
+
+            if (d.idLotePreferido) {
+              await tx.auditoriaLog.create({ data: { accion: "CAMBIO_LOTE_FEFO", entidad: "Venta", entidadId: nuevaVenta.id, idUsuario: user.id, modulo: "FARMACIA", motivo: d.motivoCambioLote, detalles: JSON.stringify({ idProducto: d.idProducto, idLotePreferido: d.idLotePreferido }) } })
+            }
           }
 
           return nuevaVenta

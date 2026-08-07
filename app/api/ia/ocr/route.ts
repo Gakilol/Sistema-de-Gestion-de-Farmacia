@@ -12,6 +12,7 @@ import { registrarLog } from "@/lib/audit"
 import { resolveRoleFromId, canViewFinancialData } from "@/lib/ia/permissions"
 import { InvoiceOcrSchema } from "@/lib/ia/schemas"
 import type { FacturaOCRResult } from "@/lib/ia/types"
+import { GoogleGenAI } from "@google/genai"
 
 const GEMINI_MODEL = "gemini-2.5-flash"
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
@@ -41,10 +42,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const vertexApiKey = process.env.VERTEX_AI_API_KEY
     const geminiApiKey = process.env.GEMINI_API_KEY
-    if (!geminiApiKey) {
+    const googleApiKey = vertexApiKey || geminiApiKey
+    if (!googleApiKey) {
       return NextResponse.json(
-        { error: "GEMINI_API_KEY no está configurada. El OCR requiere Gemini 2.5 Flash." },
+        { error: "No hay un proveedor de IA configurado. El OCR requiere Vertex AI o Gemini." },
         { status: 503 }
       )
     }
@@ -149,27 +152,52 @@ Responde ÚNICAMENTE con el JSON estructurado, sin texto adicional.`
 
     let geminiResponse: Response
     try {
-      geminiResponse = await fetch(
-        `${GEMINI_BASE_URL}/${GEMINI_MODEL}:generateContent?key=${geminiApiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(geminiBody),
-          signal: controller.signal,
-        }
-      )
+      if (vertexApiKey) {
+        const client = new GoogleGenAI({ vertexai: true, apiKey: vertexApiKey, apiVersion: "v1" })
+        const response = await client.models.generateContent({
+          model: GEMINI_MODEL,
+          contents: [{
+            parts: [
+              { text: ocrPrompt },
+              { inlineData: { mimeType, data: base64Data } },
+            ],
+          }],
+          config: {
+            temperature: 0.1,
+            maxOutputTokens: 4096,
+            responseMimeType: "application/json",
+            responseSchema: geminiBody.generationConfig.response_schema as any,
+            abortSignal: controller.signal,
+          },
+        })
+        geminiResponse = Response.json(response)
+      } else {
+        geminiResponse = await fetch(
+          `${GEMINI_BASE_URL}/${GEMINI_MODEL}:generateContent?key=${googleApiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(geminiBody),
+            signal: controller.signal,
+          }
+        )
+      }
       clearTimeout(timeoutId)
     } catch (err: any) {
       clearTimeout(timeoutId)
       if (err.name === "AbortError") {
         return NextResponse.json({ error: "El procesamiento del archivo tardó demasiado. Intenta con una imagen más clara." }, { status: 504 })
       }
-      throw err
+      registrarLog({
+        accion: "IA_GEMINI_ERROR",
+        entidad: "OCR_Factura",
+        idUsuario: user.id,
+        detalles: { status: Number.isInteger(err?.status) ? err.status : 502 },
+      })
+      return NextResponse.json({ error: "El proveedor de IA no pudo procesar el archivo." }, { status: 502 })
     }
 
     if (!geminiResponse.ok) {
-      const errText = await geminiResponse.text()
-      console.error("Gemini OCR Error:", errText)
       registrarLog({ accion: "IA_GEMINI_ERROR", entidad: "OCR_Factura", idUsuario: user.id, detalles: { status: geminiResponse.status } })
       return NextResponse.json({ error: "Error al procesar el archivo con el servicio de IA." }, { status: 502 })
     }

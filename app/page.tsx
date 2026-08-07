@@ -11,6 +11,8 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { toast } from "sonner"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useCurrentUser } from "@/app/hooks/useCurrentUser"
+import { DashboardReminders } from "@/components/dashboard-reminders"
+import { GerencialPanel } from "@/components/gerencial-panel"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
@@ -170,6 +172,9 @@ export default function Dashboard() {
               ))}
             </div>
           </div>
+
+          <DashboardReminders />
+          <GerencialPanel />
 
           {/* KPI Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">

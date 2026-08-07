@@ -41,6 +41,7 @@ interface Laboratorio {
 interface Producto {
   id: number
   nombre: string
+  codigoBarras?: string | null
   categoria: { nombre: string }
   idCategoria?: number
   precioCompra?: string

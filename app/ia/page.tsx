@@ -10,6 +10,7 @@ import {
   ClipboardList, ShieldAlert, Database, Loader2,
 } from "lucide-react"
 import { toast } from "sonner"
+import { useCurrentUser } from "@/app/hooks/useCurrentUser"
 
 // ---------------------------------------------------------------------------
 // Tipos locales
@@ -21,6 +22,7 @@ interface Message {
   toolsUsed?: string[]
   toolStatus?: string | null
   isToolLoading?: boolean
+  mode?: "vertex_ai" | "gemini" | "local_operational" | "groq_limited" | string
 }
 
 // ---------------------------------------------------------------------------
@@ -187,7 +189,7 @@ const WELCOME_MESSAGE: Message = {
   role: "assistant",
   content: `### ¡Hola! Soy **FarmaPos IA** 🤖✨
 
-Tu asistente operativo experto en gestión de farmacia. Tengo acceso directo y en tiempo real al inventario, lotes, ventas y auditoría del sistema.
+Tu asistente operativo para FarmaPOS. Las consultas operativas se resuelven con datos autorizados del sistema y un motor local seguro; cuando el proveedor avanzado está disponible, amplío la explicación sin darle acceso directo a la base de datos.
 
 Puedo ayudarte a:
 - 📦 **Inventario**: Stock bajo, lotes vencidos o por vencer, FEFO
@@ -207,8 +209,8 @@ const SUGGESTIONS = [
   { text: "¿Qué productos están por vencerse?", icon: AlertTriangle, color: "text-amber-500 bg-amber-500/10 border-amber-500/20" },
   { text: "¿Qué productos tienen stock bajo?", icon: Lightbulb, color: "text-red-500 bg-red-500/10 border-red-500/20" },
   { text: "¿Cuáles son los 10 productos más vendidos?", icon: TrendingUp, color: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20" },
-  { text: "Genera una sugerencia de orden de compra", icon: ClipboardList, color: "text-blue-500 bg-blue-500/10 border-blue-500/20" },
-  { text: "¿Hay alertas de auditoría esta semana?", icon: ShieldAlert, color: "text-purple-500 bg-purple-500/10 border-purple-500/20" },
+  { text: "Genera una sugerencia de orden de compra", icon: ClipboardList, color: "text-blue-500 bg-blue-500/10 border-blue-500/20", adminOnly: true },
+  { text: "¿Hay alertas de auditoría esta semana?", icon: ShieldAlert, color: "text-purple-500 bg-purple-500/10 border-purple-500/20", adminOnly: true },
   { text: "Busca Paracetamol en el inventario", icon: PackageSearch, color: "text-cyan-500 bg-cyan-500/10 border-cyan-500/20" },
 ]
 
@@ -217,6 +219,7 @@ const SUGGESTIONS = [
 // ---------------------------------------------------------------------------
 
 export default function AsistenteIAPage() {
+  const { user } = useCurrentUser()
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE])
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
@@ -230,6 +233,10 @@ export default function AsistenteIAPage() {
   const handleSend = useCallback(async (textToSend?: string) => {
     const messageText = textToSend ?? input
     if (!messageText.trim() || loading) return
+    if (messageText.length > 2500) {
+      toast.error("La consulta no puede superar 2500 caracteres")
+      return
+    }
     if (!textToSend) setInput("")
 
     const userMessage: Message = { role: "user", content: messageText }
@@ -247,11 +254,8 @@ export default function AsistenteIAPage() {
         }),
       })
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`)
-      }
-
-      const data = await response.json()
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`)
 
       if (data.error) {
         toast.error(data.error)
@@ -264,11 +268,12 @@ export default function AsistenteIAPage() {
           role: "assistant",
           content: data.text,
           toolsUsed: data.toolsUsed ?? [],
+          mode: data.mode,
         }
         setMessages((prev) => [...prev, assistantMessage])
       }
-    } catch {
-      toast.error("Error al comunicarse con el asistente de IA")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Error al comunicarse con el asistente de IA")
       setMessages((prev) => [
         ...prev,
         {
@@ -326,12 +331,12 @@ export default function AsistenteIAPage() {
               <h1 className="text-sm font-bold text-foreground flex items-center gap-2">
                 FarmaPos IA
                 <span className="hidden sm:inline text-[9px] font-bold text-cyan-500 bg-cyan-500/10 px-1.5 py-0.5 rounded-full border border-cyan-500/20 animate-pulse">
-                  FUNCTION CALLING
+                  IA OPERATIVA
                 </span>
               </h1>
               <p className="text-[11px] text-muted-foreground flex items-center gap-1">
                 <Database className="w-3 h-3" />
-                Acceso en tiempo real al sistema
+                Datos por rol · respaldo local automático
               </p>
             </div>
           </div>
@@ -391,6 +396,13 @@ export default function AsistenteIAPage() {
                         ))}
                       </div>
                     )}
+                    {isAi && message.mode && idx > 0 && (
+                      <div className="px-1">
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border/60 font-medium">
+                          {message.mode === "vertex_ai" ? "Vertex AI" : message.mode === "gemini" ? "Gemini" : message.mode === "local_operational" ? "Motor local seguro" : "Modo limitado"}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )
@@ -431,7 +443,7 @@ export default function AsistenteIAPage() {
             {/* Sugerencias rápidas (solo al inicio) */}
             {messages.length === 1 && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                {SUGGESTIONS.map((sug, i) => {
+                {SUGGESTIONS.filter((sug) => !sug.adminOnly || user?.rolNombre === "ADMIN").map((sug, i) => {
                   const IconComponent = sug.icon
                   return (
                     <button
@@ -458,7 +470,7 @@ export default function AsistenteIAPage() {
                 placeholder="Pregunta sobre inventario, ventas, lotes, compras..."
                 className="flex-1 bg-muted/40 border-border text-sm py-5 rounded-xl placeholder:text-muted-foreground/60"
                 disabled={loading}
-                maxLength={500}
+                maxLength={2500}
               />
               <Button
                 onClick={() => handleSend()}
@@ -471,7 +483,7 @@ export default function AsistenteIAPage() {
 
             {/* Disclaimer */}
             <p className="text-center text-[10px] text-muted-foreground/50">
-              FarmaPos IA accede al sistema en tiempo real · No sustituye la consulta con un farmacéutico o médico
+              Consultas auditadas y limitadas por rol · No sustituye la consulta con un farmacéutico o médico
             </p>
           </div>
         </div>

@@ -27,6 +27,9 @@ import {
   RefreshCw,
   Tag,
   Stethoscope,
+  Banknote,
+  BrainCircuit,
+  Share2,
 } from "lucide-react"
 
 import { useCurrentUser } from "../app/hooks/useCurrentUser"
@@ -87,6 +90,7 @@ export function Sidebar() {
     { href: "/ventas/nueva", label: "Nueva Venta", icon: TrendingUp },
     { href: "/ventas/historial", label: "Historial Ventas", icon: ShoppingCart },
     { href: "/ia", label: "Asistente IA", icon: Sparkles },
+    { href: "/caja", label: "Caja", icon: Banknote },
   ]
 
   // 🔹 Opciones SOLO ADMIN (van siempre en bloque y orden fijo)
@@ -98,6 +102,7 @@ export function Sidebar() {
     { href: "/admin/descuentos", label: "Descuentos", icon: Tag },
     { href: "/proveedores", label: "Proveedores", icon: Truck },
     { href: "/compras", label: "Compras", icon: ShoppingCart },
+    { href: "/compras/recomendaciones", label: "Compras inteligentes", icon: BrainCircuit },
     { href: "/inventario", label: "Inventario", icon: ClipboardList },
     { href: "/usuarios", label: "Usuarios", icon: Settings },
     { href: "/reportes", label: "Reportes", icon: TrendingUp },
@@ -197,6 +202,7 @@ export function Sidebar() {
                 <NavLink item={{ href: "/clinica/dashboard", label: "Dashboard Clínico", icon: Stethoscope }} />
                 <NavLink item={{ href: "/clinica", label: "Clínica", icon: ClipboardList }} />
                 <NavLink item={{ href: "/pacientes", label: "Pacientes", icon: Users }} />
+                <NavLink item={{ href: "/pacientes/resumen", label: "Resumen compartible", icon: Share2 }} />
                 <NavLink item={{ href: "/clinica/servicios", label: "Servicios", icon: Activity }} />
               </div>
             </div>

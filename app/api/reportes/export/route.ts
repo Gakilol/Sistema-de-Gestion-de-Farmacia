@@ -12,11 +12,28 @@ export async function GET(request: NextRequest) {
     if (!user) {
       return new Response("Unauthorized", { status: 401 })
     }
+    if (user.rolNombre !== "ADMIN") {
+      return new Response("Forbidden", { status: 403 })
+    }
 
     const { searchParams } = new URL(request.url)
     const type = searchParams.get("type")
     const startDateParam = searchParams.get("startDate")
     const endDateParam = searchParams.get("endDate")
+    const allowedTypes = new Set(["kpis", "utilidad-bruta", "utilidad-por-producto"])
+    if (!type || !allowedTypes.has(type)) return new Response("Invalid report type", { status: 400 })
+
+    const datePattern = /^\d{4}-\d{2}-\d{2}$/
+    if ((startDateParam && !datePattern.test(startDateParam)) || (endDateParam && !datePattern.test(endDateParam))) {
+      return new Response("Invalid date", { status: 400 })
+    }
+    if (startDateParam && endDateParam) {
+      const startMs = Date.parse(`${startDateParam}T00:00:00Z`)
+      const endMs = Date.parse(`${endDateParam}T00:00:00Z`)
+      if (startMs > endMs || endMs - startMs > 366 * 86_400_000) {
+        return new Response("Invalid date range", { status: 400 })
+      }
+    }
 
     let dateWhereVenta: any = {}
     let dateWhereCompra: any = {}

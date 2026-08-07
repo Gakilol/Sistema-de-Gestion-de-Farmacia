@@ -20,7 +20,10 @@ import { getCurrentUser } from "@/lib/auth"
 import { registrarLog } from "@/lib/audit"
 import { checkToolPermission, resolveRoleFromId } from "@/lib/ia/permissions"
 import { executeTool } from "@/lib/ia/tools"
-import type { IAToolName, IAAuditAction } from "@/lib/ia/types"
+import { detectLocalIntent, formatLocalToolResult, getLocalCapabilities } from "@/lib/ia/local-assistant"
+import type { IAToolName, IAAuditAction, UserRole } from "@/lib/ia/types"
+import { GoogleGenAI } from "@google/genai"
+import { z } from "zod"
 
 // ---------------------------------------------------------------------------
 // Constantes
@@ -30,6 +33,13 @@ const MAX_TOOL_CALLS = 3
 const GEMINI_TIMEOUT_MS = 30000
 const GEMINI_MODEL = "gemini-2.5-flash"
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+
+const ChatRequestSchema = z.object({
+  messages: z.array(z.object({
+    role: z.enum(["user", "assistant"]),
+    content: z.string().trim().min(1).max(2500),
+  })).min(1).max(20),
+})
 
 // ---------------------------------------------------------------------------
 // Definición de herramientas para Gemini (OpenAPI-compatible schema)
@@ -299,10 +309,44 @@ ${esClinico ? `
 async function callGemini(
   apiKey: string,
   contents: object[],
-  includeTools: boolean
+  includeTools: boolean,
+  useVertexAI = false
 ): Promise<Response> {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS)
+
+  if (useVertexAI) {
+    try {
+      const client = new GoogleGenAI({ vertexai: true, apiKey, apiVersion: "v1" })
+      const response = await client.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: contents as any,
+        config: {
+          temperature: 0.2,
+          maxOutputTokens: 2048,
+          abortSignal: controller.signal,
+          ...(includeTools
+            ? {
+                tools: GEMINI_TOOLS.map((tool) => ({
+                  functionDeclarations: tool.function_declarations,
+                })) as any,
+              }
+            : {}),
+        },
+      })
+      clearTimeout(timeoutId)
+      return Response.json(response)
+    } catch (err: any) {
+      clearTimeout(timeoutId)
+      if (err?.name === "AbortError" || controller.signal.aborted) {
+        throw new Error("GEMINI_TIMEOUT")
+      }
+      const status = Number.isInteger(err?.status) && err.status >= 400 && err.status <= 599
+        ? err.status
+        : 502
+      return new Response(null, { status })
+    }
+  }
 
   const body: Record<string, unknown> = {
     contents,
@@ -362,6 +406,57 @@ const TOOL_AUDIT_MAP: Partial<Record<string, IAAuditAction>> = {
   getMostCommonClinicalConditions: "IA_TOOL_GET_COMMON_CONDITIONS",
 }
 
+async function runLocalAssistant(message: string, role: UserRole, userId: number) {
+  const intent = detectLocalIntent(message)
+
+  if (intent.medicalDisclaimer) {
+    return {
+      text: "### Orientación segura\n\nNo puedo emitir diagnósticos, indicar dosis ni recomendar tratamientos. Puedo consultar el catálogo por **nombre de producto** o mostrar existencias para que un farmacéutico o médico tome la decisión profesional.",
+      toolsUsed: [],
+      mode: "local_operational",
+    }
+  }
+
+  if (!intent.toolName) {
+    return { text: getLocalCapabilities(role), toolsUsed: [], mode: "local_operational" }
+  }
+
+  if (!checkToolPermission(intent.toolName, role)) {
+    registrarLog({
+      accion: "IA_ACCESS_DENIED",
+      entidad: "AsistenteIA",
+      idUsuario: userId,
+      detalles: { herramienta: intent.toolName, rol: role, modo: "LOCAL" },
+    })
+    return {
+      text: `### Acceso restringido\n\nTu rol **${role}** no tiene permiso para consultar esta información. Solicita la consulta a un administrador autorizado.`,
+      toolsUsed: [],
+      mode: "local_operational",
+    }
+  }
+
+  const toolResult = await executeTool(intent.toolName, intent.args ?? {}, role)
+  const auditAction = TOOL_AUDIT_MAP[intent.toolName] ?? "IA_CHAT_CONSULTA"
+  registrarLog({
+    accion: auditAction,
+    entidad: "AsistenteIA",
+    idUsuario: userId,
+    detalles: {
+      herramienta: intent.toolName,
+      rol: role,
+      modo: "LOCAL",
+      resultado: toolResult.ok ? "OK" : "ERROR",
+      ...(toolResult.ok && toolResult.meta?.fuenteDatos ? { fuente: toolResult.meta.fuenteDatos } : {}),
+    },
+  })
+
+  return {
+    text: formatLocalToolResult(intent, toolResult, role),
+    toolsUsed: [intent.toolName],
+    mode: "local_operational",
+  }
+}
+
 // ---------------------------------------------------------------------------
 // POST /api/ia/chat
 // ---------------------------------------------------------------------------
@@ -374,17 +469,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No autorizado. Inicia sesión para usar el asistente." }, { status: 401 })
     }
 
-    const body = await request.json()
-    const { messages } = body
-
-    if (!messages || !Array.isArray(messages) || messages.length === 0) {
-      return NextResponse.json({ error: "Mensajes inválidos." }, { status: 400 })
+    const body = await request.json().catch(() => null)
+    const parsedBody = ChatRequestSchema.safeParse(body)
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: "La conversación no tiene un formato válido o supera los límites permitidos." }, { status: 400 })
     }
+    const { messages } = parsedBody.data
+    const latestMessage = messages[messages.length - 1].content
 
     // 2. Resolver rol del usuario
     const rol = resolveRoleFromId(user.idRol)
+    const vertexApiKey = process.env.VERTEX_AI_API_KEY
     const geminiApiKey = process.env.GEMINI_API_KEY
     const groqApiKey = process.env.GROQ_API_KEY
+    const googleApiKey = vertexApiKey || geminiApiKey
+    const useVertexAI = Boolean(vertexApiKey)
 
     // 3. Registrar consulta en auditoría
     registrarLog({
@@ -394,18 +493,22 @@ export async function POST(request: NextRequest) {
       detalles: { rol, mensajes: messages.length },
     })
 
+    // Las consultas operativas conocidas se resuelven localmente: menor latencia,
+    // resultado determinista y cero dependencia del proveedor externo.
+    const localIntent = detectLocalIntent(latestMessage)
+    if (localIntent.matched) {
+      return NextResponse.json(await runLocalAssistant(latestMessage, rol, user.id))
+    }
+
     // 4. Modo fallback: sin API keys configuradas
-    if (!geminiApiKey && !groqApiKey) {
-      return NextResponse.json({
-        text: `### ⚙️ Asistente no configurado\n\nPara habilitar el asistente de IA, configura \`GEMINI_API_KEY\` en el archivo \`.env\`.\n\nCon una API key activa, podrás consultar inventario, ventas, lotes y más en tiempo real.`,
-        toolsUsed: [],
-      })
+    if (!googleApiKey && !groqApiKey) {
+      return NextResponse.json(await runLocalAssistant(latestMessage, rol, user.id))
     }
 
     // -----------------------------------------------------------------------
     // 5. Modo Gemini con Function Calling
     // -----------------------------------------------------------------------
-    if (geminiApiKey) {
+    if (googleApiKey) {
       const systemPrompt = buildSystemPrompt(rol, user.nombreCompleto)
 
       // Construir el historial de mensajes para Gemini
@@ -432,26 +535,18 @@ export async function POST(request: NextRequest) {
       while (toolCallsCount < MAX_TOOL_CALLS) {
         let geminiResponse: Response
         try {
-          geminiResponse = await callGemini(geminiApiKey, contents, true)
+          geminiResponse = await callGemini(googleApiKey, contents, true, useVertexAI)
         } catch (err: any) {
           registrarLog({ accion: "IA_GEMINI_ERROR", entidad: "AsistenteIA", idUsuario: user.id, detalles: { error: err.message } })
           if (err.message === "GEMINI_TIMEOUT") {
-            return NextResponse.json({
-              text: "⏱️ El asistente de IA tardó demasiado en responder. Por favor intenta de nuevo en unos momentos.",
-              toolsUsed,
-            })
+            return NextResponse.json(await runLocalAssistant(latestMessage, rol, user.id))
           }
           throw err
         }
 
         if (!geminiResponse.ok) {
-          const errText = await geminiResponse.text()
-          console.error("Gemini API Error:", errText)
           registrarLog({ accion: "IA_GEMINI_ERROR", entidad: "AsistenteIA", idUsuario: user.id, detalles: { status: geminiResponse.status } })
-          return NextResponse.json({
-            text: "❌ El servicio de IA no está disponible en este momento. Por favor intenta nuevamente.",
-            toolsUsed,
-          })
+          return NextResponse.json(await runLocalAssistant(latestMessage, rol, user.id))
         }
 
         const resJson = await geminiResponse.json()
@@ -469,7 +564,7 @@ export async function POST(request: NextRequest) {
             respuestaFinal = `${respuestaFinal}\n\n---\n_${toolStatusMessage}_`
           }
 
-          return NextResponse.json({ text: respuestaFinal, toolsUsed })
+          return NextResponse.json({ text: respuestaFinal, toolsUsed, mode: useVertexAI ? "vertex_ai" : "gemini" })
         }
 
         // Verificar si hay function calls
@@ -542,7 +637,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Agregar las respuestas de herramientas al historial
-        contents.push({ role: "function", parts: functionResponses })
+        contents.push({ role: "user", parts: functionResponses })
       }
 
       // Si se agotaron los tool calls sin respuesta final, pedir una última respuesta de texto
@@ -552,13 +647,14 @@ export async function POST(request: NextRequest) {
           parts: [{ text: "Por favor resume los resultados obtenidos en una respuesta clara y concisa." }],
         })
         try {
-          const finalResponse = await callGemini(geminiApiKey, contents, false)
+          const finalResponse = await callGemini(googleApiKey, contents, false, useVertexAI)
           if (finalResponse.ok) {
             const finalJson = await finalResponse.json()
             const finalText = finalJson.candidates?.[0]?.content?.parts?.[0]?.text ?? "No pude generar una respuesta. Por favor intenta de nuevo."
             return NextResponse.json({
               text: finalText + (toolStatusMessage ? `\n\n---\n_${toolStatusMessage}_` : ""),
               toolsUsed,
+              mode: useVertexAI ? "vertex_ai" : "gemini",
             })
           }
         } catch {
@@ -566,10 +662,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      return NextResponse.json({
-        text: "No pude procesar tu solicitud. Por favor reformula tu pregunta e intenta de nuevo.",
-        toolsUsed,
-      })
+      return NextResponse.json(await runLocalAssistant(latestMessage, rol, user.id))
     }
 
     // -----------------------------------------------------------------------
