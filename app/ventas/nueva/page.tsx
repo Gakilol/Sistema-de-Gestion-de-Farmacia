@@ -465,6 +465,11 @@ export default function NuevaVentaPage() {
       })
       const data = await res.json()
       if (res.ok) {
+        if ("BroadcastChannel" in window) {
+          const channel = new BroadcastChannel("farmapos-caja")
+          channel.postMessage({ type: "VENTA_REGISTRADA", idVenta: data.id })
+          channel.close()
+        }
         toast.success("Venta registrada exitosamente")
         router.push("/ventas/historial")
       } else {

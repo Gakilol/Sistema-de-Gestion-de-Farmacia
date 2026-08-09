@@ -12,10 +12,66 @@ export async function GET(request: NextRequest) {
   const take = 20
   const where = user.rolNombre === "ADMIN" ? {} : { idUsuario: user.id }
   const [sesiones, total] = await Promise.all([
-    prisma.cajaSesion.findMany({ where, include: { usuario: { select: { nombreCompleto: true } }, movimientos: { orderBy: { createdAt: "desc" } }, ventas: { select: { metodoPago: true, total: true } } }, orderBy: { abiertaEn: "desc" }, skip: (page - 1) * take, take }),
+    prisma.cajaSesion.findMany({
+      where,
+      include: {
+        usuario: { select: { nombreCompleto: true } },
+        movimientos: {
+          orderBy: { createdAt: "desc" },
+          include: { usuario: { select: { nombreCompleto: true } } },
+        },
+        ventas: {
+          where: { estado: "COMPLETADA" },
+          orderBy: { fecha: "desc" },
+          select: {
+            id: true,
+            fecha: true,
+            metodoPago: true,
+            total: true,
+            tipoComprobante: true,
+            usuario: { select: { nombreCompleto: true } },
+            cliente: { select: { nombreCompleto: true } },
+          },
+        },
+      },
+      orderBy: { abiertaEn: "desc" },
+      skip: (page - 1) * take,
+      take,
+    }),
     prisma.cajaSesion.count({ where }),
   ])
-  return NextResponse.json({ sesiones, total, page, pages: Math.ceil(total / take) })
+
+  const sesionesConResumen = sesiones.map((sesion) => {
+    const pagos = sesion.ventas.reduce(
+      (acc, venta) => {
+        const metodo = venta.metodoPago as keyof typeof acc
+        if (metodo in acc) acc[metodo] += Number(venta.total)
+        return acc
+      },
+      { EFECTIVO: 0, TARJETA: 0, TRANSFERENCIA: 0 },
+    )
+    const cierreActual = calcularCierreCaja(
+      Number(sesion.montoInicial),
+      pagos.EFECTIVO,
+      sesion.movimientos.map((movimiento) => ({ tipo: movimiento.tipo as "INGRESO" | "RETIRO" | "GASTO", monto: Number(movimiento.monto) })),
+      Number(sesion.montoFinalContado || 0),
+    )
+
+    return {
+      ...sesion,
+      resumen: {
+        pagos,
+        totalVendido: pagos.EFECTIVO + pagos.TARJETA + pagos.TRANSFERENCIA,
+        ventasCount: sesion.ventas.length,
+        montoEsperadoActual: sesion.montoEsperado == null ? cierreActual.montoEsperado : Number(sesion.montoEsperado),
+      },
+    }
+  })
+
+  return NextResponse.json(
+    { sesiones: sesionesConResumen, total, page, pages: Math.ceil(total / take), ultimaActualizacion: new Date().toISOString() },
+    { headers: { "Cache-Control": "no-store" } },
+  )
 }
 
 export async function POST(request: NextRequest) {

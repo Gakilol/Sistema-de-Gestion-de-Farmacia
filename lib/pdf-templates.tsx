@@ -8,32 +8,35 @@ export function formatCordobas(amount: number | string | any): string {
 
 const styles = StyleSheet.create({
   page: {
-    padding: 30,
+    paddingTop: 34,
+    paddingRight: 36,
+    paddingBottom: 44,
+    paddingLeft: 36,
     fontSize: 9,
     fontFamily: 'Helvetica',
-    color: '#333333',
+    color: '#25342d',
   },
   header: {
-    marginBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#cccccc',
-    paddingBottom: 10,
+    marginBottom: 18,
+    borderBottomWidth: 2,
+    borderBottomColor: '#0b8b61',
+    paddingBottom: 12,
   },
   title: {
     fontSize: 18,
     fontFamily: 'Helvetica-Bold',
-    color: '#0f172a',
+    color: '#075d45',
     marginBottom: 5,
   },
   subtitle: {
     fontSize: 10,
-    color: '#64748b',
+    color: '#65766e',
   },
   sectionTitle: {
     fontSize: 12,
     fontFamily: 'Helvetica-Bold',
-    color: '#1e293b',
-    marginTop: 15,
+    color: '#20352c',
+    marginTop: 16,
     marginBottom: 10,
   },
   table: {
@@ -41,18 +44,18 @@ const styles = StyleSheet.create({
     width: 'auto',
     borderStyle: 'solid',
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#dbe6df',
     marginBottom: 15,
   },
   tableRow: {
     flexDirection: 'row',
     borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
+    borderBottomColor: '#e2eae5',
     alignItems: 'center',
-    height: 24,
+    minHeight: 26,
   },
   tableHeader: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#eaf5ef',
     fontFamily: 'Helvetica-Bold',
   },
   tableColHeader: {
@@ -70,11 +73,11 @@ const styles = StyleSheet.create({
     left: 30,
     right: 30,
     borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
+    borderTopColor: '#dbe6df',
     paddingTop: 10,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    color: '#94a3b8',
+    color: '#74877e',
     fontSize: 8,
   },
   kpiGrid: {
@@ -85,20 +88,20 @@ const styles = StyleSheet.create({
   kpiCard: {
     width: '23%',
     padding: 10,
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#f3f8f5',
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 4,
+    borderColor: '#dbe6df',
+    borderRadius: 6,
   },
   kpiLabel: {
     fontSize: 8,
-    color: '#64748b',
+    color: '#65766e',
     marginBottom: 4,
   },
   kpiValue: {
     fontSize: 12,
     fontFamily: 'Helvetica-Bold',
-    color: '#0f172a',
+    color: '#075d45',
   },
 });
 

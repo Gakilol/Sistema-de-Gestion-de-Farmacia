@@ -6,11 +6,21 @@ import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { toast } from "sonner"
 import * as XLSX from "xlsx"
+import { appendReportSheet, createReportWorkbook } from "@/lib/reportes/excel-export"
 import { 
   BarChart3, TrendingUp, AlertTriangle, Activity, Calendar, Search, 
-  Download, User, ListOrdered, RefreshCw, FileText, Loader2, ArrowUpRight, DollarSign
+  Download, User, ListOrdered, RefreshCw, FileText, Loader2, ArrowUpRight, DollarSign,
+  FileSpreadsheet, SlidersHorizontal, Check, ChevronRight
 } from "lucide-react"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts"
 
@@ -29,6 +39,18 @@ interface KPIs {
 }
 
 type ReportTab = "resumen" | "productos" | "utilidad-bruta" | "utilidad-por-producto" | "clientes" | "stock" | "movimientos"
+type ExportFormat = "excel" | "pdf"
+type ExportSection = ReportTab
+
+const exportOptions: Array<{ id: ExportSection; label: string; description: string; pdfType?: string }> = [
+  { id: "resumen", label: "Resumen general", description: "Ventas, compras, utilidad, ticket promedio y alertas.", pdfType: "kpis" },
+  { id: "utilidad-bruta", label: "Utilidad bruta", description: "Detalle financiero por transacción.", pdfType: "utilidad-bruta" },
+  { id: "utilidad-por-producto", label: "Rentabilidad por producto", description: "Ingresos, costos y margen por producto.", pdfType: "utilidad-por-producto" },
+  { id: "productos", label: "Productos más vendidos", description: "Ranking por unidades e ingreso total." },
+  { id: "clientes", label: "Clientes frecuentes", description: "Compras y monto acumulado por cliente." },
+  { id: "stock", label: "Stock bajo", description: "Productos que requieren reabastecimiento." },
+  { id: "movimientos", label: "Movimientos de inventario", description: "Historial de entradas y salidas." },
+]
 
 interface ProductoVencer {
   id: number
@@ -140,6 +162,9 @@ export default function ReportesPage() {
   const [endDate, setEndDate] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
   const [activeTab, setActiveTab] = useState<ReportTab>("resumen")
+  const [exportOpen, setExportOpen] = useState(false)
+  const [exportFormat, setExportFormat] = useState<ExportFormat>("excel")
+  const [selectedExportSections, setSelectedExportSections] = useState<ExportSection[]>(exportOptions.map((option) => option.id))
 
   // Helper local para obtener fecha en Managua TZ
   function getManaguaToday() {
@@ -240,127 +265,184 @@ export default function ReportesPage() {
     }
   }
 
-  const handleExportExcel = async () => {
+  const handleExportExcel = async (sections = selectedExportSections) => {
+    if (sections.length === 0) return toast.error("Selecciona al menos una sección")
     setTabLoading(true)
     try {
-      toast.info("Preparando todas las hojas del reporte...")
+      toast.info("Preparando el Excel con las secciones seleccionadas…")
       const query = reportQuery(startDate, endDate)
-      const [exportUtilidadBruta, exportUtilidadProducto, exportMasVendidos, exportClientes, exportStock, exportMovimientos] = await Promise.all([
-        fetchJson<{ ventas: UtilidadBrutaVenta[]; resumen: UtilidadBrutaResumen }>(`/api/reportes?type=utilidad-bruta&${query}`),
-        fetchJson<UtilidadPorProductoItem[]>(`/api/reportes?type=utilidad-por-producto&${query}`),
-        fetchJson<ProductoMasVendido[]>(`/api/reportes?type=productos-mas-vendidos&${query}`),
-        fetchJson<ClienteFrecuente[]>(`/api/reportes?type=clientes-frecuentes&${query}`),
-        fetchJson<StockBajoDetalle[]>(`/api/reportes?type=stock-bajo&${query}`),
-        fetchJson<MovimientoDetalle[]>(`/api/reportes?type=movimientos&${query}`),
-      ])
-      const workbook = XLSX.utils.book_new()
+      const period = `${startDate || "Inicio"} al ${endDate || "Hoy"}`
+      const sectionData: {
+        gross?: { ventas: UtilidadBrutaVenta[]; resumen: UtilidadBrutaResumen }
+        productProfit?: UtilidadPorProductoItem[]
+        products?: ProductoMasVendido[]
+        clients?: ClienteFrecuente[]
+        stock?: StockBajoDetalle[]
+        movements?: MovimientoDetalle[]
+      } = {}
 
-      // Sheet 1: KPIs
-      if (kpis) {
-        const kpisData = [
-          { Métrica: "Total Ventas", Valor: `C$${kpis.totalVentas.toFixed(2)}` },
-          { Métrica: "Total Compras", Valor: `C$${kpis.totalCompras.toFixed(2)}` },
-          { Métrica: "Utilidad Bruta (Real)", Valor: `C$${kpis.gananciaNeta.toFixed(2)}` },
-          { Métrica: "Margen Bruto", Valor: `${kpis.margenPct.toFixed(1)}%` },
-          { Métrica: "Ticket Promedio", Valor: `C$${kpis.ticketPromedio.toFixed(2)}` },
-          { Métrica: "Variación vs. período anterior", Valor: `${kpis.variacionVentasPct.toFixed(1)}%` },
-          { Métrica: "Transacciones Totales", Valor: kpis.transaccionesCount },
-          { Métrica: "Productos Stock Bajo", Valor: kpis.stockBajo }
+      await Promise.all(
+        sections.map(async (section) => {
+          if (section === "utilidad-bruta") sectionData.gross = await fetchJson(`/api/reportes?type=utilidad-bruta&${query}`)
+          if (section === "utilidad-por-producto") sectionData.productProfit = await fetchJson(`/api/reportes?type=utilidad-por-producto&${query}`)
+          if (section === "productos") sectionData.products = await fetchJson(`/api/reportes?type=productos-mas-vendidos&${query}`)
+          if (section === "clientes") sectionData.clients = await fetchJson(`/api/reportes?type=clientes-frecuentes&${query}`)
+          if (section === "stock") sectionData.stock = await fetchJson(`/api/reportes?type=stock-bajo&${query}`)
+          if (section === "movimientos") sectionData.movements = await fetchJson(`/api/reportes?type=movimientos&${query}`)
+        }),
+      )
+
+      const workbook = createReportWorkbook()
+      const currencyFormat = '"C$" #,##0.00'
+
+      if (sections.includes("resumen") && kpis) {
+        const summaryRows = [
+          { metric: "Total ventas", value: kpis.totalVentas, type: "currency" },
+          { metric: "Total compras", value: kpis.totalCompras, type: "currency" },
+          { metric: "Utilidad bruta real", value: kpis.gananciaNeta, type: "currency" },
+          { metric: "Margen bruto", value: kpis.margenPct / 100, type: "percent" },
+          { metric: "Ticket promedio", value: kpis.ticketPromedio, type: "currency" },
+          { metric: "Variación vs. período anterior", value: kpis.variacionVentasPct / 100, type: "percent" },
+          { metric: "Transacciones totales", value: kpis.transaccionesCount, type: "number" },
+          { metric: "Productos con stock bajo", value: kpis.stockBajo, type: "number" },
         ]
-        const wsKPI = XLSX.utils.json_to_sheet(kpisData)
-        XLSX.utils.book_append_sheet(workbook, wsKPI, "Resumen KPIs")
+        appendReportSheet({
+          workbook,
+          sheetName: "Resumen",
+          title: "FarmaPOS · Resumen general",
+          period,
+          rows: summaryRows,
+          columns: [
+            { header: "Métrica", width: 38, value: (row) => row.metric },
+            { header: "Valor", width: 22, value: (row) => row.value, numberFormat: "#,##0.00" },
+            { header: "Tipo", width: 16, value: (row) => row.type },
+          ],
+        })
+        const sheet = workbook.Sheets.Resumen
+        summaryRows.forEach((row, index) => {
+          const cell = sheet[`B${index + 6}`]
+          if (cell) cell.z = row.type === "currency" ? currencyFormat : row.type === "percent" ? "0.0%" : "#,##0"
+        })
       }
 
-      // Sheet 2: Utilidad Bruta Detalle
-      if (exportUtilidadBruta.ventas.length > 0) {
-        const wsUtilBruta = XLSX.utils.json_to_sheet(exportUtilidadBruta.ventas.map((v: any) => ({
-          Venta_ID: v.id,
-          Fecha: new Date(v.fecha).toLocaleDateString("es-NI"),
-          Cliente: v.cliente,
-          Total_Bruto: `C$${v.totalBruto.toFixed(2)}`,
-          Descuento_Linea: `C$${v.descuentoLineas.toFixed(2)}`,
-          Descuento_General: `C$${v.descuentoGeneral.toFixed(2)}`,
-          Total_Descuento: `C$${v.totalDescuento.toFixed(2)}`,
-          Total_Neto: `C$${v.total.toFixed(2)}`,
-          Costo_Ventas_COGS: `C$${v.cogs.toFixed(2)}`,
-          Utilidad_Bruta: `C$${v.utilidad.toFixed(2)}`,
-          Margen: `${v.margenPct.toFixed(1)}%`
-        })))
-        XLSX.utils.book_append_sheet(workbook, wsUtilBruta, "Utilidad Bruta Transaccional")
+      if (sections.includes("utilidad-bruta")) {
+        appendReportSheet({
+          workbook,
+          sheetName: "Utilidad bruta",
+          title: "FarmaPOS · Utilidad bruta por transacción",
+          period,
+          rows: sectionData.gross?.ventas || [],
+          columns: [
+            { header: "Venta", width: 12, value: (row) => row.id },
+            { header: "Fecha", width: 16, value: (row) => new Date(row.fecha).toLocaleDateString("es-NI") },
+            { header: "Cliente", width: 28, value: (row) => row.cliente },
+            { header: "Total bruto", width: 17, value: (row) => row.totalBruto, numberFormat: currencyFormat },
+            { header: "Desc. línea", width: 17, value: (row) => row.descuentoLineas, numberFormat: currencyFormat },
+            { header: "Desc. general", width: 17, value: (row) => row.descuentoGeneral, numberFormat: currencyFormat },
+            { header: "Total neto", width: 17, value: (row) => row.total, numberFormat: currencyFormat },
+            { header: "Costo COGS", width: 17, value: (row) => row.cogs, numberFormat: currencyFormat },
+            { header: "Utilidad", width: 17, value: (row) => row.utilidad, numberFormat: currencyFormat },
+            { header: "Margen", width: 13, value: (row) => row.margenPct / 100, numberFormat: "0.0%" },
+          ],
+        })
       }
 
-      // Sheet 3: Utilidad Por Producto Rentabilidad
-      if (exportUtilidadProducto.length > 0) {
-        const wsUtilProd = XLSX.utils.json_to_sheet(exportUtilidadProducto.map((p: any) => ({
-          Producto: p.nombre,
-          Laboratorio: p.laboratorio,
-          Categoría: p.categoria,
-          Cantidad_Vendida: p.cantidadVendida,
-          Ingresos_Brutos: `C$${p.ingresosBrutos.toFixed(2)}`,
-          Descuento_Linea: `C$${p.descuentoLinea.toFixed(2)}`,
-          Descuento_General_Prorrateado: `C$${p.descuentoGeneralProrrateado.toFixed(2)}`,
-          Ingresos_Netos: `C$${p.ingresosTotales.toFixed(2)}`,
-          Costo_Compra: `C$${p.cogs.toFixed(2)}`,
-          Utilidad_Bruta: `C$${p.utilidad.toFixed(2)}`,
-          Margen: `${p.margenPct.toFixed(1)}%`
-        })))
-        XLSX.utils.book_append_sheet(workbook, wsUtilProd, "Rentabilidad por Producto")
+      if (sections.includes("utilidad-por-producto")) {
+        appendReportSheet({
+          workbook,
+          sheetName: "Rentabilidad producto",
+          title: "FarmaPOS · Rentabilidad por producto",
+          period,
+          rows: sectionData.productProfit || [],
+          columns: [
+            { header: "Producto", width: 34, value: (row) => row.nombre },
+            { header: "Laboratorio", width: 24, value: (row) => row.laboratorio },
+            { header: "Categoría", width: 22, value: (row) => row.categoria },
+            { header: "Cant. vendida", width: 15, value: (row) => row.cantidadVendida },
+            { header: "Ingresos brutos", width: 18, value: (row) => row.ingresosBrutos, numberFormat: currencyFormat },
+            { header: "Descuento", width: 18, value: (row) => row.descuentoLinea + row.descuentoGeneralProrrateado, numberFormat: currencyFormat },
+            { header: "Ingresos netos", width: 18, value: (row) => row.ingresosTotales, numberFormat: currencyFormat },
+            { header: "Costo", width: 18, value: (row) => row.cogs, numberFormat: currencyFormat },
+            { header: "Utilidad", width: 18, value: (row) => row.utilidad, numberFormat: currencyFormat },
+            { header: "Margen", width: 13, value: (row) => row.margenPct / 100, numberFormat: "0.0%" },
+          ],
+        })
       }
 
-      // Sheet 4: Mas Vendidos
-      if (exportMasVendidos.length > 0) {
-        const wsProd = XLSX.utils.json_to_sheet(exportMasVendidos.map((p, idx) => ({
-          Puesto: idx + 1,
-          Producto: p.nombre,
-          Laboratorio: p.laboratorio,
-          Categoría: p.categoria,
-          Cantidad_Vendida: p.cantidad,
-          Total_Recaudado: `C$${p.total.toFixed(2)}`
-        })))
-        XLSX.utils.book_append_sheet(workbook, wsProd, "Volumen Más Vendidos")
+      if (sections.includes("productos")) {
+        appendReportSheet({
+          workbook,
+          sheetName: "Más vendidos",
+          title: "FarmaPOS · Productos más vendidos",
+          period,
+          rows: (sectionData.products || []).map((product, index) => ({ ...product, rank: index + 1 })),
+          columns: [
+            { header: "Puesto", width: 10, value: (row) => row.rank },
+            { header: "Producto", width: 34, value: (row) => row.nombre },
+            { header: "Laboratorio", width: 24, value: (row) => row.laboratorio },
+            { header: "Categoría", width: 22, value: (row) => row.categoria },
+            { header: "Cantidad", width: 14, value: (row) => row.cantidad },
+            { header: "Total recaudado", width: 20, value: (row) => row.total, numberFormat: currencyFormat },
+          ],
+        })
       }
 
-      // Sheet 5: Clientes Frecuentes
-      if (exportClientes.length > 0) {
-        const wsCli = XLSX.utils.json_to_sheet(exportClientes.map((c, idx) => ({
-          Puesto: idx + 1,
-          Cliente: c.nombre,
-          Cédula: c.cedula,
-          Cant_Compras: c.comprasCount,
-          Total_Comprado: `C$${c.totalComprado.toFixed(2)}`
-        })))
-        XLSX.utils.book_append_sheet(workbook, wsCli, "Clientes Frecuentes")
+      if (sections.includes("clientes")) {
+        appendReportSheet({
+          workbook,
+          sheetName: "Clientes frecuentes",
+          title: "FarmaPOS · Clientes frecuentes",
+          period,
+          rows: (sectionData.clients || []).map((client, index) => ({ ...client, rank: index + 1 })),
+          columns: [
+            { header: "Puesto", width: 10, value: (row) => row.rank },
+            { header: "Cliente", width: 32, value: (row) => row.nombre },
+            { header: "Cédula", width: 20, value: (row) => row.cedula },
+            { header: "Compras", width: 14, value: (row) => row.comprasCount },
+            { header: "Total comprado", width: 20, value: (row) => row.totalComprado, numberFormat: currencyFormat },
+          ],
+        })
       }
 
-      // Sheet 6: Stock Bajo
-      if (exportStock.length > 0) {
-        const wsStock = XLSX.utils.json_to_sheet(exportStock.map(s => ({
-          Producto: s.nombre,
-          Categoría: s.categoria,
-          Stock_Actual: s.stockActual,
-          Stock_Mínimo: s.stockMinimo,
-          Faltante: s.diferencia
-        })))
-        XLSX.utils.book_append_sheet(workbook, wsStock, "Stock Bajo")
+      if (sections.includes("stock")) {
+        appendReportSheet({
+          workbook,
+          sheetName: "Stock bajo",
+          title: "FarmaPOS · Productos con stock bajo",
+          period,
+          rows: sectionData.stock || [],
+          columns: [
+            { header: "Producto", width: 34, value: (row) => row.nombre },
+            { header: "Categoría", width: 24, value: (row) => row.categoria },
+            { header: "Stock actual", width: 16, value: (row) => row.stockActual },
+            { header: "Stock mínimo", width: 16, value: (row) => row.stockMinimo },
+            { header: "Faltante", width: 14, value: (row) => row.diferencia },
+          ],
+        })
       }
 
-      // Sheet 7: Movimientos
-      if (exportMovimientos.length > 0) {
-        const wsMov = XLSX.utils.json_to_sheet(exportMovimientos.map(m => ({
-          ID: m.id,
-          Tipo: m.tipo,
-          Fecha: new Date(m.fecha).toLocaleString("es-NI"),
-          Total: `C$${m.total.toFixed(2)}`,
-          Usuario: m.usuario,
-          Detalle: m.detalle
-        })))
-        XLSX.utils.book_append_sheet(workbook, wsMov, "Movimientos Kardex")
+      if (sections.includes("movimientos")) {
+        appendReportSheet({
+          workbook,
+          sheetName: "Movimientos",
+          title: "FarmaPOS · Movimientos de inventario",
+          period,
+          rows: sectionData.movements || [],
+          columns: [
+            { header: "ID", width: 16, value: (row) => row.id },
+            { header: "Tipo", width: 16, value: (row) => row.tipo },
+            { header: "Fecha", width: 22, value: (row) => new Date(row.fecha).toLocaleString("es-NI") },
+            { header: "Total", width: 18, value: (row) => row.total, numberFormat: currencyFormat },
+            { header: "Usuario", width: 24, value: (row) => row.usuario },
+            { header: "Detalle", width: 48, value: (row) => row.detalle },
+          ],
+        })
       }
 
-      const startStr = startDate ? `_desde_${startDate}` : ""
-      const endStr = endDate ? `_hasta_${endDate}` : ""
-      XLSX.writeFile(workbook, `Reporte_Farmacia_Completo${startStr}${endStr}.xlsx`)
-      toast.success("Excel exportado exitosamente con todas las hojas")
+      if (workbook.SheetNames.length === 0) throw new Error("No hay datos disponibles para las secciones seleccionadas")
+      XLSX.writeFile(workbook, `Reporte_FarmaPOS_${startDate || "inicio"}_${endDate || "hoy"}.xlsx`, { compression: true })
+      setExportOpen(false)
+      toast.success(`Excel exportado con ${workbook.SheetNames.length} ${workbook.SheetNames.length === 1 ? "hoja" : "hojas"}`)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Error al exportar Excel")
     } finally {
@@ -491,22 +573,37 @@ export default function ReportesPage() {
     }
   }
 
-  const handleExportPDF = () => {
-    let type = "kpis"
-    if (activeTab === "resumen") {
-      type = "kpis"
-    } else if (activeTab === "utilidad-bruta") {
-      type = "utilidad-bruta"
-    } else if (activeTab === "utilidad-por-producto" || activeTab === "productos") {
-      type = "utilidad-por-producto"
-    } else {
-      // Fallback para pestañas normales
-      window.print()
+  const openExportDialog = (format: ExportFormat) => {
+    setExportFormat(format)
+    if (format === "pdf") {
+      const preferred = exportOptions.find((option) => option.id === activeTab && option.pdfType)
+      setSelectedExportSections([preferred?.id || "resumen"])
+    } else if (selectedExportSections.length === 0) {
+      setSelectedExportSections(exportOptions.map((option) => option.id))
+    }
+    setExportOpen(true)
+  }
+
+  const toggleExportSection = (section: ExportSection) => {
+    if (exportFormat === "pdf") {
+      setSelectedExportSections([section])
       return
     }
+    setSelectedExportSections((current) =>
+      current.includes(section) ? current.filter((item) => item !== section) : [...current, section],
+    )
+  }
 
-    // Abrir endpoint de exportación en una nueva pestaña
-    window.open(`/api/reportes/export?type=${type}&startDate=${startDate}&endDate=${endDate}`, "_blank")
+  const confirmExport = async () => {
+    if (selectedExportSections.length === 0) return toast.error("Selecciona al menos una sección")
+    if (exportFormat === "excel") {
+      await handleExportExcel(selectedExportSections)
+      return
+    }
+    const selected = exportOptions.find((option) => option.id === selectedExportSections[0])
+    if (!selected?.pdfType) return toast.error("Selecciona una sección disponible para PDF")
+    window.open(`/api/reportes/export?type=${selected.pdfType}&startDate=${startDate}&endDate=${endDate}`, "_blank", "noopener,noreferrer")
+    setExportOpen(false)
   }
 
   const filterBySearch = (text: string) => {
@@ -520,13 +617,13 @@ export default function ReportesPage() {
         <div className="p-4 pt-16 md:p-8 md:pt-8 page-transition">
           
           {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
+          <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
-                <BarChart3 className="w-8 h-8 text-primary" />
+              <h1 className="flex items-center gap-3 text-3xl font-bold text-foreground">
+                <BarChart3 className="h-8 w-8 text-primary" />
                 Reportes y Analíticas
               </h1>
-              <p className="text-muted-foreground mt-1">Monitoreo dinámico del rendimiento físico y financiero (Nicaragua)</p>
+              <p className="mt-1 text-muted-foreground">Monitoreo dinámico del rendimiento físico y financiero (Nicaragua)</p>
             </div>
             <div className="flex gap-2 no-print flex-wrap">
               <Button 
@@ -538,22 +635,22 @@ export default function ReportesPage() {
                 {refreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
               </Button>
               <Button 
-                onClick={handleExportExcel} 
-                className="bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-2"
+                onClick={() => openExportDialog("excel")}
+                className="flex items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700"
               >
                 <Download className="w-4 h-4" />
                 Exportar Excel
               </Button>
               <Button 
                 onClick={handleExportCSV} 
-                className="bg-teal-600 hover:bg-teal-700 text-white flex items-center gap-2"
+                className="flex items-center gap-2 bg-teal-600 text-white hover:bg-teal-700"
               >
                 <Download className="w-4 h-4" />
                 CSV
               </Button>
               <Button 
-                onClick={handleExportPDF} 
-                className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-2"
+                onClick={() => openExportDialog("pdf")}
+                className="flex items-center gap-2 bg-indigo-600 text-white hover:bg-indigo-700"
               >
                 <FileText className="w-4 h-4" />
                 PDF Profesional
@@ -562,7 +659,7 @@ export default function ReportesPage() {
           </div>
 
           {/* Filters Bar */}
-          <Card className="glass-card p-4 mb-6 grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+          <Card className="glass-card mb-6 grid grid-cols-1 items-end gap-4 p-4 sm:grid-cols-3">
             <div>
               <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 flex items-center gap-1">
                 <Calendar className="w-3.5 h-3.5 text-primary" />
@@ -572,7 +669,7 @@ export default function ReportesPage() {
                 type="date" 
                 value={startDate} 
                 onChange={(e) => setStartDate(e.target.value)} 
-                className="bg-muted/30 border-border"
+                className="border-border bg-muted/30"
               />
             </div>
             <div>
@@ -584,14 +681,14 @@ export default function ReportesPage() {
                 type="date" 
                 value={endDate} 
                 onChange={(e) => setEndDate(e.target.value)} 
-                className="bg-muted/30 border-border"
+                className="border-border bg-muted/30"
               />
             </div>
             <div className="flex gap-2">
               <Button 
                 onClick={handleApplyFilter} 
                 disabled={loading} 
-                className="bg-primary hover:bg-primary/90 text-primary-foreground flex-1"
+                className="min-w-36 flex-1"
               >
                 Filtrar Rango
               </Button>
@@ -599,7 +696,7 @@ export default function ReportesPage() {
           </Card>
 
           {/* Tab Navigation */}
-          <div className="flex border-b border-border mb-6 overflow-x-auto gap-2">
+          <div className="mb-6 flex gap-2 overflow-x-auto border-b border-border">
             {[
               { id: "resumen", label: "Resumen General", icon: Activity },
               { id: "utilidad-bruta", label: "Utilidad Bruta (Transaccional)", icon: DollarSign },
@@ -616,10 +713,10 @@ export default function ReportesPage() {
                   key={tab.id}
                   onClick={() => handleTabChange(tab.id as ReportTab)}
                   disabled={tabLoading}
-                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-all whitespace-nowrap ${
+                  className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition-all ${
                     active 
-                      ? "border-primary text-primary" 
-                      : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+                      ? "border-primary text-primary"
+                      : "border-transparent text-muted-foreground hover:border-border hover:text-foreground"
                   }`}
                 >
                   <Icon className="w-4 h-4" />
@@ -671,8 +768,8 @@ export default function ReportesPage() {
               {activeTab === "resumen" && (
                 <div className="space-y-8">
                   {/* KPIs Cards */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    <Card className="glass-card p-6 border-l-4 border-l-blue-500 hover:scale-[1.01] transition-transform">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    <Card className="glass-card border-l-4 border-l-blue-500 p-6 transition-transform hover:scale-[1.01]">
                       <div className="flex justify-between items-start">
                         <div>
                           <p className="text-sm font-medium text-muted-foreground mb-1">Ventas del Rango</p>
@@ -685,7 +782,7 @@ export default function ReportesPage() {
                       </div>
                     </Card>
 
-                    <Card className="glass-card p-6 border-l-4 border-l-amber-500 hover:scale-[1.01] transition-transform">
+                    <Card className="glass-card border-l-4 border-l-amber-500 p-6 transition-transform hover:scale-[1.01]">
                       <div className="flex justify-between items-start">
                         <div>
                           <p className="text-sm font-medium text-muted-foreground mb-1">Compras del Rango</p>
@@ -698,7 +795,7 @@ export default function ReportesPage() {
                       </div>
                     </Card>
 
-                    <Card className="glass-card p-6 border-l-4 border-l-emerald-500 hover:scale-[1.01] transition-transform">
+                    <Card className="glass-card border-l-4 border-l-emerald-500 p-6 transition-transform hover:scale-[1.01]">
                       <div className="flex justify-between items-start">
                         <div>
                           <p className="text-sm font-medium text-muted-foreground mb-1">Utilidad Bruta Real</p>
@@ -713,7 +810,7 @@ export default function ReportesPage() {
                       </div>
                     </Card>
 
-                    <Card className="glass-card p-6 border-l-4 border-l-red-500 hover:scale-[1.01] transition-transform">
+                    <Card className="glass-card border-l-4 border-l-red-500 p-6 transition-transform hover:scale-[1.01]">
                       <div className="flex justify-between items-start">
                         <div>
                           <p className="text-sm font-medium text-muted-foreground mb-1">Stock Bajo Alerta</p>
@@ -726,13 +823,13 @@ export default function ReportesPage() {
                       </div>
                     </Card>
 
-                    <Card className="glass-card p-6 border-l-4 border-l-cyan-500 hover:scale-[1.01] transition-transform">
+                    <Card className="glass-card border-l-4 border-l-cyan-500 p-6 transition-transform hover:scale-[1.01]">
                       <p className="text-sm font-medium text-muted-foreground mb-1">Ticket Promedio</p>
                       <h3 className="text-2xl font-bold text-foreground">C${kpis?.ticketPromedio.toFixed(2) || "0.00"}</h3>
                       <p className="text-xs text-muted-foreground mt-2">Promedio por venta completada</p>
                     </Card>
 
-                    <Card className="glass-card p-6 border-l-4 border-l-violet-500 hover:scale-[1.01] transition-transform">
+                    <Card className="glass-card border-l-4 border-l-violet-500 p-6 transition-transform hover:scale-[1.01]">
                       <p className="text-sm font-medium text-muted-foreground mb-1">Variación vs. período anterior</p>
                       <h3 className={`text-2xl font-bold ${(kpis?.variacionVentasPct || 0) >= 0 ? "text-emerald-500" : "text-red-500"}`}>
                         {(kpis?.variacionVentasPct || 0) >= 0 ? "+" : ""}{kpis?.variacionVentasPct.toFixed(1) || "0.0"}%
@@ -1090,6 +1187,104 @@ export default function ReportesPage() {
 
         </div>
       </main>
+
+      <Dialog open={exportOpen} onOpenChange={setExportOpen}>
+        <DialogContent className="max-h-[min(90vh,820px)] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <div className="flex size-11 items-center justify-center rounded-xl bg-primary/9 text-primary">
+              {exportFormat === "excel" ? <FileSpreadsheet className="size-5" /> : <FileText className="size-5" />}
+            </div>
+            <DialogTitle className="pt-2 text-xl">Configurar exportación</DialogTitle>
+            <DialogDescription>
+              Elige qué información aparecerá en el archivo. El rango actual es {startDate || "inicio"} al {endDate || "hoy"}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-2 gap-2 rounded-xl bg-muted p-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                setExportFormat("excel")
+                if (selectedExportSections.length === 1) setSelectedExportSections(exportOptions.map((option) => option.id))
+              }}
+              className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors ${exportFormat === "excel" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              <FileSpreadsheet className="size-4" /> Excel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setExportFormat("pdf")
+                const current = exportOptions.find((option) => option.id === selectedExportSections[0] && option.pdfType)
+                setSelectedExportSections([current?.id || "resumen"])
+              }}
+              className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors ${exportFormat === "pdf" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              <FileText className="size-4" /> PDF
+            </button>
+          </div>
+
+          <div>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-foreground">Contenido del archivo</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {exportFormat === "excel" ? "Cada sección se creará como una hoja espaciosa y filtrable." : "El PDF profesional se genera para una sección a la vez."}
+                </p>
+              </div>
+              {exportFormat === "excel" && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedExportSections(selectedExportSections.length === exportOptions.length ? [] : exportOptions.map((option) => option.id))}
+                  className="shrink-0 text-xs font-semibold text-primary hover:underline"
+                >
+                  {selectedExportSections.length === exportOptions.length ? "Quitar todo" : "Seleccionar todo"}
+                </button>
+              )}
+            </div>
+
+            <div className="overflow-hidden rounded-xl border border-border">
+              {exportOptions
+                .filter((option) => exportFormat === "excel" || option.pdfType)
+                .map((option) => {
+                  const selected = selectedExportSections.includes(option.id)
+                  return (
+                    <button
+                      type="button"
+                      key={option.id}
+                      onClick={() => toggleExportSection(option.id)}
+                      className={`flex w-full items-center gap-3 border-b border-border px-4 py-3.5 text-left transition-colors last:border-0 ${selected ? "bg-primary/[0.045]" : "bg-card hover:bg-muted/45"}`}
+                    >
+                      <span className={`flex size-5 shrink-0 items-center justify-center border ${exportFormat === "pdf" ? "rounded-full" : "rounded-md"} ${selected ? "border-primary bg-primary text-primary-foreground" : "border-input bg-background"}`}>
+                        {selected && (exportFormat === "pdf" ? <span className="size-2 rounded-full bg-current" /> : <Check className="size-3.5" />)}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold text-foreground">{option.label}</span>
+                        <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{option.description}</span>
+                      </span>
+                    </button>
+                  )
+                })}
+            </div>
+          </div>
+
+          {exportFormat === "excel" && (
+            <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3.5 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/25 dark:text-emerald-200">
+              <SlidersHorizontal className="mt-0.5 size-4 shrink-0" />
+              <p className="leading-5">El nuevo formato agrega títulos, período, columnas amplias, alturas de fila cómodas, filtros y encabezados fijos.</p>
+            </div>
+          )}
+
+          <DialogFooter className="sticky bottom-0 -mx-6 -mb-6 border-t border-border bg-background/96 px-6 py-4 backdrop-blur-sm">
+            <Button variant="outline" onClick={() => setExportOpen(false)}>Cancelar</Button>
+            <Button onClick={confirmExport} disabled={tabLoading || selectedExportSections.length === 0}>
+              {tabLoading ? <Loader2 className="animate-spin" /> : <Download />}
+              {tabLoading ? "Preparando…" : `Exportar ${exportFormat === "excel" ? "Excel" : "PDF"}`}
+              {!tabLoading && <ChevronRight />}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
