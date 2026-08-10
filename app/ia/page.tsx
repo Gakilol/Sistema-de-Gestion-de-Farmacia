@@ -1,13 +1,15 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
+import * as XLSX from "xlsx"
 import { Sidebar } from "@/components/sidebar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
-  Sparkles, Send, Bot, User, RefreshCw, AlertTriangle,
+  Send, Bot, User, AlertTriangle,
   ArrowRight, Lightbulb, TrendingUp, PackageSearch,
-  ClipboardList, ShieldAlert, Database, Loader2,
+  ClipboardList, ShieldAlert, Database, Loader2, Upload,
+  Plus, MessageSquare, Trash2, History, FileSpreadsheet, X,
 } from "lucide-react"
 import { toast } from "sonner"
 import { useCurrentUser } from "@/app/hooks/useCurrentUser"
@@ -17,12 +19,21 @@ import { useCurrentUser } from "@/app/hooks/useCurrentUser"
 // ---------------------------------------------------------------------------
 
 interface Message {
+  id?: string
   role: "user" | "assistant"
   content: string
   toolsUsed?: string[]
   toolStatus?: string | null
   isToolLoading?: boolean
   mode?: "vertex_ai" | "gemini" | "local_operational" | "groq_limited" | string
+}
+
+interface Conversation {
+  id: string
+  titulo: string
+  vistaPrevia?: string
+  updatedAt: string
+  importacionActiva?: { id: string; archivo: string } | null
 }
 
 // ---------------------------------------------------------------------------
@@ -197,6 +208,7 @@ Puedo ayudarte a:
 - 📊 **Ventas**: Reportes, productos más vendidos, resúmenes por fecha
 - 🛒 **Compras**: Sugerencias y borradores de órdenes de compra
 - 🛡️ **Auditoría**: Detectar anomalías y anulaciones inusuales
+- 📄 **Excel**: Revisar archivos y crear productos solo cuando estén completos
 
 ¿Con qué deseas comenzar?`,
 }
@@ -221,14 +233,114 @@ const SUGGESTIONS = [
 export default function AsistenteIAPage() {
   const { user } = useCurrentUser()
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE])
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null)
+  const [activeImportId, setActiveImportId] = useState<string | null>(null)
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [toolLoadingLabel, setToolLoadingLabel] = useState<string>("Consultando...")
   const chatEndRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const loadConversations = useCallback(async () => {
+    if (!user) return
+    setHistoryLoading(true)
+    try {
+      const response = await fetch("/api/ia/conversaciones", { cache: "no-store" })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || "No se pudo cargar el historial")
+      setConversations(data.conversaciones ?? [])
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo cargar el historial")
+    } finally {
+      setHistoryLoading(false)
+    }
+  }, [user])
+
+  useEffect(() => { loadConversations() }, [loadConversations])
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
+
+  const createConversation = useCallback(async (firstText: string) => {
+    const title = firstText.replace(/\s+/g, " ").trim().slice(0, 70) || "Nueva conversación"
+    const response = await fetch("/api/ia/conversaciones", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ titulo: title }),
+    })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(data.error || "No se pudo crear la conversación")
+    setCurrentConversationId(data.conversacion.id)
+    return data.conversacion.id as string
+  }, [])
+
+  const saveMessage = useCallback(async (conversationId: string, message: Message) => {
+    const response = await fetch(`/api/ia/conversaciones/${conversationId}/mensajes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        role: message.role,
+        content: message.content,
+        metadata: { toolsUsed: message.toolsUsed ?? [], mode: message.mode ?? null },
+      }),
+    })
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}))
+      throw new Error(data.error || "No se pudo guardar el mensaje")
+    }
+  }, [])
+
+  const openConversation = useCallback(async (conversation: Conversation) => {
+    if (loading || uploading) return
+    setHistoryOpen(false)
+    setHistoryLoading(true)
+    try {
+      const response = await fetch(`/api/ia/conversaciones/${conversation.id}`, { cache: "no-store" })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || "No se pudo abrir la conversación")
+      const storedMessages: Message[] = (data.conversacion.mensajes ?? []).map((message: any) => ({
+        id: message.id,
+        role: message.rol,
+        content: message.contenido,
+        toolsUsed: Array.isArray(message.metadata?.toolsUsed) ? message.metadata.toolsUsed : [],
+        mode: message.metadata?.mode,
+      }))
+      setMessages(storedMessages.length > 0 ? storedMessages : [WELCOME_MESSAGE])
+      setCurrentConversationId(conversation.id)
+      setActiveImportId(data.conversacion.importacionActiva?.id ?? null)
+      setInput("")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo abrir la conversación")
+    } finally {
+      setHistoryLoading(false)
+    }
+  }, [loading, uploading])
+
+  const handleNewChat = useCallback(() => {
+    if (loading || uploading) return
+    setMessages([WELCOME_MESSAGE])
+    setCurrentConversationId(null)
+    setActiveImportId(null)
+    setInput("")
+    setHistoryOpen(false)
+  }, [loading, uploading])
+
+  const deleteConversation = useCallback(async (conversationId: string) => {
+    if (!window.confirm("¿Eliminar esta conversación y todos sus mensajes?")) return
+    const response = await fetch(`/api/ia/conversaciones/${conversationId}`, { method: "DELETE" })
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}))
+      return toast.error(data.error || "No se pudo eliminar la conversación")
+    }
+    if (currentConversationId === conversationId) handleNewChat()
+    await loadConversations()
+    toast.success("Conversación eliminada")
+  }, [currentConversationId, handleNewChat, loadConversations])
 
   const handleSend = useCallback(async (textToSend?: string) => {
     const messageText = textToSend ?? input
@@ -246,12 +358,17 @@ export default function AsistenteIAPage() {
     setToolLoadingLabel("Analizando tu consulta...")
 
     try {
-      const response = await fetch("/api/ia/chat", {
+      const conversationId = currentConversationId ?? await createConversation(messageText)
+      await saveMessage(conversationId, userMessage)
+
+      const endpoint = activeImportId ? `/api/ia/importaciones/${activeImportId}` : "/api/ia/chat"
+      const requestBody = activeImportId
+        ? { respuesta: messageText }
+        : { messages: newMessages.map((m) => ({ role: m.role, content: m.content })) }
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: newMessages.map((m) => ({ role: m.role, content: m.content })),
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       const data = await response.json().catch(() => ({}))
@@ -268,9 +385,12 @@ export default function AsistenteIAPage() {
           role: "assistant",
           content: data.text,
           toolsUsed: data.toolsUsed ?? [],
-          mode: data.mode,
+          mode: activeImportId ? "importacion_excel" : data.mode,
         }
         setMessages((prev) => [...prev, assistantMessage])
+        await saveMessage(conversationId, assistantMessage)
+        if (data.finalizada) setActiveImportId(null)
+        await loadConversations()
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Error al comunicarse con el asistente de IA")
@@ -284,7 +404,7 @@ export default function AsistenteIAPage() {
     } finally {
       setLoading(false)
     }
-  }, [messages, input, loading])
+  }, [messages, input, loading, currentConversationId, createConversation, saveMessage, activeImportId, loadConversations])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -293,11 +413,47 @@ export default function AsistenteIAPage() {
     }
   }
 
-  const handleReset = () => {
-    setMessages([WELCOME_MESSAGE])
-    setInput("")
-    toast.success("Conversación reiniciada")
-  }
+  const handleFileUpload = useCallback(async (file: File) => {
+    if (user?.rolNombre !== "ADMIN") return toast.error("Solo administración puede importar productos")
+    if (!/\.(xlsx|xls)$/i.test(file.name)) return toast.error("Selecciona un archivo Excel .xlsx o .xls")
+    if (file.size > 5 * 1024 * 1024) return toast.error("El archivo no puede superar 5 MB")
+    setUploading(true)
+    setLoading(true)
+    setToolLoadingLabel("Revisando columnas y productos...")
+    try {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true })
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
+      if (!firstSheet) throw new Error("El Excel no contiene hojas")
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, { defval: null, raw: true })
+      if (rows.length === 0) throw new Error("La primera hoja no contiene productos")
+      if (rows.length > 250) throw new Error("Por seguridad, importa un máximo de 250 productos por archivo")
+
+      const conversationId = currentConversationId ?? await createConversation(`Importar productos: ${file.name}`)
+      const userMessage: Message = { role: "user", content: `Adjunté el archivo **${file.name}** para importar productos.` }
+      setMessages((prev) => [...prev, userMessage])
+      await saveMessage(conversationId, userMessage)
+
+      const response = await fetch("/api/ia/importaciones", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archivo: file.name, filas: rows, conversacionId: conversationId }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || "No se pudo analizar el Excel")
+      const assistantMessage: Message = { role: "assistant", content: data.text, mode: "importacion_excel" }
+      setMessages((prev) => [...prev, assistantMessage])
+      setActiveImportId(data.importacionId)
+      await saveMessage(conversationId, assistantMessage)
+      await loadConversations()
+      toast.success("Excel revisado; la IA te indicará qué falta")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo leer el Excel")
+    } finally {
+      setUploading(false)
+      setLoading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ""
+    }
+  }, [user, currentConversationId, createConversation, saveMessage, loadConversations])
 
   // Indicador de herramienta en uso
   useEffect(() => {
@@ -319,6 +475,67 @@ export default function AsistenteIAPage() {
   return (
     <div className="flex h-screen bg-background">
       <Sidebar />
+      {historyOpen && (
+        <button
+          aria-label="Cerrar historial"
+          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+          onClick={() => setHistoryOpen(false)}
+        />
+      )}
+      <aside className={`${historyOpen ? "fixed inset-y-0 right-0 z-40 flex" : "hidden"} w-[min(88vw,19rem)] flex-col border-l border-border bg-card shadow-2xl lg:relative lg:z-auto lg:flex lg:w-72 lg:border-l-0 lg:border-r lg:shadow-none`}>
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <div className="flex items-center gap-2">
+            <History className="size-4 text-cyan-500" />
+            <span className="text-sm font-semibold">Chats guardados</span>
+          </div>
+          <Button variant="ghost" size="icon" className="size-8 lg:hidden" onClick={() => setHistoryOpen(false)}>
+            <X className="size-4" />
+          </Button>
+        </div>
+        <div className="p-3">
+          <Button onClick={handleNewChat} className="w-full justify-start gap-2" disabled={loading || uploading}>
+            <Plus className="size-4" />
+            Nuevo chat
+          </Button>
+        </div>
+        <div className="flex-1 space-y-1 overflow-y-auto px-2 pb-3">
+          {historyLoading && conversations.length === 0 ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-xs text-muted-foreground">
+              <Loader2 className="size-3.5 animate-spin" /> Cargando historial…
+            </div>
+          ) : conversations.length === 0 ? (
+            <div className="px-4 py-8 text-center text-xs text-muted-foreground">
+              Tus conversaciones aparecerán aquí.
+            </div>
+          ) : conversations.map((conversation) => (
+            <div
+              key={conversation.id}
+              className={`group flex items-start gap-2 rounded-xl border px-3 py-2.5 transition-colors ${currentConversationId === conversation.id ? "border-cyan-500/30 bg-cyan-500/10" : "border-transparent hover:bg-muted/60"}`}
+            >
+              <button className="min-w-0 flex-1 text-left" onClick={() => openConversation(conversation)}>
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                  {conversation.importacionActiva ? <FileSpreadsheet className="size-3.5 shrink-0 text-emerald-500" /> : <MessageSquare className="size-3.5 shrink-0 text-cyan-500" />}
+                  <span className="truncate">{conversation.titulo}</span>
+                </span>
+                <span className="mt-1 block truncate text-[10px] text-muted-foreground">{conversation.vistaPrevia}</span>
+                <span className="mt-1 block text-[9px] text-muted-foreground/70">
+                  {new Intl.DateTimeFormat("es-NI", { dateStyle: "medium" }).format(new Date(conversation.updatedAt))}
+                </span>
+              </button>
+              <button
+                aria-label={`Eliminar ${conversation.titulo}`}
+                className="mt-0.5 rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-red-500/10 hover:text-red-500 group-hover:opacity-100 focus:opacity-100"
+                onClick={() => deleteConversation(conversation.id)}
+              >
+                <Trash2 className="size-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="border-t border-border px-4 py-3 text-[10px] leading-relaxed text-muted-foreground">
+          El historial es privado para cada usuario y se guarda en FarmaPOS.
+        </div>
+      </aside>
       <main className="flex-1 flex flex-col h-screen overflow-hidden min-w-0">
 
         {/* ── Header ── */}
@@ -336,19 +553,23 @@ export default function AsistenteIAPage() {
               </h1>
               <p className="text-[11px] text-muted-foreground flex items-center gap-1">
                 <Database className="w-3 h-3" />
-                Datos por rol · respaldo local automático
+                Datos por rol · historial guardado automáticamente
               </p>
             </div>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleReset}
-            className="text-muted-foreground hover:text-foreground border-border hover:bg-muted/50 gap-1.5 text-xs"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Limpiar</span>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setHistoryOpen(true)}
+              className="gap-1.5 text-xs lg:hidden"
+            >
+              <History className="size-3.5" /> Historial
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleNewChat} className="hidden gap-1.5 text-xs sm:flex lg:hidden">
+              <Plus className="size-3.5" /> Nuevo chat
+            </Button>
+          </div>
         </header>
 
         {/* ── Área de Chat ── */}
@@ -399,7 +620,7 @@ export default function AsistenteIAPage() {
                     {isAi && message.mode && idx > 0 && (
                       <div className="px-1">
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border/60 font-medium">
-                          {message.mode === "vertex_ai" ? "Vertex AI" : message.mode === "gemini" ? "Gemini" : message.mode === "local_operational" ? "Motor local seguro" : "Modo limitado"}
+                          {message.mode === "vertex_ai" ? "Vertex AI" : message.mode === "gemini" ? "Gemini" : message.mode === "local_operational" ? "Motor local seguro" : message.mode === "importacion_excel" ? "Importación Excel" : "Modo limitado"}
                         </span>
                       </div>
                     )}
@@ -440,6 +661,13 @@ export default function AsistenteIAPage() {
         <div className="p-3 sm:p-4 border-t border-border bg-card/70 backdrop-blur-md z-10 shrink-0">
           <div className="max-w-3xl mx-auto space-y-3">
 
+            {activeImportId && (
+              <div className="flex items-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+                <FileSpreadsheet className="size-4 shrink-0" />
+                <span className="flex-1">Importación en revisión: responde los datos faltantes o escribe <strong>IMPORTAR</strong>.</span>
+              </div>
+            )}
+
             {/* Sugerencias rápidas (solo al inicio) */}
             {messages.length === 1 && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -463,18 +691,41 @@ export default function AsistenteIAPage() {
 
             {/* Campo de texto */}
             <div className="flex gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  if (file) handleFileUpload(file)
+                }}
+              />
+              {user?.rolNombre === "ADMIN" && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  title="Adjuntar Excel de productos"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={loading || uploading || Boolean(activeImportId)}
+                  className="h-10 w-10 shrink-0 rounded-xl"
+                >
+                  {uploading ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
+                </Button>
+              )}
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Pregunta sobre inventario, ventas, lotes, compras..."
+                placeholder={activeImportId ? "Completa datos: Fila 3: categoría=…" : "Pregunta sobre inventario, ventas o adjunta un Excel..."}
                 className="flex-1 bg-muted/40 border-border text-sm py-5 rounded-xl placeholder:text-muted-foreground/60"
-                disabled={loading}
+                disabled={loading || uploading}
                 maxLength={2500}
               />
               <Button
                 onClick={() => handleSend()}
-                disabled={loading || !input.trim()}
+                disabled={loading || uploading || !input.trim()}
                 className="bg-primary hover:bg-primary/90 text-primary-foreground py-5 px-4 sm:px-5 rounded-xl shadow-lg shadow-primary/20 transition-transform active:scale-95 shrink-0"
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}

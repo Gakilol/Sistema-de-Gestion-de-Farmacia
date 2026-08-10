@@ -15,7 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { toast } from "sonner"
-import * as XLSX from "xlsx"
+import * as XLSX from "xlsx-js-style"
 import { appendReportSheet, createReportWorkbook } from "@/lib/reportes/excel-export"
 import { 
   BarChart3, TrendingUp, AlertTriangle, Activity, Calendar, Search, 
@@ -315,13 +315,17 @@ export default function ReportesPage() {
           columns: [
             { header: "Métrica", width: 38, value: (row) => row.metric },
             { header: "Valor", width: 22, value: (row) => row.value, numberFormat: "#,##0.00" },
-            { header: "Tipo", width: 16, value: (row) => row.type },
+            { header: "Formato", width: 16, value: (row) => row.type === "currency" ? "Moneda" : row.type === "percent" ? "Porcentaje" : "Número" },
           ],
         })
         const sheet = workbook.Sheets.Resumen
         summaryRows.forEach((row, index) => {
           const cell = sheet[`B${index + 6}`]
-          if (cell) cell.z = row.type === "currency" ? currencyFormat : row.type === "percent" ? "0.0%" : "#,##0"
+          if (cell) {
+            const format = row.type === "currency" ? currencyFormat : row.type === "percent" ? "0.0%" : "#,##0"
+            cell.z = format
+            cell.s = { ...(cell.s || {}), numFmt: format }
+          }
         })
       }
 
@@ -337,11 +341,11 @@ export default function ReportesPage() {
             { header: "Fecha", width: 16, value: (row) => new Date(row.fecha).toLocaleDateString("es-NI") },
             { header: "Cliente", width: 28, value: (row) => row.cliente },
             { header: "Total bruto", width: 17, value: (row) => row.totalBruto, numberFormat: currencyFormat },
-            { header: "Desc. línea", width: 17, value: (row) => row.descuentoLineas, numberFormat: currencyFormat },
-            { header: "Desc. general", width: 17, value: (row) => row.descuentoGeneral, numberFormat: currencyFormat },
+            { header: "Descuento por línea", width: 20, value: (row) => row.descuentoLineas, numberFormat: currencyFormat },
+            { header: "Descuento general", width: 20, value: (row) => row.descuentoGeneral, numberFormat: currencyFormat },
             { header: "Total neto", width: 17, value: (row) => row.total, numberFormat: currencyFormat },
-            { header: "Costo COGS", width: 17, value: (row) => row.cogs, numberFormat: currencyFormat },
-            { header: "Utilidad", width: 17, value: (row) => row.utilidad, numberFormat: currencyFormat },
+            { header: "Costo de ventas", width: 18, value: (row) => row.cogs, numberFormat: currencyFormat },
+            { header: "Utilidad bruta", width: 18, value: (row) => row.utilidad, numberFormat: currencyFormat },
             { header: "Margen", width: 13, value: (row) => row.margenPct / 100, numberFormat: "0.0%" },
           ],
         })
@@ -358,7 +362,7 @@ export default function ReportesPage() {
             { header: "Producto", width: 34, value: (row) => row.nombre },
             { header: "Laboratorio", width: 24, value: (row) => row.laboratorio },
             { header: "Categoría", width: 22, value: (row) => row.categoria },
-            { header: "Cant. vendida", width: 15, value: (row) => row.cantidadVendida },
+            { header: "Cantidad vendida", width: 17, value: (row) => row.cantidadVendida },
             { header: "Ingresos brutos", width: 18, value: (row) => row.ingresosBrutos, numberFormat: currencyFormat },
             { header: "Descuento", width: 18, value: (row) => row.descuentoLinea + row.descuentoGeneralProrrateado, numberFormat: currencyFormat },
             { header: "Ingresos netos", width: 18, value: (row) => row.ingresosTotales, numberFormat: currencyFormat },

@@ -28,7 +28,6 @@ import {
   Tag,
   Stethoscope,
   Banknote,
-  BrainCircuit,
   Share2,
 } from "lucide-react"
 
@@ -102,7 +101,6 @@ export function Sidebar() {
     { href: "/admin/descuentos", label: "Descuentos", icon: Tag },
     { href: "/proveedores", label: "Proveedores", icon: Truck },
     { href: "/compras", label: "Compras", icon: ShoppingCart },
-    { href: "/compras/recomendaciones", label: "Compras inteligentes", icon: BrainCircuit },
     { href: "/inventario", label: "Inventario", icon: ClipboardList },
     { href: "/usuarios", label: "Usuarios", icon: Settings },
     { href: "/reportes", label: "Reportes", icon: TrendingUp },

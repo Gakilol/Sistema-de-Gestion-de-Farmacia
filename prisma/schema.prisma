@@ -39,6 +39,51 @@ model Usuario {
   cajas                  CajaSesion[]
   movimientosCaja        CajaMovimiento[]
   accesosPacienteCreados AccesoPaciente[]
+  iaConversaciones       IAConversacion[]
+  iaImportaciones        IAImportacionProducto[]
+}
+
+// ===== ASISTENTE IA: HISTORIAL E IMPORTACIONES =====
+model IAConversacion {
+  id          String                  @id @default(cuid())
+  idUsuario   Int
+  usuario     Usuario                 @relation(fields: [idUsuario], references: [id], onDelete: Cascade)
+  titulo      String                  @default("Nueva conversación")
+  mensajes    IAMensaje[]
+  importaciones IAImportacionProducto[]
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+
+  @@index([idUsuario, updatedAt])
+}
+
+model IAMensaje {
+  id             String         @id @default(cuid())
+  idConversacion String
+  conversacion   IAConversacion @relation(fields: [idConversacion], references: [id], onDelete: Cascade)
+  rol            String
+  contenido      String         @db.Text
+  metadata       Json?
+  createdAt      DateTime       @default(now())
+
+  @@index([idConversacion, createdAt])
+}
+
+model IAImportacionProducto {
+  id             String          @id @default(cuid())
+  idUsuario      Int
+  usuario        Usuario         @relation(fields: [idUsuario], references: [id], onDelete: Cascade)
+  idConversacion String?
+  conversacion   IAConversacion? @relation(fields: [idConversacion], references: [id], onDelete: SetNull)
+  archivo        String
+  estado         String          @default("BORRADOR")
+  filas          Json
+  resumen        Json?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([idUsuario, estado, updatedAt])
+  @@index([idConversacion])
 }
 
 model Cliente {

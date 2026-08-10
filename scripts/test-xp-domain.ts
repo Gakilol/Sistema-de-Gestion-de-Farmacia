@@ -2,7 +2,6 @@ import assert from "node:assert/strict"
 import { asignarLotesFEFO } from "../lib/domain/fefo"
 import { calcularCierreCaja } from "../lib/domain/cash"
 import { estadoDespuesDeSurtir, puedeTransicionarReceta } from "../lib/domain/prescriptions"
-import { calcularRecomendacionCompra } from "../lib/domain/purchase-recommendations"
 import { formatearCedulaMientrasEscribe, ocultarCedula, prepararCedulaBusqueda } from "../lib/domain/patient-access"
 
 const ahora = new Date("2026-08-07T12:00:00Z")
@@ -24,10 +23,6 @@ assert.equal(estadoDespuesDeSurtir([{ cantidad: 2, cantidadFacturada: 2 }]), "US
 assert.equal(puedeTransicionarReceta("EMITIDA", "EN_PREPARACION"), true)
 assert.equal(puedeTransicionarReceta("ANULADA", "EMITIDA"), false)
 
-const recomendacion = calcularRecomendacionCompra({ id: 1, stockActual: 8, stockMinimo: 10, ventas30Dias: 30, unidadesPorVencer: 5 })
-assert.equal(recomendacion.cantidadSugerida, 27)
-assert.equal(recomendacion.variables.stockUtil, 3)
-
 const cedula = prepararCedulaBusqueda("0010101900001a")
 assert.equal(cedula?.formateada, "001-010190-0001A")
 assert.deepEqual(cedula?.candidatas, ["001-010190-0001A", "0010101900001A"])
@@ -37,4 +32,4 @@ assert.equal(ocultarCedula("001-010190-0001A"), "***-******-0001A")
 assert.equal(prepararCedulaBusqueda("001-00001-0001A")?.formateada, "001-00001-0001A")
 assert.equal(formatearCedulaMientrasEscribe("001000010001a"), "001-00001-0001A")
 
-console.log("OK: 17 reglas XP de dominio verificadas (FEFO, caja, receta, compras y acceso clínico).")
+console.log("OK: reglas XP de dominio verificadas (FEFO, caja, receta y acceso clínico).")

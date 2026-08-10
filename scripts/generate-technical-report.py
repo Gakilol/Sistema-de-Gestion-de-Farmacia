@@ -290,10 +290,10 @@ def build():
     add_heading(doc, "8.1 Base de datos", 2)
     doc.add_paragraph("La migración 20260807090000_xp_operacion_integrada es aditiva y contiene rollback. Añade CajaSesion, CajaMovimiento y AccesoPaciente; incorpora Venta.idReceta, Venta.idCaja y ExamenPaciente.autorizadoPortal. Se agregan índices de fecha, estado y relaciones de consulta frecuente, además de un índice único parcial que impide dos cajas ABIERTA para el mismo usuario. La migración fue aplicada en la base Neon configurada y prisma migrate status confirmó que las nueve migraciones están al día.")
     add_heading(doc, "8.2 APIs", 2)
-    for item in ["/api/caja", "/api/recordatorios", "/api/compras/recomendaciones", "/api/dashboard/gerencial", "/api/paciente/acceso", "/api/paciente/resumen/[token]"]: add_bullet(doc, item)
+    for item in ["/api/caja", "/api/recordatorios", "/api/dashboard/gerencial", "/api/paciente/acceso", "/api/paciente/resumen/[token]"]: add_bullet(doc, item)
     doc.add_paragraph("Ventas ahora valida stock vigente agregado, alergias, pertenencia de productos a la receta, excepción FEFO y caja abierta. Recetas materializa VENCIDA bajo demanda y expone transiciones controladas.")
     add_heading(doc, "8.3 Interfaz", 2)
-    doc.add_paragraph("El dashboard incluye recordatorios e indicadores gerenciales por rol. La venta identifica FEFO y habilita selector de lote sólo a ADMIN. Se añadieron vistas para caja, compras inteligentes, generación de resumen y consulta pública imprimible. En modo oscuro, los resultados de productos y clientes ahora usan fondo opaco, flujo vertical sin superposición, límites de altura, roles accesibles y bloqueo visible de artículos sin stock.")
+    doc.add_paragraph("El dashboard incluye recordatorios e indicadores gerenciales por rol. La venta identifica FEFO y habilita selector de lote sólo a ADMIN. Se añadieron vistas para caja, generación de resumen y consulta pública imprimible. En modo oscuro, los resultados de productos y clientes ahora usan fondo opaco, flujo vertical sin superposición, límites de altura, roles accesibles y bloqueo visible de artículos sin stock.")
     add_heading(doc, "8.4 Seguridad y privacidad", 2)
     add_bullet(doc, "El token del paciente se genera con randomBytes(32), se entrega una vez y se almacena sólo como SHA-256.")
     add_bullet(doc, "La consulta pública parte del idCliente ligado al token; no admite identificadores arbitrarios.")
@@ -358,12 +358,10 @@ def build():
         ["lib/domain/fefo.ts", "Regla FEFO reutilizable."],
         ["lib/domain/cash.ts", "Cálculo de cierre."],
         ["lib/domain/prescriptions.ts", "Estados y transiciones."],
-        ["lib/domain/purchase-recommendations.ts", "Recomendación explicable."],
         ["app/api/ventas/route.ts", "Venta, receta, caja y auditoría en transacción."],
         ["app/api/caja/route.ts", "Apertura, movimientos, cierre y resolución."],
         ["app/api/recordatorios/route.ts", "Centro por rol."],
         ["app/api/dashboard/gerencial/route.ts", "KPIs agregados."],
-        ["app/api/compras/recomendaciones/route.ts", "Demanda, vencimiento y proveedores."],
         ["app/api/paciente/", "Generación y consumo del enlace temporal."],
         ["app/ventas/nueva/page.tsx", "FEFO, excepción y alergias."],
         ["app/caja/page.tsx", "Interfaz de caja."],
