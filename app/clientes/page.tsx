@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
 import { clienteSchema } from "@/lib/validations"
 import { useCurrentUser } from "@/app/hooks/useCurrentUser"
+import { usePersistentState } from "@/hooks/usePersistentState"
 
 interface Cliente {
   id: number
@@ -21,6 +22,13 @@ interface Cliente {
   direccion: string | null
   activo: boolean
   tipoPerfil: "FARMACIA" | "CLINICA" | "AMBOS"
+  canalPreferido: "INTERNO" | "WHATSAPP" | "EMAIL" | "SMS"
+  consentimientoWhatsApp: boolean
+  consentimientoEmail: boolean
+  consentimientoSms: boolean
+  puntosFidelidad: number
+  nivelFidelidad: "BRONCE" | "PLATA" | "ORO"
+  saldoFavor: string
 }
 
 export default function ClientesPage() {
@@ -29,7 +37,7 @@ export default function ClientesPage() {
 
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState("")
+  const [search, setSearch] = usePersistentState("farmapos:clientes:busqueda", "")
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
 
@@ -40,6 +48,10 @@ export default function ClientesPage() {
     correo: "",
     direccion: "",
     tipoPerfil: "FARMACIA" as "FARMACIA" | "CLINICA" | "AMBOS",
+    canalPreferido: "INTERNO" as "INTERNO" | "WHATSAPP" | "EMAIL" | "SMS",
+    consentimientoWhatsApp: false,
+    consentimientoEmail: false,
+    consentimientoSms: false,
   })
 
   useEffect(() => {
@@ -82,7 +94,8 @@ export default function ClientesPage() {
       const data = await res.json()
       if (res.ok) {
         toast.success(editingId ? "Cliente actualizado" : "Cliente creado exitosamente");
-        setFormData({ nombreCompleto: "", cedula: "", telefono: "", correo: "", direccion: "", tipoPerfil: "FARMACIA" })
+        await fetch(`/api/clientes/${data.id}/preferencias`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ canalPreferido: formData.canalPreferido, consentimientoWhatsApp: formData.consentimientoWhatsApp, consentimientoEmail: formData.consentimientoEmail, consentimientoSms: formData.consentimientoSms }) })
+        setFormData({ nombreCompleto: "", cedula: "", telefono: "", correo: "", direccion: "", tipoPerfil: "FARMACIA", canalPreferido: "INTERNO", consentimientoWhatsApp: false, consentimientoEmail: false, consentimientoSms: false })
         setEditingId(null)
         setShowForm(false)
         fetchClientes()
@@ -95,9 +108,18 @@ export default function ClientesPage() {
     }
   }
 
+  const guardarConsentimiento = async () => {
+    if (!editingId) return
+    const response = await fetch(`/api/clientes/${editingId}/preferencias`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ canalPreferido: formData.canalPreferido, consentimientoWhatsApp: formData.consentimientoWhatsApp, consentimientoEmail: formData.consentimientoEmail, consentimientoSms: formData.consentimientoSms }) })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) return toast.error(payload.error || "No se pudo guardar el consentimiento")
+    toast.success("Consentimiento actualizado")
+    fetchClientes()
+  }
+
   const handleOpenCreate = () => {
     setEditingId(null)
-    setFormData({ nombreCompleto: "", cedula: "", telefono: "", correo: "", direccion: "", tipoPerfil: "FARMACIA" })
+    setFormData({ nombreCompleto: "", cedula: "", telefono: "", correo: "", direccion: "", tipoPerfil: "FARMACIA", canalPreferido: "INTERNO", consentimientoWhatsApp: false, consentimientoEmail: false, consentimientoSms: false })
     setShowForm(true)
   }
 
@@ -110,6 +132,10 @@ export default function ClientesPage() {
       correo: cliente.correo || "", 
       direccion: cliente.direccion || "",
       tipoPerfil: cliente.tipoPerfil || "FARMACIA"
+      ,canalPreferido: cliente.canalPreferido || "INTERNO"
+      ,consentimientoWhatsApp: cliente.consentimientoWhatsApp
+      ,consentimientoEmail: cliente.consentimientoEmail
+      ,consentimientoSms: cliente.consentimientoSms
     })
     setShowForm(true)
   }
@@ -242,6 +268,23 @@ export default function ClientesPage() {
                     <Input value={formData.direccion} onChange={(e) => setFormData({ ...formData, direccion: e.target.value })} className="bg-muted/30 border-border" placeholder="Ej: Bo. San Judas, de la iglesia 2c al sur" />
                   </div>
                 </div>
+                <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+                  <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <div><p className="text-sm font-semibold text-foreground">Consentimiento de comunicaciones</p><p className="text-xs text-muted-foreground">Registra solo los canales autorizados expresamente por el cliente.</p></div>
+                    <select value={formData.canalPreferido} onChange={(event) => setFormData({ ...formData, canalPreferido: event.target.value as typeof formData.canalPreferido })} className="rounded-md border border-border bg-background px-3 py-2 text-sm">
+                      <option value="INTERNO">Sin canal preferido</option>
+                      <option value="WHATSAPP">WhatsApp</option>
+                      <option value="EMAIL">Correo</option>
+                      <option value="SMS">SMS</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-wrap gap-4 text-sm text-foreground">
+                    <label className="flex items-center gap-2"><input type="checkbox" checked={formData.consentimientoWhatsApp} onChange={(event) => setFormData({ ...formData, consentimientoWhatsApp: event.target.checked })} /> WhatsApp</label>
+                    <label className="flex items-center gap-2"><input type="checkbox" checked={formData.consentimientoEmail} onChange={(event) => setFormData({ ...formData, consentimientoEmail: event.target.checked })} /> Correo</label>
+                    <label className="flex items-center gap-2"><input type="checkbox" checked={formData.consentimientoSms} onChange={(event) => setFormData({ ...formData, consentimientoSms: event.target.checked })} /> SMS</label>
+                  </div>
+                  {editingId && <Button type="button" variant="outline" size="sm" onClick={guardarConsentimiento} className="mt-3">Guardar consentimiento</Button>}
+                </div>
                 <div className="flex gap-2">
                   <Button type="submit" className="bg-primary hover:bg-primary/90 text-primary-foreground">{editingId ? "Actualizar" : "Guardar"}</Button>
                   <Button type="button" variant="outline" onClick={() => { setShowForm(false); setEditingId(null) }}>Cancelar</Button>
@@ -261,13 +304,15 @@ export default function ClientesPage() {
                 <table className="w-full">
                   <thead className="bg-muted/30 border-b border-border">
                     <tr>
-                      {["Nombre", "Cédula", "Teléfono", "Correo", "Estado", "Acciones"].map((h) => (
+                      {["Nombre", "Fidelización", "Cédula", "Teléfono", "Correo", "Estado", "Acciones"].map((h) => (
                         <th key={h} className="px-6 py-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {filteredClientes.map((cliente) => (
+                    {filteredClientes.length === 0 ? (
+                      <tr><td colSpan={7} className="px-6 py-12 text-center"><Users className="mx-auto h-9 w-9 text-muted-foreground/50" /><p className="mt-3 font-medium text-foreground">No hay clientes que coincidan</p><p className="mt-1 text-sm text-muted-foreground">Cambia la búsqueda o registra un nuevo cliente.</p><div className="mt-4 flex justify-center gap-2"><Button size="sm" variant="outline" onClick={() => setSearch("")}>Limpiar búsqueda</Button><Button size="sm" onClick={handleOpenCreate}>Nuevo cliente</Button></div></td></tr>
+                    ) : filteredClientes.map((cliente) => (
                       <tr key={cliente.id} className="hover:bg-muted/20 transition-colors">
                         <td className="px-6 py-4 text-sm font-medium text-foreground">
                           <div>{cliente.nombreCompleto}</div>
@@ -278,6 +323,10 @@ export default function ClientesPage() {
                               <span className="text-emerald-500 font-semibold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">Solo Farmacia</span>
                             )}
                           </div>
+                        </td>
+                        <td className="px-6 py-4 text-sm">
+                          <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${cliente.nivelFidelidad === "ORO" ? "border-amber-500/25 bg-amber-500/10 text-amber-400" : cliente.nivelFidelidad === "PLATA" ? "border-blue-500/25 bg-blue-500/10 text-blue-300" : "border-border bg-muted/30 text-muted-foreground"}`}>{cliente.nivelFidelidad} · {cliente.puntosFidelidad} pts</span>
+                          {Number(cliente.saldoFavor) > 0 && <p className="mt-1 text-xs font-medium text-emerald-400">Saldo C${Number(cliente.saldoFavor).toFixed(2)}</p>}
                         </td>
                         <td className="px-6 py-4 text-sm text-muted-foreground">{cliente.cedula || "—"}</td>
                         <td className="px-6 py-4 text-sm text-muted-foreground">{cliente.telefono || "—"}</td>

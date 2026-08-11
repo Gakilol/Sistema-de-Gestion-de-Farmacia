@@ -25,6 +25,28 @@ const SMTP_CONFIGS: Record<string, { host: string; port: number; secure: boolean
 
 const smtpConfigured = !!(SMTP_HOST || SMTP_CONFIGS[SMTP_PROVIDER]) && !!SMTP_USER && !!SMTP_PASS
 
+export function obtenerEstadoCorreo() {
+  return { disponible: smtpConfigured, proveedor: SMTP_PROVIDER }
+}
+
+export async function enviarCorreoTransaccional(input: { destinatario: string; asunto: string; mensaje: string }) {
+  if (!smtpConfigured) return { ok: false, error: "SMTP no configurado", codigo: "SIN_INTEGRACION" as const }
+  try {
+    const transporter = getTransporter()
+    const safeMessage = input.mensaje.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[char]!)
+    const info = await transporter.sendMail({
+      from: SMTP_FROM,
+      to: input.destinatario,
+      subject: input.asunto,
+      text: input.mensaje,
+      html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:28px;border:1px solid #dbe4ea;border-radius:16px"><h2 style="color:#059669">FarmaPOS</h2><p style="white-space:pre-line;line-height:1.6;color:#334155">${safeMessage}</p><p style="font-size:12px;color:#64748b">Mensaje enviado según tus preferencias de comunicación.</p></div>`,
+    })
+    return { ok: true, proveedorId: info.messageId }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Error SMTP", codigo: "FALLO_ENVIO" as const }
+  }
+}
+
 function getTransporter() {
   const config = SMTP_CONFIGS[SMTP_PROVIDER]
   const host = SMTP_HOST || config?.host

@@ -62,6 +62,11 @@ export default function ClinicaPage() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
 
+  useEffect(() => {
+    const tab = new URLSearchParams(window.location.search).get("tab")
+    if (["citas", "consultas", "recetas"].includes(tab || "")) setActiveTab(tab as Tab)
+  }, [])
+
   // Master Data
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [productos, setProductos] = useState<Producto[]>([])

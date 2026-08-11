@@ -5,6 +5,7 @@ import { registrarLog } from "@/lib/audit"
 import { ventaSchema } from "@/lib/validations"
 import { toManaguaStartOfDay, toManaguaEndOfDay } from "@/lib/timezone"
 import { asignarLotesFEFO } from "@/lib/domain/fefo"
+import { calcularBeneficiosVenta, nivelPorPuntos } from "@/lib/domain/loyalty"
 
 export async function GET(request: NextRequest) {
   try {
@@ -42,6 +43,7 @@ export async function GET(request: NextRequest) {
       include: {
         cliente: true,
         usuario: { include: { rol: true } },
+        devoluciones: { include: { detalles: true }, orderBy: { createdAt: "desc" } },
         descuento: true,
         detalles: {
           include: {
@@ -89,12 +91,14 @@ export async function POST(request: NextRequest) {
       numeroReceta,
       tipoComprobante,
       estado,
+      estadoEntrega,
       montoRecibido,
       cambio,
       rucCliente,
       idDescuento,
       descuentoTotal
-      ,confirmarAlergias
+      ,confirmarAlergias,
+      aplicarSaldoFavor
     } = validation.data
     const detalles = validationDetalles as any[]
 
@@ -248,7 +252,9 @@ export async function POST(request: NextRequest) {
     }
 
     const saleDiscount = Number(descuentoTotal || 0)
-    let total = Math.max(0, totalBruto - saleDiscount)
+    const clienteFidelidad = idCliente ? await prisma.cliente.findUnique({ where: { id: Number(idCliente) }, select: { puntosFidelidad: true, nivelFidelidad: true, saldoFavor: true } }) : null
+    const beneficios = calcularBeneficiosVenta({ subtotalTrasPromocion: Math.max(0, totalBruto - saleDiscount), nivel: clienteFidelidad?.nivelFidelidad || "BRONCE", saldoDisponible: Number(clienteFidelidad?.saldoFavor || 0), aplicarSaldo: Boolean(aplicarSaldoFavor) })
+    const total = beneficios.total
 
     // ── Idempotencia: Evitar ventas duplicadas por doble click en menos de 15 segundos ──
     const quinceSegundosAtras = new Date(Date.now() - 15 * 1000)
@@ -292,6 +298,14 @@ export async function POST(request: NextRequest) {
         // ── Transacción atómica: venta + detalles + FEFO batch deduction + receta + movimientos ──
         venta = await prisma.$transaction(async (tx: any) => {
           let recetaId: number | null = null
+          let puntosPrevios = clienteFidelidad?.puntosFidelidad || 0
+          if (idCliente) {
+            await tx.$executeRawUnsafe(`SELECT id FROM "Cliente" WHERE id = ${Number(idCliente)} FOR UPDATE`)
+            const clienteActual = await tx.cliente.findUnique({ where: { id: Number(idCliente) }, select: { puntosFidelidad: true, saldoFavor: true } })
+            if (!clienteActual) throw new Error("Cliente no encontrado")
+            if (Number(clienteActual.saldoFavor) < beneficios.saldoAplicado) throw new Error("El saldo a favor cambió; actualiza la venta")
+            puntosPrevios = clienteActual.puntosFidelidad
+          }
           // 1. Bloqueo pesimista de productos y lotes en orden determinista para evitar Deadlocks (SOLO físicos)
           const physicalProductIds = productIds.filter((id: number) => !productoMap.get(id)!.esServicio)
           const sortedPhysicalProductIds = [...physicalProductIds].sort((a, b) => a - b)
@@ -392,12 +406,16 @@ export async function POST(request: NextRequest) {
               nombrePodologo: nombrePodologo || null,
               numeroReceta: numeroReceta || null,
               tipoComprobante: tipoComprobante || "RECIBO",
-              estado: estado || "COMPLETADA",
+          estado: estado || "COMPLETADA",
+          estadoEntrega: estadoEntrega || "ENTREGADA",
               montoRecibido: montoRecibido !== undefined && montoRecibido !== null ? Number(montoRecibido) : null,
               cambio: cambio !== undefined && cambio !== null ? Number(cambio) : null,
               rucCliente: rucCliente || null,
               idDescuento: idDescuento || null,
               descuentoTotal: descuentoTotal ? Number(descuentoTotal) : 0,
+              descuentoFidelizacion: beneficios.descuentoFidelizacion,
+              saldoAplicado: beneficios.saldoAplicado,
+              puntosGanados: beneficios.puntosGanados,
               idReceta: recetaId,
               idCaja: cajaAbierta?.id ?? null,
               detalles: {
@@ -417,6 +435,13 @@ export async function POST(request: NextRequest) {
               usuario: { include: { rol: true } },
             },
           })
+
+          if (idCliente) {
+            const puntosNuevos = puntosPrevios + beneficios.puntosGanados
+            await tx.cliente.update({ where: { id: Number(idCliente) }, data: { puntosFidelidad: puntosNuevos, nivelFidelidad: nivelPorPuntos(puntosNuevos), ...(beneficios.saldoAplicado > 0 ? { saldoFavor: { decrement: beneficios.saldoAplicado } } : {}) } })
+            if (beneficios.puntosGanados > 0) await tx.movimientoFidelizacion.create({ data: { idCliente: Number(idCliente), tipo: "PUNTOS_VENTA", puntos: beneficios.puntosGanados, idVenta: nuevaVenta.id, referencia: `Venta #${nuevaVenta.id}`, idUsuario: user.id } })
+            if (beneficios.saldoAplicado > 0) await tx.movimientoFidelizacion.create({ data: { idCliente: Number(idCliente), tipo: "USO_SALDO", monto: -beneficios.saldoAplicado, idVenta: nuevaVenta.id, referencia: `Venta #${nuevaVenta.id}`, idUsuario: user.id } })
+          }
 
           // 4b. Incrementar usosActuales del descuento si se aplicó uno
           if (idDescuento && saleDiscount > 0) {

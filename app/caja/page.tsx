@@ -496,7 +496,7 @@ export default function CajaPage() {
             </section>
           )}
 
-          <section id="cierres" className="mt-10 scroll-mt-20 border-t border-border pt-7">
+          <section id="diferencias-caja" className="mt-10 scroll-mt-20 border-t border-border pt-7">
             <div className="mb-4 flex items-end justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Historial</p>

@@ -228,6 +228,13 @@ export async function POST(request: NextRequest) {
           },
         })
 
+        // Mantener el costo del catálogo proveedor-producto alineado con la última recepción.
+        await tx.proveedorProducto.upsert({
+          where: { idProveedor_idProducto: { idProveedor, idProducto: detalle.idProducto } },
+          create: { idProveedor, idProducto: detalle.idProducto, precioCompra: costoUnitario },
+          update: { precioCompra: costoUnitario },
+        })
+
         // Registrar movimiento de inventario (KARDEX)
         await tx.movimientoInventario.create({
           data: {

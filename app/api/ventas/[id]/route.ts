@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
 import { registrarLog } from "@/lib/audit"
+import { z } from "zod"
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -26,6 +27,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
             }
           }
         },
+        devoluciones: { include: { detalles: true }, orderBy: { createdAt: "desc" } },
       },
     })
 
@@ -38,6 +40,23 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     console.error("Error fetching venta:", error)
     return NextResponse.json({ error: "Error fetching venta" }, { status: 500 })
   }
+}
+
+const entregaSchema = z.object({ accion: z.enum(["MARCAR_LISTO", "MARCAR_ENTREGADA"]) })
+
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await getCurrentUser()
+  if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+  if (!['ADMIN', 'EMPLEADO'].includes(user.rolNombre)) return NextResponse.json({ error: "Sin permiso" }, { status: 403 })
+  const { id } = await params
+  const idVenta = Number(id)
+  const validation = entregaSchema.safeParse(await request.json().catch(() => null))
+  if (!Number.isInteger(idVenta) || !validation.success) return NextResponse.json({ error: "Solicitud inválida" }, { status: 400 })
+  const estadoEntrega = validation.data.accion === "MARCAR_LISTO" ? "LISTO_PARA_RETIRAR" : "ENTREGADA"
+  const updated = await prisma.venta.updateMany({ where: { id: idVenta, estado: "COMPLETADA" }, data: { estadoEntrega } })
+  if (updated.count !== 1) return NextResponse.json({ error: "Venta no encontrada o anulada" }, { status: 409 })
+  registrarLog({ accion: validation.data.accion, entidad: "Venta", entidadId: idVenta, idUsuario: user.id, detalles: { estadoEntrega } })
+  return NextResponse.json(await prisma.venta.findUnique({ where: { id: idVenta }, include: { cliente: true, detalles: { include: { producto: true } }, devoluciones: true } }))
 }
 
 export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {

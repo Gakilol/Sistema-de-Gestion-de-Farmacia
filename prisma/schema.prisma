@@ -41,6 +41,12 @@ model Usuario {
   accesosPacienteCreados AccesoPaciente[]
   iaConversaciones       IAConversacion[]
   iaImportaciones        IAImportacionProducto[]
+  ordenesCompraCreadas   OrdenCompra[]            @relation("OrdenCompraCreadaPor")
+  ordenesCompraAprobadas OrdenCompra[]            @relation("OrdenCompraAprobadaPor")
+  ventasPausadas         VentaPausada[]
+  devolucionesVenta      DevolucionVenta[]
+  comunicacionesCliente  ComunicacionCliente[]
+  movimientosFidelidad   MovimientoFidelizacion[]
 }
 
 // ===== ASISTENTE IA: HISTORIAL E IMPORTACIONES =====
@@ -87,29 +93,40 @@ model IAImportacionProducto {
 }
 
 model Cliente {
-  id              Int       @id @default(autoincrement())
-  nombreCompleto  String
-  telefono        String?   @unique
-  correo          String?   @unique
-  cedula          String?   @unique
-  ruc             String?   @unique
-  direccion       String?
-  activo          Boolean   @default(true)
-  esDatoPrueba    Boolean   @default(false)
-  fechaNacimiento DateTime?
-  sexo            String?
-  tipoPerfil      String    @default("FARMACIA")
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id                          Int       @id @default(autoincrement())
+  nombreCompleto              String
+  telefono                    String?   @unique
+  correo                      String?   @unique
+  cedula                      String?   @unique
+  ruc                         String?   @unique
+  direccion                   String?
+  activo                      Boolean   @default(true)
+  esDatoPrueba                Boolean   @default(false)
+  fechaNacimiento             DateTime?
+  sexo                        String?
+  tipoPerfil                  String    @default("FARMACIA")
+  canalPreferido              String    @default("INTERNO") // INTERNO, WHATSAPP, EMAIL, SMS
+  consentimientoWhatsApp      Boolean   @default(false)
+  consentimientoEmail         Boolean   @default(false)
+  consentimientoSms           Boolean   @default(false)
+  consentimientoActualizadoEn DateTime?
+  puntosFidelidad             Int       @default(0)
+  nivelFidelidad              String    @default("BRONCE") // BRONCE, PLATA, ORO
+  saldoFavor                  Decimal   @default(0) @db.Decimal(10, 2)
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
 
-  ventas        Venta[]
-  citas         Cita[]
-  atenciones    AtencionPodologica[]
-  recetas       Receta[]
-  datosClinicos DatosClinicosPaciente?
-  examenes      ExamenPaciente[]
-  descuentos    DescuentoCliente[]
-  accesosPortal AccesoPaciente[]
+  ventas               Venta[]
+  citas                Cita[]
+  atenciones           AtencionPodologica[]
+  recetas              Receta[]
+  datosClinicos        DatosClinicosPaciente?
+  examenes             ExamenPaciente[]
+  descuentos           DescuentoCliente[]
+  accesosPortal        AccesoPaciente[]
+  ventasPausadas       VentaPausada[]
+  comunicaciones       ComunicacionCliente[]
+  movimientosFidelidad MovimientoFidelizacion[]
 }
 
 // ===== CATEGORÍA DE PRODUCTOS =====
@@ -160,15 +177,16 @@ model Producto {
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 
-  detallesCompra DetalleCompra[]
-  detallesVenta  DetalleVenta[]
-  proveedores    ProveedorProducto[]
-  lotes          Lote[]
-  movimientos    MovimientoInventario[]
-  devoluciones   DevolucionProveedor[]
-  detallesReceta DetalleReceta[]
-  descuentos     DescuentoProducto[]
-  insumos        InsumoAtencion[]
+  detallesCompra      DetalleCompra[]
+  detallesVenta       DetalleVenta[]
+  proveedores         ProveedorProducto[]
+  lotes               Lote[]
+  movimientos         MovimientoInventario[]
+  devoluciones        DevolucionProveedor[]
+  detallesReceta      DetalleReceta[]
+  descuentos          DescuentoProducto[]
+  insumos             InsumoAtencion[]
+  detallesOrdenCompra DetalleOrdenCompra[]
 }
 
 // ===== PROVEEDORES =====
@@ -185,20 +203,22 @@ model Proveedor {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  compras      Compra[]
-  productos    ProveedorProducto[]
-  devoluciones DevolucionProveedor[]
+  compras       Compra[]
+  productos     ProveedorProducto[]
+  devoluciones  DevolucionProveedor[]
+  ordenesCompra OrdenCompra[]
 }
 
 // ===== CATÁLOGO PROVEEDOR-PRODUCTO =====
 model ProveedorProducto {
-  id           Int       @id @default(autoincrement())
-  idProveedor  Int
-  proveedor    Proveedor @relation(fields: [idProveedor], references: [id], onDelete: Cascade)
-  idProducto   Int
-  producto     Producto  @relation(fields: [idProducto], references: [id], onDelete: Cascade)
-  precioCompra Decimal?  @db.Decimal(10, 2)
-  createdAt    DateTime  @default(now())
+  id                Int       @id @default(autoincrement())
+  idProveedor       Int
+  proveedor         Proveedor @relation(fields: [idProveedor], references: [id], onDelete: Cascade)
+  idProducto        Int
+  producto          Producto  @relation(fields: [idProducto], references: [id], onDelete: Cascade)
+  precioCompra      Decimal?  @db.Decimal(10, 2)
+  tiempoEntregaDias Int       @default(7)
+  createdAt         DateTime  @default(now())
 
   @@unique([idProveedor, idProducto])
 }
@@ -217,7 +237,52 @@ model Compra {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  detalles DetalleCompra[]
+  detalles      DetalleCompra[]
+  idOrdenCompra Int?
+  ordenCompra   OrdenCompra?    @relation(fields: [idOrdenCompra], references: [id], onDelete: SetNull)
+
+  @@index([idOrdenCompra])
+}
+
+// ===== ORDENES DE COMPRA (BORRADOR, APROBACION Y RECEPCIONES) =====
+model OrdenCompra {
+  id            Int       @id @default(autoincrement())
+  codigo        String    @unique
+  estado        String    @default("BORRADOR") // BORRADOR, APROBADA, PARCIAL, RECIBIDA, CANCELADA
+  idProveedor   Int
+  proveedor     Proveedor @relation(fields: [idProveedor], references: [id])
+  totalEstimado Decimal   @default(0) @db.Decimal(12, 2)
+  observaciones String?
+  idCreadoPor   Int
+  creadoPor     Usuario   @relation("OrdenCompraCreadaPor", fields: [idCreadoPor], references: [id])
+  idAprobadoPor Int?
+  aprobadoPor   Usuario?  @relation("OrdenCompraAprobadaPor", fields: [idAprobadoPor], references: [id], onDelete: SetNull)
+  aprobadaEn    DateTime?
+  recibidaEn    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  detalles DetalleOrdenCompra[]
+  compras  Compra[]
+
+  @@index([estado, createdAt])
+  @@index([idProveedor])
+}
+
+model DetalleOrdenCompra {
+  id                 Int         @id @default(autoincrement())
+  idOrdenCompra      Int
+  ordenCompra        OrdenCompra @relation(fields: [idOrdenCompra], references: [id], onDelete: Cascade)
+  idProducto         Int
+  producto           Producto    @relation(fields: [idProducto], references: [id])
+  cantidadSolicitada Int
+  cantidadRecibida   Int         @default(0)
+  costoUnitario      Decimal     @db.Decimal(10, 2)
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  @@unique([idOrdenCompra, idProducto])
+  @@index([idProducto])
 }
 
 model DetalleCompra {
@@ -287,32 +352,37 @@ model MovimientoInventario {
 
 // ===== VENTAS DE FARMACIA =====
 model Venta {
-  id              Int         @id @default(autoincrement())
-  fecha           DateTime    @default(now())
-  idCliente       Int?
-  cliente         Cliente?    @relation(fields: [idCliente], references: [id])
-  total           Decimal     @db.Decimal(10, 2)
-  metodoPago      String // "EFECTIVO", "TARJETA", "TRANSFERENCIA"
-  nombrePodologo  String?
-  numeroReceta    String?
-  idUsuario       Int
-  usuario         Usuario     @relation(fields: [idUsuario], references: [id])
-  tipoComprobante String      @default("RECIBO")
-  estado          String      @default("COMPLETADA")
-  montoRecibido   Decimal?    @db.Decimal(10, 2)
-  cambio          Decimal?    @db.Decimal(10, 2)
-  rucCliente      String?
-  idDescuento     Int?
-  descuento       Descuento?  @relation(fields: [idDescuento], references: [id])
-  descuentoTotal  Decimal?    @default(0) @db.Decimal(10, 2)
-  idReceta        Int?
-  receta          Receta?     @relation(fields: [idReceta], references: [id], onDelete: SetNull)
-  idCaja          Int?
-  caja            CajaSesion? @relation(fields: [idCaja], references: [id], onDelete: SetNull)
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  id                    Int         @id @default(autoincrement())
+  fecha                 DateTime    @default(now())
+  idCliente             Int?
+  cliente               Cliente?    @relation(fields: [idCliente], references: [id])
+  total                 Decimal     @db.Decimal(10, 2)
+  metodoPago            String // "EFECTIVO", "TARJETA", "TRANSFERENCIA"
+  nombrePodologo        String?
+  numeroReceta          String?
+  idUsuario             Int
+  usuario               Usuario     @relation(fields: [idUsuario], references: [id])
+  tipoComprobante       String      @default("RECIBO")
+  estado                String      @default("COMPLETADA")
+  estadoEntrega         String      @default("ENTREGADA") // ENTREGADA, LISTO_PARA_RETIRAR
+  montoRecibido         Decimal?    @db.Decimal(10, 2)
+  cambio                Decimal?    @db.Decimal(10, 2)
+  rucCliente            String?
+  idDescuento           Int?
+  descuento             Descuento?  @relation(fields: [idDescuento], references: [id])
+  descuentoTotal        Decimal?    @default(0) @db.Decimal(10, 2)
+  descuentoFidelizacion Decimal     @default(0) @db.Decimal(10, 2)
+  saldoAplicado         Decimal     @default(0) @db.Decimal(10, 2)
+  puntosGanados         Int         @default(0)
+  idReceta              Int?
+  receta                Receta?     @relation(fields: [idReceta], references: [id], onDelete: SetNull)
+  idCaja                Int?
+  caja                  CajaSesion? @relation(fields: [idCaja], references: [id], onDelete: SetNull)
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
 
-  detalles DetalleVenta[]
+  detalles     DetalleVenta[]
+  devoluciones DevolucionVenta[]
 
   @@index([idReceta])
   @@index([idCaja])
@@ -333,7 +403,106 @@ model DetalleVenta {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  lotes DetalleVentaLote[]
+  lotes        DetalleVentaLote[]
+  devoluciones DetalleDevolucionVenta[]
+}
+
+// ===== VENTAS PAUSADAS (SIN MOVIMIENTO DE INVENTARIO) =====
+model VentaPausada {
+  id           Int       @id @default(autoincrement())
+  titulo       String
+  payload      Json
+  estado       String    @default("PAUSADA") // PAUSADA, RECUPERADA, CANCELADA
+  idCliente    Int?
+  cliente      Cliente?  @relation(fields: [idCliente], references: [id], onDelete: SetNull)
+  idUsuario    Int
+  usuario      Usuario   @relation(fields: [idUsuario], references: [id])
+  recuperadaEn DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([estado, updatedAt])
+  @@index([idUsuario, estado])
+}
+
+// ===== DEVOLUCIONES Y CAMBIOS DE VENTAS =====
+model DevolucionVenta {
+  id              Int      @id @default(autoincrement())
+  idempotencyKey  String   @unique
+  idVenta         Int
+  venta           Venta    @relation(fields: [idVenta], references: [id])
+  tipo            String   @default("DEVOLUCION") // DEVOLUCION, CAMBIO
+  motivo          String
+  observacion     String?
+  reintegrarStock Boolean  @default(false)
+  total           Decimal  @db.Decimal(10, 2)
+  creditoGenerado Decimal  @default(0) @db.Decimal(10, 2)
+  estado          String   @default("COMPLETADA")
+  idUsuario       Int
+  usuario         Usuario  @relation(fields: [idUsuario], references: [id])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  detalles DetalleDevolucionVenta[]
+
+  @@index([idVenta, createdAt])
+  @@index([tipo, estado])
+}
+
+model DetalleDevolucionVenta {
+  id                Int             @id @default(autoincrement())
+  idDevolucionVenta Int
+  devolucionVenta   DevolucionVenta @relation(fields: [idDevolucionVenta], references: [id], onDelete: Cascade)
+  idDetalleVenta    Int
+  detalleVenta      DetalleVenta    @relation(fields: [idDetalleVenta], references: [id])
+  cantidad          Int
+  cantidadBase      Int
+  monto             Decimal         @db.Decimal(10, 2)
+  lotes             Json?
+  createdAt         DateTime        @default(now())
+
+  @@index([idDetalleVenta])
+}
+
+// ===== COMUNICACIONES Y CONSENTIMIENTO =====
+model ComunicacionCliente {
+  id          Int       @id @default(autoincrement())
+  idCliente   Int
+  cliente     Cliente   @relation(fields: [idCliente], references: [id], onDelete: Cascade)
+  tipo        String // RECETA_PENDIENTE, RECETA_LISTA, CITA_PROXIMA, RECOMPRA, PEDIDO_LISTO
+  canal       String // WHATSAPP, EMAIL, SMS
+  destino     String
+  asunto      String?
+  mensaje     String
+  estado      String    @default("PENDIENTE") // PENDIENTE, ENVIADO, ENTREGADO, FALLIDO, SIN_INTEGRACION
+  proveedorId String?
+  resultado   String?
+  idUsuario   Int
+  usuario     Usuario   @relation(fields: [idUsuario], references: [id])
+  enviadoEn   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([idCliente, createdAt])
+  @@index([estado, createdAt])
+}
+
+// ===== FIDELIZACION Y SALDO A FAVOR =====
+model MovimientoFidelizacion {
+  id         Int      @id @default(autoincrement())
+  idCliente  Int
+  cliente    Cliente  @relation(fields: [idCliente], references: [id], onDelete: Cascade)
+  tipo       String // PUNTOS_VENTA, USO_SALDO, CREDITO_CAMBIO, AJUSTE
+  puntos     Int      @default(0)
+  monto      Decimal  @default(0) @db.Decimal(10, 2)
+  idVenta    Int?
+  referencia String?
+  idUsuario  Int
+  usuario    Usuario  @relation(fields: [idUsuario], references: [id])
+  createdAt  DateTime @default(now())
+
+  @@index([idCliente, createdAt])
+  @@index([idVenta])
 }
 
 // ===== AUDITORÍA =====

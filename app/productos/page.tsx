@@ -12,6 +12,7 @@ import useSWR from "swr"
 import * as XLSX from "xlsx"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useCurrentUser } from "@/app/hooks/useCurrentUser"
+import { usePersistentState } from "@/hooks/usePersistentState"
 import { ScannerModal } from "@/components/scanner-modal"
 import { useBarcodeScanner } from "@/hooks/useBarcodeScanner"
 
@@ -71,12 +72,12 @@ export default function ProductosPage() {
   const { user } = useCurrentUser()
   const isAdmin = user?.rolNombre === "ADMIN"
 
-  const [search, setSearch] = useState("")
+  const [search, setSearch] = usePersistentState("farmapos:productos:busqueda", "")
   const [showForm, setShowForm] = useState(false)
   const [showCategoryModal, setShowCategoryModal] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState("")
-  const [activeFilter, setActiveFilter] = useState<"todos" | "activos" | "stock-bajo" | "vencidos" | "inactivos">("activos")
-  const [filterCategoria, setFilterCategoria] = useState<string>("")
+  const [activeFilter, setActiveFilter] = usePersistentState<"todos" | "activos" | "stock-bajo" | "vencidos" | "inactivos">("farmapos:productos:estado", "activos")
+  const [filterCategoria, setFilterCategoria] = usePersistentState<string>("farmapos:productos:categoria", "")
 
   // Detalles modal
   const [showDetailsModal, setShowDetailsModal] = useState(false)

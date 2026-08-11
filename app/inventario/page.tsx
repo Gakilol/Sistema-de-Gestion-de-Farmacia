@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
 import { useCurrentUser } from "@/app/hooks/useCurrentUser"
+import { usePersistentState } from "@/hooks/usePersistentState"
 import {
   ClipboardList, Package, AlertTriangle, Clock, Search,
   ChevronLeft, ChevronRight, ArrowUpCircle, ArrowDownCircle,
@@ -68,12 +69,12 @@ export default function InventarioPage() {
   const { user } = useCurrentUser()
   const isAdmin = user?.rolNombre === "ADMIN"
 
-  const [activeTab, setActiveTab] = useState<Tab>("lotes")
-  const [viewMode, setViewMode] = useState<ViewMode>("grouped")
+  const [activeTab, setActiveTab] = usePersistentState<Tab>("farmapos:inventario:tab", "lotes")
+  const [viewMode, setViewMode] = usePersistentState<ViewMode>("farmapos:inventario:vista", "grouped")
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState("")
+  const [search, setSearch] = usePersistentState("farmapos:inventario:busqueda", "")
   const [page, setPage] = useState(1)
-  const [diasAlerta, setDiasAlerta] = useState<number>(90)
+  const [diasAlerta, setDiasAlerta] = usePersistentState<number>("farmapos:inventario:dias-alerta", 90)
 
   // Expanded products state for grouped view
   const [expandedProducts, setExpandedProducts] = useState<Record<number, boolean>>({})
@@ -105,6 +106,11 @@ export default function InventarioPage() {
   const [devSubmitLoading, setDevSubmitLoading] = useState(false)
 
   const LIMIT = 30
+
+  useEffect(() => {
+    const tab = new URLSearchParams(window.location.search).get("tab")
+    if (["lotes", "movimientos", "alertas", "devoluciones"].includes(tab || "")) setActiveTab(tab as Tab)
+  }, [])
 
   useEffect(() => {
     setPage(1)

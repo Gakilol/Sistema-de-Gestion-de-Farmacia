@@ -11,11 +11,12 @@ import { useBarcodeScanner } from "@/hooks/useBarcodeScanner"
 import { esPosibleCedula } from "@/lib/cedulaValidator"
 import {
   Plus, Trash2, ShoppingCart, Search, X,
-  Scan, AlertTriangle, UserPlus, ScanLine
+  Scan, AlertTriangle, UserPlus, ScanLine, PauseCircle, Play, ChevronDown, ShieldCheck, PackageCheck, Clock3
 } from "lucide-react"
 import { toast } from "sonner"
 import useSWR from "swr"
 import { useCurrentUser } from "@/app/hooks/useCurrentUser"
+import { tasaDescuentoNivel } from "@/lib/domain/loyalty"
 
 const fetcher = async (url: string) => {
   const response = await fetch(url)
@@ -60,6 +61,9 @@ interface Cliente {
   correo?: string | null
   direccion?: string | null
   activo?: boolean
+  puntosFidelidad?: number
+  nivelFidelidad?: "BRONCE" | "PLATA" | "ORO"
+  saldoFavor?: string
 }
 
 interface LineaVenta {
@@ -195,9 +199,15 @@ export default function NuevaVentaPage() {
   const [motivoCambioLote, setMotivoCambioLote] = useState("")
   const [alergiasPendientes, setAlergiasPendientes] = useState<string | null>(null)
   const [confirmarAlergias, setConfirmarAlergias] = useState(false)
+  const [estadoEntrega, setEstadoEntrega] = useState<"ENTREGADA" | "LISTO_PARA_RETIRAR">("ENTREGADA")
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [showPausadas, setShowPausadas] = useState(false)
+  const [aplicarSaldoFavor, setAplicarSaldoFavor] = useState(false)
 
   const { data: descuentosData } = useSWR<any[]>("/api/descuentos?estado=ACTIVO", fetcher)
   const descuentos = Array.isArray(descuentosData) ? descuentosData : []
+  const { data: pausadasData, mutate: mutatePausadas } = useSWR<{ pausadas: any[] }>("/api/ventas/pausadas", fetcher)
+  const ventasPausadas = pausadasData?.pausadas || []
 
   // Scanner states
   const [scannerOpen, setScannerOpen] = useState(false)
@@ -217,6 +227,11 @@ export default function NuevaVentaPage() {
   const clienteDropdownRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { fetchData() }, [])
+
+  useEffect(() => {
+    const modo = new URLSearchParams(window.location.search).get("modo")
+    if (modo === "receta") setShowAdvanced(true)
+  }, [])
 
   useEffect(() => {
     setSelectedLoteId(null)
@@ -369,7 +384,7 @@ export default function NuevaVentaPage() {
       return sum + d
     }, 0)
 
-    if (cantDeducir + ocupadoEnCarrito > selectedProducto.stockActual) { toast.error("Stock insuficiente"); return }
+    if (!selectedProducto.esServicio && cantDeducir + ocupadoEnCarrito > selectedProducto.stockActual) { toast.error("Stock insuficiente"); return }
 
     const precioUnitario = getPrecioUnitario()
     if (precioUnitario <= 0) { toast.error("El precio del producto es inválido (debe ser mayor a 0)"); return }
@@ -432,11 +447,89 @@ export default function NuevaVentaPage() {
     }
   }
 
-  const totalNeto = total - discountTotal
+  const clienteSeleccionado = clientes.find((cliente) => String(cliente.id) === selectedCliente)
+  const descuentoFidelizacion = Math.round(Math.max(0, total - discountTotal) * tasaDescuentoNivel(clienteSeleccionado?.nivelFidelidad || "BRONCE") * 100) / 100
+  const saldoDisponible = Number(clienteSeleccionado?.saldoFavor || 0)
+  const saldoAplicado = aplicarSaldoFavor ? Math.min(saldoDisponible, Math.max(0, total - discountTotal - descuentoFidelizacion)) : 0
+  const totalNeto = Math.max(0, total - discountTotal - descuentoFidelizacion - saldoAplicado)
 
   const cambio = (metodoPago === "EFECTIVO" && montoRecibido && Number(montoRecibido) >= totalNeto)
     ? Number(montoRecibido) - totalNeto
     : 0
+
+  const limpiarVenta = () => {
+    setLineas([])
+    setSelectedCliente("")
+    setClienteSearch("")
+    setMetodoPago("EFECTIVO")
+    setNombrePodologo("")
+    setNumeroReceta("")
+    setTipoComprobante("RECIBO")
+    setRucCliente("")
+    setMontoRecibido("")
+    setSelectedDescuento("")
+    setAlergiasPendientes(null)
+    setConfirmarAlergias(false)
+    setEstadoEntrega("ENTREGADA")
+    setShowAdvanced(false)
+    setAplicarSaldoFavor(false)
+  }
+
+  const pausarVenta = async () => {
+    if (!lineas.length) return toast.error("Agrega al menos un producto antes de pausar")
+    const cliente = clientes.find((item) => String(item.id) === selectedCliente)
+    const titulo = cliente?.nombreCompleto || `Venta ${new Date().toLocaleTimeString("es-NI", { hour: "2-digit", minute: "2-digit" })}`
+    try {
+      const response = await fetch("/api/ventas/pausadas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          titulo,
+          idCliente: selectedCliente ? Number(selectedCliente) : null,
+          payload: { lineas, selectedCliente, metodoPago, nombrePodologo, numeroReceta, tipoComprobante, rucCliente, montoRecibido, selectedDescuento, alergiasPendientes, confirmarAlergias, estadoEntrega, aplicarSaldoFavor },
+        }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result.error || "No se pudo pausar la venta")
+      limpiarVenta()
+      await mutatePausadas()
+      setShowPausadas(true)
+      toast.success("Venta pausada y disponible para recuperar")
+    } catch (cause) { toast.error(cause instanceof Error ? cause.message : "No se pudo pausar la venta") }
+  }
+
+  const recuperarVenta = async (pausa: any) => {
+    if (lineas.length && !window.confirm("El carrito actual será reemplazado por la venta pausada. ¿Continuar?")) return
+    const response = await fetch(`/api/ventas/pausadas/${pausa.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ accion: "RECUPERAR" }) })
+    const result = await response.json().catch(() => ({}))
+    if (!response.ok) return toast.error(result.error || "No se pudo recuperar la venta")
+    const payload = pausa.payload || {}
+    setLineas(Array.isArray(payload.lineas) ? payload.lineas : [])
+    setSelectedCliente(payload.selectedCliente || "")
+    setMetodoPago(payload.metodoPago || "EFECTIVO")
+    setNombrePodologo(payload.nombrePodologo || "")
+    setNumeroReceta(payload.numeroReceta || "")
+    setTipoComprobante(payload.tipoComprobante || "RECIBO")
+    setRucCliente(payload.rucCliente || "")
+    setMontoRecibido(payload.montoRecibido || "")
+    setSelectedDescuento(payload.selectedDescuento || "")
+    setAlergiasPendientes(payload.alergiasPendientes || null)
+    setConfirmarAlergias(Boolean(payload.confirmarAlergias))
+    setEstadoEntrega(payload.estadoEntrega === "LISTO_PARA_RETIRAR" ? "LISTO_PARA_RETIRAR" : "ENTREGADA")
+    setAplicarSaldoFavor(Boolean(payload.aplicarSaldoFavor))
+    setShowAdvanced(Boolean(payload.nombrePodologo || payload.numeroReceta || payload.tipoComprobante === "FACTURA" || payload.selectedDescuento))
+    setShowPausadas(false)
+    await mutatePausadas()
+    toast.success("Venta recuperada")
+  }
+
+  const cancelarPausa = async (pausa: any) => {
+    const response = await fetch(`/api/ventas/pausadas/${pausa.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ accion: "CANCELAR" }) })
+    const result = await response.json().catch(() => ({}))
+    if (!response.ok) return toast.error(result.error || "No se pudo descartar la venta pausada")
+    await mutatePausadas()
+    toast.success("Venta pausada descartada")
+  }
 
   const handleRegistrarVenta = async () => {
     if (lineas.length === 0) { toast.error("Agregue al menos un producto"); return }
@@ -455,12 +548,14 @@ export default function NuevaVentaPage() {
           nombrePodologo: nombrePodologo || null,
           numeroReceta: numeroReceta || null,
           tipoComprobante,
+          estadoEntrega,
           montoRecibido: montoRecibido ? Number(montoRecibido) : null,
           cambio: montoRecibido ? cambio : null,
           rucCliente: tipoComprobante === "FACTURA" ? rucCliente : null,
           idDescuento: selectedDescuento ? Number.parseInt(selectedDescuento) : null,
           descuentoTotal: discountTotal,
           confirmarAlergias,
+          aplicarSaldoFavor,
         }),
       })
       const data = await res.json()
@@ -512,24 +607,67 @@ export default function NuevaVentaPage() {
       <Sidebar />
       <main className="flex-1 overflow-auto">
         <div className="p-4 pt-16 md:p-8 md:pt-8 page-transition">
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-2">
             <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
               <ShoppingCart className="w-8 h-8 text-primary" />
               Nueva Venta
             </h1>
-            {/* Botón de escáner */}
-            <Button
-              id="btn-scanner-venta"
-              variant="outline"
-              size="sm"
-              onClick={() => setScannerOpen(true)}
-              className="border-primary/30 text-primary hover:bg-primary/10 gap-2"
-            >
-              <ScanLine className="w-4 h-4" />
-              Escanear
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={() => setShowPausadas((value) => !value)} className="gap-2">
+                <Clock3 className="w-4 h-4" />
+                Pausadas {ventasPausadas.length > 0 && `(${ventasPausadas.length})`}
+              </Button>
+              <Button variant="outline" size="sm" onClick={pausarVenta} disabled={lineas.length === 0} className="gap-2">
+                <PauseCircle className="w-4 h-4" />
+                Pausar venta
+              </Button>
+              <Button
+                id="btn-scanner-venta"
+                size="sm"
+                onClick={() => setScannerOpen(true)}
+                className="gap-2"
+              >
+                <ScanLine className="w-4 h-4" />
+                Escanear
+              </Button>
+            </div>
           </div>
-          <p className="text-muted-foreground mb-8">Registra una nueva venta · El lector físico detecta automáticamente</p>
+          <p className="text-muted-foreground mb-5">Busca o escanea, confirma el cobro y entrega. Las opciones poco frecuentes permanecen ocultas.</p>
+
+          {showPausadas && (
+            <Card className="mb-6 border-blue-500/20 bg-blue-500/5 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-foreground">Ventas pausadas</p>
+                  <p className="text-xs text-muted-foreground">Recupera el carrito exactamente donde quedó.</p>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => setShowPausadas(false)}><X className="h-4 w-4" /></Button>
+              </div>
+              {ventasPausadas.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-border px-4 py-5 text-center text-sm text-muted-foreground">No hay ventas pausadas.</p>
+              ) : (
+                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  {ventasPausadas.map((pausa: any) => (
+                    <div key={pausa.id} className="rounded-xl border border-border bg-background/70 p-3">
+                      <p className="truncate text-sm font-semibold text-foreground">{pausa.titulo}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{Array.isArray(pausa.payload?.lineas) ? pausa.payload.lineas.length : 0} artículos · {new Date(pausa.createdAt).toLocaleTimeString("es-NI", { hour: "2-digit", minute: "2-digit" })}</p>
+                      <div className="mt-3 flex gap-2">
+                        <Button size="sm" onClick={() => recuperarVenta(pausa)} className="h-8 flex-1 gap-1"><Play className="h-3.5 w-3.5" /> Recuperar</Button>
+                        <Button size="sm" variant="ghost" onClick={() => cancelarPausa(pausa)} className="h-8 text-muted-foreground">Descartar</Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          )}
+
+          <div className="mb-6 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-xs text-blue-300">
+            <span className="flex items-center gap-1.5 font-semibold"><ShieldCheck className="h-4 w-4" /> Protecciones activas</span>
+            <span>FEFO automático</span>
+            <span>Lotes vencidos bloqueados</span>
+            <span>Receta y alergias verificadas</span>
+          </div>
 
           {/* ALERTA DE LOTE VENCIDO */}
           {alertaLoteVencido && (
@@ -671,7 +809,7 @@ export default function NuevaVentaPage() {
                                   isUnavailable
                                     ? "bg-muted text-muted-foreground border-border"
                                     : isLowStock
-                                    ? "bg-red-500/10 text-red-500 border border-red-500/20"
+                                    ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
                                     : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
                                 }`}>
                                   {isUnavailable ? "Sin stock" : stockDisplay}
@@ -759,7 +897,10 @@ export default function NuevaVentaPage() {
                       <tbody>
                         {lineas.map((linea, idx) => (
                           <tr key={idx} className="border-b border-border/50">
-                            <td className="py-3 text-foreground">{linea.nombre}<span className="text-xs text-muted-foreground ml-2">({linea.tipoUnidad})</span></td>
+                            <td className="py-3 text-foreground">
+                              <span>{linea.nombre}</span><span className="text-xs text-muted-foreground ml-2">({linea.tipoUnidad})</span>
+                              {linea.loteCodigo && <span className="mt-1 block text-[11px] font-medium text-blue-400">FEFO · lote {linea.loteCodigo}</span>}
+                            </td>
                             <td className="text-right text-foreground">{linea.cantidad}</td>
                             <td className="text-right text-muted-foreground">C${linea.precioUnitario.toFixed(2)}</td>
                             <td className="text-right font-medium text-foreground">C${linea.subtotal.toFixed(2)}</td>
@@ -802,7 +943,7 @@ export default function NuevaVentaPage() {
                           </span>
                           <button
                             type="button"
-                            onClick={() => { setSelectedCliente(""); setClienteSearch("") }}
+                            onClick={() => { setSelectedCliente(""); setClienteSearch(""); setAplicarSaldoFavor(false) }}
                             className="text-muted-foreground hover:text-foreground shrink-0"
                           >
                             <X className="w-4 h-4" />
@@ -831,6 +972,10 @@ export default function NuevaVentaPage() {
                                   <span className="text-foreground font-normal line-clamp-2">{client.direccion}</span>
                                 </p>
                               )}
+                              <div className="mt-2 border-t border-border/40 pt-2">
+                                <div className="flex items-center justify-between"><span>Fidelización</span><span className="font-semibold text-foreground">{client.nivelFidelidad || "BRONCE"} · {client.puntosFidelidad || 0} pts</span></div>
+                                {Number(client.saldoFavor || 0) > 0 && <label className="mt-2 flex cursor-pointer items-center justify-between rounded-lg bg-emerald-500/10 p-2 text-emerald-300"><span>Usar saldo C${Number(client.saldoFavor).toFixed(2)}</span><input type="checkbox" checked={aplicarSaldoFavor} onChange={(event) => setAplicarSaldoFavor(event.target.checked)} /></label>}
+                              </div>
                             </div>
                           )
                         })()}
@@ -921,20 +1066,6 @@ export default function NuevaVentaPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-foreground mb-1">Tipo de Comprobante</label>
-                    <select value={tipoComprobante} onChange={(e) => setTipoComprobante(e.target.value)} className={selectClass}>
-                      <option value="RECIBO">Recibo</option>
-                      <option value="FACTURA">Factura Local (Nicaragua)</option>
-                    </select>
-                  </div>
-                  {tipoComprobante === "FACTURA" && (
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-1">RUC del Cliente (Facturación)</label>
-                      <Input value={rucCliente} onChange={(e) => setRucCliente(e.target.value)} placeholder="001-280599-1004A" className="bg-muted/30 border-border text-sm font-mono" />
-                    </div>
-                  )}
-
-                  <div>
                     <label className="block text-sm font-medium text-foreground mb-1">Método de Pago</label>
                     <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)} className={selectClass}>
                       <option value="EFECTIVO">Efectivo</option>
@@ -957,10 +1088,45 @@ export default function NuevaVentaPage() {
                   )}
 
                   <div>
-                    <label className="block text-sm font-medium text-foreground mb-1">Podólogo (Opcional)</label>
-                    <Input value={nombrePodologo} onChange={(e) => setNombrePodologo(e.target.value)} placeholder="Nombre del podólogo" className="bg-muted/30 border-border text-sm" />
+                    <label className="block text-sm font-medium text-foreground mb-2">Entrega</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button type="button" onClick={() => setEstadoEntrega("ENTREGADA")} className={`rounded-xl border p-3 text-left transition-colors ${estadoEntrega === "ENTREGADA" ? "border-emerald-500/50 bg-emerald-500/10" : "border-border bg-muted/20 hover:bg-muted/40"}`}>
+                        <PackageCheck className={`mb-1 h-4 w-4 ${estadoEntrega === "ENTREGADA" ? "text-emerald-400" : "text-muted-foreground"}`} />
+                        <span className="block text-xs font-semibold text-foreground">Entrega ahora</span>
+                      </button>
+                      <button type="button" onClick={() => setEstadoEntrega("LISTO_PARA_RETIRAR")} className={`rounded-xl border p-3 text-left transition-colors ${estadoEntrega === "LISTO_PARA_RETIRAR" ? "border-amber-500/50 bg-amber-500/10" : "border-border bg-muted/20 hover:bg-muted/40"}`}>
+                        <Clock3 className={`mb-1 h-4 w-4 ${estadoEntrega === "LISTO_PARA_RETIRAR" ? "text-amber-400" : "text-muted-foreground"}`} />
+                        <span className="block text-xs font-semibold text-foreground">Listo para retirar</span>
+                      </button>
+                    </div>
                   </div>
-                  <div className="space-y-2">
+
+                  <Button type="button" variant="ghost" onClick={() => setShowAdvanced((value) => !value)} className="w-full justify-between border border-dashed border-border text-muted-foreground hover:text-foreground">
+                    Factura, receta, podólogo y descuentos
+                    <ChevronDown className={`h-4 w-4 transition-transform ${showAdvanced ? "rotate-180" : ""}`} />
+                  </Button>
+
+                  {showAdvanced && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-1">Tipo de Comprobante</label>
+                        <select value={tipoComprobante} onChange={(e) => setTipoComprobante(e.target.value)} className={selectClass}>
+                          <option value="RECIBO">Recibo</option>
+                          <option value="FACTURA">Factura Local (Nicaragua)</option>
+                        </select>
+                      </div>
+                      {tipoComprobante === "FACTURA" && (
+                        <div>
+                          <label className="block text-sm font-medium text-foreground mb-1">RUC del Cliente (Facturación)</label>
+                          <Input value={rucCliente} onChange={(e) => setRucCliente(e.target.value)} placeholder="001-280599-1004A" className="bg-muted/30 border-border text-sm font-mono" />
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-1">Podólogo (Opcional)</label>
+                        <Input value={nombrePodologo} onChange={(e) => setNombrePodologo(e.target.value)} placeholder="Nombre del podólogo" className="bg-muted/30 border-border text-sm" />
+                      </div>
+                      <div className="space-y-2">
                     <label className="block text-sm font-medium text-foreground">Cargar Receta Médica</label>
                     <div className="flex gap-2">
                       <Input
@@ -1042,10 +1208,12 @@ export default function NuevaVentaPage() {
                         Cargar
                       </Button>
                     </div>
-                  </div>
+                      </div>
+                    </>
+                  )}
 
                   <div className="pt-4 border-t border-border space-y-3">
-                    <div>
+                    {showAdvanced && <div>
                       <label className="block text-xs font-medium text-foreground mb-1">Descuento General</label>
                       <select
                         value={selectedDescuento}
@@ -1080,7 +1248,7 @@ export default function NuevaVentaPage() {
                           )
                         })}
                       </select>
-                    </div>
+                    </div>}
 
                     <div className="space-y-1.5 pt-2 border-t border-border/40">
                       <div className="flex items-center justify-between text-xs">
@@ -1092,10 +1260,16 @@ export default function NuevaVentaPage() {
                         <span className="font-medium text-foreground">C${total.toFixed(2)}</span>
                       </div>
                       {discountTotal > 0 && (
-                        <div className="flex items-center justify-between text-xs text-red-500">
+                        <div className="flex items-center justify-between text-xs text-emerald-400">
                           <span>Descuento</span>
                           <span className="font-semibold">-C${discountTotal.toFixed(2)}</span>
                         </div>
+                      )}
+                      {descuentoFidelizacion > 0 && (
+                        <div className="flex items-center justify-between text-xs text-emerald-400"><span>Beneficio {clienteSeleccionado?.nivelFidelidad}</span><span className="font-semibold">-C${descuentoFidelizacion.toFixed(2)}</span></div>
+                      )}
+                      {saldoAplicado > 0 && (
+                        <div className="flex items-center justify-between text-xs text-blue-300"><span>Saldo a favor</span><span className="font-semibold">-C${saldoAplicado.toFixed(2)}</span></div>
                       )}
                       <div className="flex items-center justify-between pt-2 border-t border-border/60">
                         <span className="text-sm font-semibold text-muted-foreground">Total Neto</span>

@@ -1,4 +1,4 @@
-export type TipoRecordatorio = "CITA_PROXIMA" | "CITA_PENDIENTE" | "RECETA_SIN_USAR" | "VENCIMIENTO" | "STOCK_BAJO"
+export type TipoRecordatorio = "CITA_PROXIMA" | "CITA_PENDIENTE" | "RECETA_PENDIENTE" | "RECETA_LISTA" | "PEDIDO_LISTO" | "RECOMPRA" | "VENCIMIENTO" | "STOCK_BAJO"
 export type CanalRecordatorio = "INTERNO" | "EMAIL" | "SMS" | "WHATSAPP"
 
 export interface RecordatorioInterno {
@@ -11,4 +11,10 @@ export interface RecordatorioInterno {
   href: string
   canalesDisponibles: CanalRecordatorio[]
   canalActivo: "INTERNO"
+  idCliente?: number
+  cliente?: string
+  canalSugerido?: CanalRecordatorio
+  consentimiento?: boolean
+  asunto?: string
+  mensaje?: string
 }

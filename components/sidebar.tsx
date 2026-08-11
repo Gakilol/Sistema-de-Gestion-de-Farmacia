@@ -29,6 +29,10 @@ import {
   Stethoscope,
   Banknote,
   Share2,
+  BellRing,
+  Boxes,
+  Wrench,
+  BrainCircuit,
 } from "lucide-react"
 
 import { useCurrentUser } from "../app/hooks/useCurrentUser"
@@ -79,31 +83,38 @@ export function Sidebar() {
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/"
-    return pathname.startsWith(href)
+    if (["/clinica", "/compras", "/ia"].includes(href)) return pathname === href
+    return pathname === href || pathname.startsWith(`${href}/`)
   }
 
-  // 🔹 Opciones visibles para TODOS
-  const commonLinks = [
+  const operationLinks = [
     { href: "/", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/clientes", label: "Clientes", icon: Users },
     { href: "/ventas/nueva", label: "Nueva Venta", icon: TrendingUp },
     { href: "/ventas/historial", label: "Historial Ventas", icon: ShoppingCart },
-    { href: "/ia", label: "Asistente IA", icon: Sparkles },
+    { href: "/clientes", label: "Clientes", icon: Users },
     { href: "/caja", label: "Caja", icon: Banknote },
+    { href: "/recordatorios", label: "Recordatorios", icon: BellRing },
+    { href: "/ia", label: "Asistente IA", icon: Sparkles },
+    { href: "/reportes", label: "Reportes", icon: TrendingUp, adminOnly: true },
   ]
 
-  // 🔹 Opciones SOLO ADMIN (van siempre en bloque y orden fijo)
-  const adminLinks = [
+  const catalogLinks = [
     { href: "/productos", label: "Productos", icon: Package },
     { href: "/admin/categorias", label: "Categorías", icon: Layers },
     { href: "/admin/laboratorios", label: "Laboratorios", icon: Settings },
     { href: "/admin/formas-farmaceuticas", label: "Formas Farmacéuticas", icon: Settings },
     { href: "/admin/descuentos", label: "Descuentos", icon: Tag },
+  ]
+
+  const supplyLinks = [
+    { href: "/inventario", label: "Inventario", icon: ClipboardList },
     { href: "/proveedores", label: "Proveedores", icon: Truck },
     { href: "/compras", label: "Compras", icon: ShoppingCart },
-    { href: "/inventario", label: "Inventario", icon: ClipboardList },
+    { href: "/compras/recomendaciones", label: "Compras inteligentes", icon: BrainCircuit },
+  ]
+
+  const configurationLinks = [
     { href: "/usuarios", label: "Usuarios", icon: Settings },
-    { href: "/reportes", label: "Reportes", icon: TrendingUp },
     { href: "/auditoria", label: "Auditoría", icon: ClipboardList },
   ]
 
@@ -175,12 +186,14 @@ export function Sidebar() {
 
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-1">
-          {/* Sección general (todos los roles) */}
-          <div className="space-y-0.5">
-            {commonLinks
+          <div>
+            <p className="mb-2 px-4 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/60">Operación</p>
+            <div className="space-y-0.5">
+            {operationLinks
               .filter((item) => {
+                if (item.adminOnly && !isAdmin) return false
                 if (role === "DOCTOR") {
-                  return item.href === "/" || item.href === "/ia"
+                  return item.href === "/" || item.href === "/ia" || item.href === "/recordatorios"
                 }
                 return true
               })
@@ -188,6 +201,7 @@ export function Sidebar() {
                 <NavLink key={item.href} item={item} />
               ))
             }
+            </div>
           </div>
 
           {/* Sección clínica (ADMIN o DOCTOR) */}
@@ -206,18 +220,12 @@ export function Sidebar() {
             </div>
           )}
 
-          {/* Sección administración (solo ADMIN) */}
           {isAdmin && (
-            <div className="mt-6">
-              <p className="text-[11px] font-semibold text-muted-foreground/60 uppercase tracking-widest mb-2 px-4">
-                Administración
-              </p>
-              <div className="space-y-0.5">
-                {adminLinks.map((item) => (
-                  <NavLink key={item.href} item={item} />
-                ))}
-              </div>
-            </div>
+            <>
+              <div className="mt-6"><p className="mb-2 flex items-center gap-2 px-4 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/60"><Boxes className="h-3 w-3" /> Catálogo</p><div className="space-y-0.5">{catalogLinks.map((item) => <NavLink key={item.href} item={item} />)}</div></div>
+              <div className="mt-6"><p className="mb-2 flex items-center gap-2 px-4 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/60"><Truck className="h-3 w-3" /> Abastecimiento</p><div className="space-y-0.5">{supplyLinks.map((item) => <NavLink key={item.href} item={item} />)}</div></div>
+              <div className="mt-6"><p className="mb-2 flex items-center gap-2 px-4 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/60"><Wrench className="h-3 w-3" /> Configuración</p><div className="space-y-0.5">{configurationLinks.map((item) => <NavLink key={item.href} item={item} />)}</div></div>
+            </>
           )}
         </nav>
 

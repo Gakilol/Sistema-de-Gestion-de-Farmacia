@@ -5,10 +5,12 @@ import { Sidebar } from "@/components/sidebar"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Eye, X, ShoppingCart, Calendar, RefreshCw } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Eye, X, ShoppingCart, Calendar, RefreshCw, PackageCheck, Clock3, RotateCcw, ArrowLeftRight } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useCurrentUser } from "@/app/hooks/useCurrentUser"
 import { toast } from "sonner"
+import { usePersistentState } from "@/hooks/usePersistentState"
 
 interface Venta {
   id: number
@@ -18,7 +20,14 @@ interface Venta {
   metodoPago: string
   numeroReceta: string | null
   estado: string
-  detalles: Array<{ producto: { nombre: string }; cantidad: number; precioUnitario: string }>
+  estadoEntrega: string
+  devoluciones: Array<{
+    id: number
+    tipo: string
+    total: string
+    detalles: Array<{ idDetalleVenta: number; cantidad: number }>
+  }>
+  detalles: Array<{ id: number; producto: { nombre: string }; cantidad: number; precioUnitario: string; tipoUnidad: string }>
 }
 
 function getManaguaToday() {
@@ -34,11 +43,18 @@ export default function HistorialVentasPage() {
   const [selectedVenta, setSelectedVenta] = useState<Venta | null>(null)
   
   // Date filter states
-  const [preset, setPreset] = useState("todos")
-  const [startDate, setStartDate] = useState("")
-  const [endDate, setEndDate] = useState("")
+  const [preset, setPreset] = usePersistentState("farmapos:ventas:filtro-fecha", "todos")
+  const [startDate, setStartDate] = usePersistentState("farmapos:ventas:desde", "")
+  const [endDate, setEndDate] = usePersistentState("farmapos:ventas:hasta", "")
   
   const [anulando, setAnulando] = useState(false)
+  const [devolucionVenta, setDevolucionVenta] = useState<Venta | null>(null)
+  const [tipoDevolucion, setTipoDevolucion] = useState<"DEVOLUCION" | "CAMBIO">("DEVOLUCION")
+  const [motivoDevolucion, setMotivoDevolucion] = useState("PRODUCTO_INCORRECTO")
+  const [observacionDevolucion, setObservacionDevolucion] = useState("")
+  const [cantidadesDevolucion, setCantidadesDevolucion] = useState<Record<number, number>>({})
+  const [reintegrarStock, setReintegrarStock] = useState(false)
+  const [procesandoDevolucion, setProcesandoDevolucion] = useState(false)
 
   const { user } = useCurrentUser()
   const isAdmin = user?.rolNombre === "ADMIN"
@@ -54,7 +70,7 @@ export default function HistorialVentasPage() {
       if (params.toString()) {
         url += `?${params.toString()}`
       }
-      const res = await fetch(url)
+      const res = await fetch(url, { cache: "no-store" })
       const payload: unknown = await res.json().catch(() => null)
       if (!res.ok) {
         const apiMessage = payload && typeof payload === "object" && "error" in payload
@@ -145,6 +161,71 @@ export default function HistorialVentasPage() {
       toast.error("Error de conexión al anular la venta")
     } finally {
       setAnulando(false)
+    }
+  }
+
+  const refrescarVentas = () => fetchVentas(startDate || undefined, endDate || undefined)
+
+  const actualizarEntrega = async (venta: Venta, accion: "MARCAR_LISTO" | "MARCAR_ENTREGADA") => {
+    const response = await fetch(`/api/ventas/${venta.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accion }),
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) return toast.error(payload.error || "No se pudo actualizar la entrega")
+    toast.success(accion === "MARCAR_LISTO" ? "Pedido listo para retirar" : "Pedido marcado como entregado")
+    setSelectedVenta(null)
+    await refrescarVentas()
+  }
+
+  const cantidadDisponible = (venta: Venta, idDetalleVenta: number, cantidadVendida: number) => {
+    const devuelta = (venta.devoluciones || []).reduce((total, devolucion) => {
+      const linea = devolucion.detalles.find((detalle) => detalle.idDetalleVenta === idDetalleVenta)
+      return total + (linea?.cantidad || 0)
+    }, 0)
+    return Math.max(0, cantidadVendida - devuelta)
+  }
+
+  const abrirDevolucion = (venta: Venta, tipo: "DEVOLUCION" | "CAMBIO") => {
+    setDevolucionVenta(venta)
+    setTipoDevolucion(tipo)
+    setMotivoDevolucion("PRODUCTO_INCORRECTO")
+    setObservacionDevolucion("")
+    setCantidadesDevolucion({})
+    setReintegrarStock(false)
+  }
+
+  const registrarDevolucion = async () => {
+    if (!devolucionVenta) return
+    const detalles = Object.entries(cantidadesDevolucion)
+      .map(([idDetalleVenta, cantidad]) => ({ idDetalleVenta: Number(idDetalleVenta), cantidad: Number(cantidad) }))
+      .filter((detalle) => detalle.cantidad > 0)
+    if (detalles.length === 0) return toast.error("Selecciona al menos un artículo")
+    setProcesandoDevolucion(true)
+    try {
+      const response = await fetch(`/api/ventas/${devolucionVenta.id}/devoluciones`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idempotencyKey: crypto.randomUUID(),
+          tipo: tipoDevolucion,
+          motivo: motivoDevolucion,
+          observacion: observacionDevolucion || null,
+          reintegrarStock,
+          detalles,
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.error || "No se pudo registrar la operación")
+      toast.success(tipoDevolucion === "CAMBIO" ? `Cambio registrado: crédito C$${Number(payload.creditoGenerado).toFixed(2)}` : `Devolución registrada por C$${Number(payload.total).toFixed(2)}`)
+      setDevolucionVenta(null)
+      setSelectedVenta(null)
+      await refrescarVentas()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo registrar la operación")
+    } finally {
+      setProcesandoDevolucion(false)
     }
   }
 
@@ -258,7 +339,10 @@ export default function HistorialVentasPage() {
                     {ventas.length === 0 ? (
                       <tr>
                         <td colSpan={8} className="px-6 py-8 text-center text-muted-foreground text-sm">
-                          No se encontraron ventas para el período seleccionado.
+                          <ShoppingCart className="mx-auto mb-2 h-8 w-8 text-muted-foreground/50" />
+                          <p className="font-medium text-foreground">No hay ventas en este período</p>
+                          <p className="mt-1">Prueba otro rango o inicia una nueva venta.</p>
+                          <div className="mt-4 flex justify-center gap-2"><Button size="sm" variant="outline" onClick={() => setPreset("todos")}>Ver todas</Button><Button size="sm" onClick={() => window.location.assign("/ventas/nueva")}>Nueva venta</Button></div>
                         </td>
                       </tr>
                     ) : (
@@ -286,9 +370,11 @@ export default function HistorialVentasPage() {
                             <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${
                               v.estado === "ANULADA"
                                 ? "bg-red-500/10 text-red-500 border-red-500/20"
-                                : "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                                : v.estadoEntrega === "LISTO_PARA_RETIRAR"
+                                  ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                                  : "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
                             }`}>
-                              {v.estado}
+                              {v.estado === "ANULADA" ? "ANULADA" : v.estadoEntrega === "LISTO_PARA_RETIRAR" ? "LISTO PARA RETIRAR" : "ENTREGADA"}
                             </span>
                           </td>
                           <td className="px-6 py-4">
@@ -322,17 +408,19 @@ export default function HistorialVentasPage() {
                 </div>
                 <Button variant="ghost" size="sm" onClick={() => setSelectedVenta(null)}><X className="w-5 h-5" /></Button>
               </div>
-              <div className="grid grid-cols-3 gap-4 mb-6">
+              <div className="grid grid-cols-1 gap-4 mb-6 sm:grid-cols-3">
                 <div><p className="text-xs text-muted-foreground uppercase mb-1">Cliente</p><p className="font-medium text-foreground">{selectedVenta.cliente?.nombreCompleto || "—"}</p></div>
                 <div><p className="text-xs text-muted-foreground uppercase mb-1">Pago</p><p className="font-medium text-foreground">{selectedVenta.metodoPago}</p></div>
                 <div>
-                  <p className="text-xs text-muted-foreground uppercase mb-1">Estado</p>
+                  <p className="text-xs text-muted-foreground uppercase mb-1">Entrega</p>
                   <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${
                     selectedVenta.estado === "ANULADA"
                       ? "bg-red-500/10 text-red-500 border-red-500/20"
-                      : "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                      : selectedVenta.estadoEntrega === "LISTO_PARA_RETIRAR"
+                        ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                        : "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
                   }`}>
-                    {selectedVenta.estado}
+                    {selectedVenta.estado === "ANULADA" ? "ANULADA" : selectedVenta.estadoEntrega === "LISTO_PARA_RETIRAR" ? "LISTO PARA RETIRAR" : "ENTREGADA"}
                   </span>
                 </div>
               </div>
@@ -347,22 +435,35 @@ export default function HistorialVentasPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {selectedVenta.detalles.map((d, i) => (
-                      <tr key={i} className="border-b border-border/50">
+                    {selectedVenta.detalles.map((d) => (
+                      <tr key={d.id} className="border-b border-border/50">
                         <td className="py-2 text-foreground">{d.producto.nombre}</td>
-                        <td className="text-right text-foreground">{d.cantidad}</td>
+                        <td className="text-right text-foreground">{d.cantidad} {d.tipoUnidad?.toLowerCase()}</td>
                         <td className="text-right text-muted-foreground">C${Number.parseFloat(d.precioUnitario).toFixed(2)}</td>
                         <td className="text-right font-medium text-foreground">C${(d.cantidad * Number.parseFloat(d.precioUnitario)).toFixed(2)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                <div className="mt-6 pt-4 border-t border-border flex justify-between items-center">
-                  <div>
+                <div className="mt-6 pt-4 border-t border-border flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center">
+                  <div className="flex flex-wrap gap-2">
+                    {selectedVenta.estado !== "ANULADA" && selectedVenta.estadoEntrega !== "LISTO_PARA_RETIRAR" && (
+                      <Button variant="outline" onClick={() => actualizarEntrega(selectedVenta, "MARCAR_LISTO")} className="gap-2 border-amber-500/30 text-amber-400"><Clock3 className="h-4 w-4" /> Listo para retirar</Button>
+                    )}
+                    {selectedVenta.estado !== "ANULADA" && selectedVenta.estadoEntrega === "LISTO_PARA_RETIRAR" && (
+                      <Button variant="outline" onClick={() => actualizarEntrega(selectedVenta, "MARCAR_ENTREGADA")} className="gap-2 border-emerald-500/30 text-emerald-400"><PackageCheck className="h-4 w-4" /> Marcar entregada</Button>
+                    )}
+                    {selectedVenta.estado !== "ANULADA" && selectedVenta.detalles.some((detalle) => cantidadDisponible(selectedVenta, detalle.id, detalle.cantidad) > 0) && (
+                      <>
+                        <Button variant="outline" onClick={() => abrirDevolucion(selectedVenta, "DEVOLUCION")} className="gap-2"><RotateCcw className="h-4 w-4" /> Devolución</Button>
+                        <Button variant="outline" onClick={() => abrirDevolucion(selectedVenta, "CAMBIO")} className="gap-2"><ArrowLeftRight className="h-4 w-4" /> Cambio</Button>
+                      </>
+                    )}
                     {isAdmin && selectedVenta.estado !== "ANULADA" && (
                       <Button
                         onClick={() => handleAnularVenta(selectedVenta.id)}
-                        className="bg-red-600 hover:bg-red-700 text-white font-medium shadow-sm transition-colors"
+                        variant="outline"
+                        className="border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300"
                         disabled={anulando}
                       >
                         {anulando ? "Anulando..." : "Anular Venta"}
@@ -374,6 +475,70 @@ export default function HistorialVentasPage() {
               </div>
             </Card>
           )}
+
+          <Dialog open={Boolean(devolucionVenta)} onOpenChange={(open) => !open && setDevolucionVenta(null)}>
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>{tipoDevolucion === "CAMBIO" ? "Registrar cambio" : "Registrar devolución"}</DialogTitle>
+                <DialogDescription>
+                  Venta #{devolucionVenta?.id}. El importe se calcula proporcionalmente al total neto pagado.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  {devolucionVenta?.detalles.map((detalle) => {
+                    const disponible = cantidadDisponible(devolucionVenta, detalle.id, detalle.cantidad)
+                    return (
+                      <div key={detalle.id} className="grid grid-cols-[minmax(0,1fr)_90px] items-center gap-3 rounded-xl border border-border p-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-foreground">{detalle.producto.nombre}</p>
+                          <p className="text-xs text-muted-foreground">Disponible para devolver: {disponible} {detalle.tipoUnidad?.toLowerCase()}</p>
+                        </div>
+                        <Input
+                          aria-label={`Cantidad de ${detalle.producto.nombre}`}
+                          type="number"
+                          min="0"
+                          max={disponible}
+                          disabled={disponible === 0}
+                          value={cantidadesDevolucion[detalle.id] || ""}
+                          onChange={(event) => setCantidadesDevolucion((current) => ({ ...current, [detalle.id]: Math.min(disponible, Math.max(0, Number(event.target.value))) }))}
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-foreground">Motivo</label>
+                  <select value={motivoDevolucion} onChange={(event) => setMotivoDevolucion(event.target.value)} className="w-full rounded-lg border border-border bg-muted/30 p-2.5 text-sm text-foreground">
+                    <option value="PRODUCTO_INCORRECTO">Producto incorrecto</option>
+                    <option value="DEFECTUOSO">Producto defectuoso</option>
+                    <option value="REACCION_ADVERSA">Reacción adversa</option>
+                    <option value="ERROR_COBRO">Error de cobro</option>
+                    <option value="OTRO">Otro</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-foreground">Observación</label>
+                  <Input value={observacionDevolucion} onChange={(event) => setObservacionDevolucion(event.target.value)} placeholder="Detalle opcional" />
+                </div>
+                {isAdmin && (
+                  <label className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-sm text-foreground">
+                    <input type="checkbox" checked={reintegrarStock} onChange={(event) => setReintegrarStock(event.target.checked)} className="mt-0.5" />
+                    <span><strong>Reintegrar al inventario.</strong> Úsalo solo después de comprobar que el producto conserva condiciones de venta. Un lote vencido seguirá bloqueado.</span>
+                  </label>
+                )}
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDevolucionVenta(null)}>Cancelar</Button>
+                <Button onClick={registrarDevolucion} disabled={procesandoDevolucion}>
+                  {procesandoDevolucion ? "Procesando..." : tipoDevolucion === "CAMBIO" ? "Generar crédito de cambio" : "Confirmar devolución"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </main>
     </div>

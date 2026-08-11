@@ -7,11 +7,11 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { AlertCircle, TrendingUp, ShoppingCart, Package, Trophy, Users, Crown } from "lucide-react"
 import useSWR from "swr"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from "recharts"
 import { toast } from "sonner"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useCurrentUser } from "@/app/hooks/useCurrentUser"
-import { DashboardReminders } from "@/components/dashboard-reminders"
+import { OperationalTodayCenter } from "@/components/operational-today-center"
 import { GerencialPanel } from "@/components/gerencial-panel"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
@@ -173,7 +173,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <DashboardReminders />
+          <OperationalTodayCenter />
           <GerencialPanel />
 
           {/* KPI Cards */}
@@ -235,10 +235,14 @@ export default function Dashboard() {
                 <TrendingUp className="w-5 h-5 text-primary" />
                 Gráfico de Ventas
               </h2>
-              <div className="h-[280px] w-full">
+              <div className="h-[280px] min-w-0 w-full">
                 {chartData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                    <BarChart
+                      responsive
+                      className="h-full w-full"
+                      data={chartData}
+                      margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
+                    >
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                       <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }} dy={10} />
                       <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--muted-foreground)', fontSize: 12 }} dx={-10} tickFormatter={(value) => `C$${value}`} />
@@ -259,7 +263,6 @@ export default function Dashboard() {
                         ))}
                       </Bar>
                     </BarChart>
-                  </ResponsiveContainer>
                 ) : (
                   <div className="h-full flex items-center justify-center text-muted-foreground">
                     No hay datos de ventas para este periodo.
